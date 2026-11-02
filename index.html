@@ -30,7 +30,10 @@
   <h1>Hollow Snow</h1>
   <p class="tag">The forest froze the night the king stopped dying.</p>
   <div class="loadout"></div>
-  <button id="start">Enter the forest</button>
+  <div class="title-actions">
+    <button id="open-room" class="secondary">Character room</button>
+    <button id="start">Enter the forest</button>
+  </div>
   <ul class="keys">
     <li><b>WASD</b> move</li>
     <li><b>Left click</b> fire</li>
@@ -43,6 +46,17 @@
     <li><b>M</b> mute</li>
   </ul>
 </section>
+
+<aside id="room" class="hidden">
+  <button id="close-room" class="secondary">Back to menu</button>
+  <h3>View</h3>
+  <div class="chips" id="room-views"></div>
+  <h3>Pose</h3>
+  <div class="chips" id="room-poses"></div>
+  <label class="check"><input type="checkbox" id="room-gun" checked> Show gun</label>
+  <div class="loadout"></div>
+  <p class="hint"><b>Left drag</b> rotate<br><b>Scroll</b> zoom<br><b>Right drag</b> pan</p>
+</aside>
 
 <section id="pause" class="screen hidden">
   <h2>Paused</h2>

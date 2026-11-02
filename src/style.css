@@ -44,6 +44,26 @@ html, body { height: 100%; overflow: hidden; background: #2b3552; color: #eef1ff
 .loadout .option:hover, .loadout .option:focus-visible { background: #6e1a33; }
 .loadout .option[aria-pressed="true"]:hover { background: #a02140; }
 @media (max-width: 640px) { .loadout { grid-template-columns: 1fr; } }
+.title-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+button.secondary { background: rgba(16, 21, 44, .78); border-color: rgba(238, 241, 255, .45); }
+button.secondary:hover, button.secondary:focus-visible { background: #2d3760; }
+
+#room { position: fixed; top: 0; bottom: 0; left: 0; width: min(330px, 86vw); padding: 16px; overflow-y: auto; background: rgba(16, 21, 44, .78); }
+#room h3 { margin: 16px 0 6px; font-size: 15px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; color: #ffc2cc; }
+#room #close-room { width: 100%; font-size: 16px; padding: 9px; }
+#room .loadout { grid-template-columns: 1fr; margin-top: 4px; gap: 4px; }
+#room .loadout h3 { margin-top: 12px; }
+#room .loadout .option { padding: 5px 10px; font-size: 14px; }
+#room .loadout .option span { display: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips button { padding: 5px 11px; font-size: 14px; background: rgba(16, 21, 44, .72); border-color: rgba(238, 241, 255, .28); }
+.chips button:hover, .chips button:focus-visible { background: #6e1a33; }
+.chips button[aria-pressed="true"] { background: #8e1b35; border-color: #ffb3bf; }
+.check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 15px; cursor: pointer; }
+.hint { margin-top: 14px; font-size: 13px; line-height: 1.6; opacity: .85; }
+.hint b { color: #ffc2cc; font-weight: 400; }
+body.in-room #view { cursor: grab; }
+body.in-room.dragging #view { cursor: grabbing; }
 h1 { font-size: clamp(44px, 9vw, 92px); font-weight: 400; letter-spacing: .04em; color: #fff0f0; text-shadow: 0 0 6px #d21f3f, 0 0 26px #d21f3f; }
 h2 { font-size: clamp(34px, 6vw, 60px); font-weight: 400; color: #fff0f0; text-shadow: 0 0 6px #d21f3f, 0 0 22px #d21f3f; }
 .tag { max-width: 640px; font-size: clamp(16px, 2.2vw, 21px); font-style: italic; opacity: .9; }

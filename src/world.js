@@ -320,6 +320,7 @@ function swayMaterial(params) {
 
 /* ---------- Forest ---------- */
 const chunks = [];
+const weatherMaterials = [];
 
 // Splits instances into grid cells so whole cells can be culled.
 function addInstances(scene, geometry, material, placements, castShadow, tints) {
@@ -694,6 +695,7 @@ function buildSnow(scene) {
   }));
   points.frustumCulled = false;
   scene.add(points);
+  weatherMaterials.push(points.material);
 
   const wrap = (v, size) => ((v % size) + size) % size;
   return (dt, time, center) => {
@@ -714,6 +716,7 @@ function buildSnow(scene) {
 // Drifting banks of snow fog near the ground, on top of the height fog.
 function buildMist(scene) {
   const material = new THREE.SpriteMaterial({ map: TEX.mist, color: 0xc4cde0, transparent: true, opacity: 0.2, depthWrite: false, fog: false });
+  weatherMaterials.push(material);
   const banks = [];
   const span = 64;
   for (let i = 0; i < 34; i++) {
@@ -762,6 +765,9 @@ function buildWorld(renderer, scene) {
   return {
     wards,
     altar,
+    setWeather(visible) {
+      for (const material of weatherMaterials) material.visible = visible;
+    },
     update(dt, time, cameraPos, focus) {
       worldUniforms.uTime.value = time;
       sky.position.copy(cameraPos);

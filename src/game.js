@@ -313,7 +313,7 @@ function updateDroppedMags(dt) {
     mag.life -= dt;
     mag.vel.y -= 9 * dt;
     mag.mesh.position.addScaledVector(mag.vel, dt);
-    const ground = groundHeight(mag.mesh.position.x, mag.mesh.position.z) + 0.02;
+    const ground = (game.state === 'room' ? ROOM_Y : groundHeight(mag.mesh.position.x, mag.mesh.position.z)) + 0.02;
     if (mag.mesh.position.y < ground) {
       mag.mesh.position.y = ground;
       if (mag.vel.y < -1) burst(mag.mesh.position, 0xf2f5ff, 2, 0.6);
@@ -1233,6 +1233,177 @@ function updateTitle(dt) {
   camera.lookAt(player.pos.x - 0.58, player.pos.y + 0.92, player.pos.z);
 }
 
+/* ---------- Character room ---------- */
+// A plain studio high above the map, for looking over the character up close.
+const ROOM_Y = 400;
+const ROOM_VIEWS = {
+  Full: { y: 0.8, dist: 2.7, yaw: 0.3, pitch: 0.05 },
+  Head: { y: 1.38, dist: 0.85, yaw: 0.35, pitch: 0.04 },
+  Face: { y: 1.34, dist: 0.5, yaw: 0, pitch: 0 },
+  Side: { y: 1.34, dist: 0.8, yaw: Math.PI / 2, pitch: 0 },
+  Back: { y: 1.1, dist: 1.5, yaw: Math.PI, pitch: 0.08 },
+  Torso: { y: 1.08, dist: 1.05, yaw: 0.2, pitch: 0.02 },
+  Legs: { y: 0.42, dist: 1.25, yaw: 0.3, pitch: 0.05 },
+  Hands: { y: 0.98, dist: 0.8, yaw: 0.2, pitch: 0.22 },
+};
+const ROOM_POSES = ['Idle', 'Aim', 'Walk', 'Reload'];
+
+const roomSet = new THREE.Group();
+roomSet.position.y = ROOM_Y;
+roomSet.visible = false;
+const roomWall = new THREE.Mesh(new THREE.SphereGeometry(9, 32, 20), new THREE.MeshBasicMaterial({ color: 0x4a5372, side: THREE.BackSide, fog: false }));
+const roomFloor = new THREE.Mesh(new THREE.CircleGeometry(9, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x79819c, roughness: 0.85, fog: false }));
+roomFloor.receiveShadow = true;
+const roomMark = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.65, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc2cc, fog: false }));
+roomMark.position.y = 0.004;
+roomSet.add(roomWall, roomFloor, roomMark);
+scene.add(roomSet);
+
+const orbit = {
+  target: new THREE.Vector3(0, 0.8, 0),
+  yaw: 0.3, pitch: 0.05, dist: 2.7,
+  goal: { y: 0.8, x: 0, z: 0, yaw: 0.3, pitch: 0.05, dist: 2.7 },
+  button: -1,
+};
+let roomPose = 'Idle';
+let roomView = 'Full';
+const roomReturn = new THREE.Vector3();
+
+function renderRoomControls() {
+  const chip = (group, name, active) => `<button data-${group}="${name}" aria-pressed="${active}">${name}</button>`;
+  $('room-views').innerHTML = Object.keys(ROOM_VIEWS).map((name) => chip('view', name, name === roomView)).join('');
+  $('room-poses').innerHTML = ROOM_POSES.map((name) => chip('pose', name, name === roomPose)).join('');
+}
+
+function setRoomView(name) {
+  const v = ROOM_VIEWS[name];
+  roomView = name;
+  Object.assign(orbit.goal, { x: 0, y: v.y, z: 0, yaw: v.yaw, pitch: v.pitch, dist: v.dist });
+  renderRoomControls();
+}
+
+function setRoomPose(name) {
+  roomPose = name;
+  player.reload = null;
+  if (name === 'Reload') startRoomReload();
+  renderRoomControls();
+}
+
+function startRoomReload() {
+  player.ammo[gunId] = 0;
+  startReload();
+}
+
+function openRoom() {
+  game.state = 'room';
+  document.body.classList.add('in-room');
+  $('title').classList.add('hidden');
+  $('room').classList.remove('hidden');
+  roomSet.visible = true;
+  world.setWeather(false);
+  roomReturn.copy(player.pos);
+  player.pos.set(0, ROOM_Y, 0);
+  player.bodyYaw = 0;
+  player.pitch = 0;
+  camera.near = 0.02;
+  camera.fov = 34;
+  camera.updateProjectionMatrix();
+  setRoomPose('Idle');
+  setRoomView('Full');
+  Object.assign(orbit, { yaw: orbit.goal.yaw, pitch: orbit.goal.pitch, dist: orbit.goal.dist });
+  orbit.target.set(orbit.goal.x, orbit.goal.y, orbit.goal.z);
+}
+
+function closeRoom() {
+  game.state = 'title';
+  document.body.classList.remove('in-room', 'dragging');
+  orbit.button = -1;
+  $('room').classList.add('hidden');
+  $('title').classList.remove('hidden');
+  roomSet.visible = false;
+  world.setWeather(true);
+  avatar.holder.visible = true;
+  player.pos.copy(roomReturn);
+  player.reload = null;
+  player.aimT = 0;
+  player.stride = 0;
+  player.ammo[gunId] = GUNS[gunId].mag;
+  camera.near = 0.1;
+  camera.fov = 58;
+  camera.updateProjectionMatrix();
+  for (const mag of droppedMags.splice(0)) scene.remove(mag.mesh);
+}
+
+$('open-room').addEventListener('click', openRoom);
+$('close-room').addEventListener('click', closeRoom);
+$('room').addEventListener('click', (e) => {
+  if (e.target.dataset.view) setRoomView(e.target.dataset.view);
+  if (e.target.dataset.pose) setRoomPose(e.target.dataset.pose);
+});
+addEventListener('keydown', (e) => { if (e.code === 'Escape' && game.state === 'room') closeRoom(); });
+canvas.addEventListener('mousedown', (e) => {
+  if (game.state !== 'room') return;
+  orbit.button = e.button;
+  document.body.classList.add('dragging');
+});
+addEventListener('mouseup', () => {
+  orbit.button = -1;
+  document.body.classList.remove('dragging');
+});
+addEventListener('mousemove', (e) => {
+  if (game.state !== 'room' || orbit.button < 0) return;
+  if (orbit.button === 0) {
+    orbit.goal.yaw -= e.movementX * 0.0075;
+    orbit.goal.pitch = clamp(orbit.goal.pitch + e.movementY * 0.0055, -1.2, 1.45);
+  } else {
+    // Pan across the screen; the amount scales so close-ups stay controllable.
+    const pan = orbit.dist * 0.0012;
+    const c = Math.cos(orbit.yaw), s = Math.sin(orbit.yaw);
+    orbit.goal.x = clamp(orbit.goal.x - e.movementX * pan * c, -1.5, 1.5);
+    orbit.goal.z = clamp(orbit.goal.z + e.movementX * pan * s, -1.5, 1.5);
+    orbit.goal.y = clamp(orbit.goal.y + e.movementY * pan, 0, 2);
+  }
+});
+canvas.addEventListener('wheel', (e) => {
+  if (game.state !== 'room') return;
+  e.preventDefault();
+  orbit.goal.dist = clamp(orbit.goal.dist * Math.exp(e.deltaY * 0.0012), 0.16, 6);
+}, { passive: false });
+
+const roomMove = new THREE.Vector3();
+function updateRoom(dt) {
+  game.time += dt;
+  player.equip = Math.max(0, player.equip - dt * 4);
+  avatar.holder.visible = $('room-gun').checked;
+  player.pos.set(0, ROOM_Y, 0);
+  player.bodyYaw = 0;
+  player.pitch = 0;
+
+  const walking = roomPose === 'Walk';
+  roomMove.set(0, 0, walking ? 1 : 0);
+  player.stride += ((walking ? 0.68 : 0) - player.stride) * (1 - Math.exp(-9 * dt));
+  if (walking) player.walkPhase += dt * 4.3 * 3;
+  player.aimT = roomPose === 'Aim' ? 1 : 0;
+  if (player.reload) updateReload(dt);
+  else if (roomPose === 'Reload') startRoomReload();
+  updateDroppedMags(dt);
+  poseAvatar(dt, roomMove, walking);
+  avatar.simulate(dt);
+
+  const ease = 1 - Math.exp(-11 * dt);
+  orbit.yaw += (orbit.goal.yaw - orbit.yaw) * ease;
+  orbit.pitch += (orbit.goal.pitch - orbit.pitch) * ease;
+  orbit.dist += (orbit.goal.dist - orbit.dist) * ease;
+  orbit.target.x += (orbit.goal.x - orbit.target.x) * ease;
+  orbit.target.y += (orbit.goal.y - orbit.target.y) * ease;
+  orbit.target.z += (orbit.goal.z - orbit.target.z) * ease;
+
+  const cp = Math.cos(orbit.pitch), sp = Math.sin(orbit.pitch);
+  const tx = orbit.target.x, ty = ROOM_Y + orbit.target.y, tz = orbit.target.z;
+  camera.position.set(tx + Math.sin(orbit.yaw) * cp * orbit.dist, Math.max(ROOM_Y + 0.03, ty + sp * orbit.dist), tz + Math.cos(orbit.yaw) * cp * orbit.dist);
+  camera.lookAt(tx, ty, tz);
+}
+
 setSkin(skinId);
 renderLoadout();
 
@@ -1244,7 +1415,8 @@ function frame(now) {
 
   if (game.state === 'title') updateTitle(dt);
   if (game.state === 'playing') update(dt);
-  if (game.state === 'playing' || game.state === 'title') {
+  if (game.state === 'room') updateRoom(dt);
+  if (game.state === 'playing' || game.state === 'title' || game.state === 'room') {
     muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 60);
     tracerT -= dt;
     if (tracerT <= 0) { tracer.visible = false; muzzleFlash.visible = false; }
