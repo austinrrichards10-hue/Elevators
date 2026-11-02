@@ -138,13 +138,19 @@ function fitClothToLegs(parts, names) {
     const scale = oldWeight.normalized ? (oldWeight.array instanceof Uint8Array ? 255 : 65535) : 1;
     const indices = new Uint16Array(pos.count * 4), weights = new Float32Array(pos.count * 4);
     for (let i = 0; i < pos.count; i++) {
-      const legShare = 1 - THREE.MathUtils.smoothstep(pos.getY(i), 0.84, 0.99);
+      const legShare = 1 - THREE.MathUtils.smoothstep(pos.getY(i), 0.88, 0.99);
       for (let k = 0; k < 4; k++) {
         indices[i * 4 + k] = oldIndex.array[i * 4 + k];
         weights[i * 4 + k] = oldWeight.array[i * 4 + k] / scale;
       }
       if (legShare <= 0) continue;
-      const left = THREE.MathUtils.clamp((pos.getX(i) - MODEL_CENTER.x + 0.035) / 0.07, 0, 1);
+      const left = THREE.MathUtils.clamp((pos.getX(i) - MODEL_CENTER.x + 0.022) / 0.044, 0, 1);
+      // A little ease around the leg, so the fabric stays clear of the skin as it moves.
+      const ease = 0.011 * legShare;
+      const offX = pos.getX(i) - MODEL_CENTER.x, offZ = pos.getZ(i) - MODEL_CENTER.z;
+      const offLength = Math.hypot(offX, offZ) || 1;
+      pos.setX(i, pos.getX(i) + (offX / offLength) * ease);
+      pos.setZ(i, pos.getZ(i) + (offZ / offLength) * ease);
       indices[i * 4] = hips;
       indices[i * 4 + 1] = thighL;
       indices[i * 4 + 2] = thighR;
@@ -156,6 +162,41 @@ function fitClothToLegs(parts, names) {
     }
     geometry.setAttribute('skinIndex', new THREE.BufferAttribute(indices, 4));
     geometry.setAttribute('skinWeight', new THREE.BufferAttribute(weights, 4));
+  }
+}
+
+// Skin the clothing covers is never seen, but it can poke through when the legs swing.
+// Removing the triangles above the hem, all the way around the hips, leaves nothing to clip.
+function removeSkinUnderCloth(parts) {
+  const sectors = 16;
+  const hem = new Array(sectors).fill(Infinity);
+  const sectorOf = (x, z) => Math.floor(((Math.atan2(x - MODEL_CENTER.x, z - MODEL_CENTER.z) + Math.PI) / (Math.PI * 2)) * sectors) % sectors;
+  for (const part of parts) {
+    if (!part.isCloth) continue;
+    const pos = part.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      if (y > 1 || Math.abs(pos.getX(i) - MODEL_CENTER.x) > 0.25) continue;
+      const s = sectorOf(pos.getX(i), pos.getZ(i));
+      hem[s] = Math.min(hem[s], y);
+    }
+  }
+  for (const part of parts) {
+    if (part.isCloth || part.isHair) continue;
+    const { geometry } = part;
+    const pos = geometry.attributes.position;
+    const index = geometry.index.array;
+    const covered = (v) => {
+      const x = pos.getX(v);
+      if (Math.abs(x - MODEL_CENTER.x) > 0.25) return false;
+      const y = pos.getY(v);
+      return y < 1.05 && y > hem[sectorOf(x, pos.getZ(v))] + 0.018;
+    };
+    const kept = [];
+    for (let t = 0; t < index.length; t += 3) {
+      if (!(covered(index[t]) && covered(index[t + 1]) && covered(index[t + 2]))) kept.push(index[t], index[t + 1], index[t + 2]);
+    }
+    if (kept.length !== index.length) geometry.setIndex(kept);
   }
 }
 
@@ -201,6 +242,7 @@ function loadSkinData(skinId) {
     }
   });
 
+  removeSkinUnderCloth(parts);
   fitClothToLegs(parts, names);
 
   // Which bones actually move vertices, so only those are updated each frame.

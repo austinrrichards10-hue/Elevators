@@ -662,9 +662,9 @@ function poseAvatar(dt, move, moving) {
   const gait = (leg, phase, splay) => {
     const swing = Math.sin(phase);
     const fold = Math.max(0, Math.cos(phase + 0.35));
-    const walkThigh = (swing * -0.5 - 0.06) * walk;
+    const walkThigh = (swing * -0.4 - 0.04) * walk;
     const walkKnee = (0.1 + fold * fold * 0.85) * walk;
-    const runThigh = (swing * -0.62 - 0.26) * run;
+    const runThigh = (swing * -0.5 - 0.15) * run;
     const runKnee = (0.3 + fold * fold * 1.6) * run;
     leg.thigh.rotation.x = lerp((walkThigh + runThigh) * gaitScale, -1.9, tuck);
     leg.shin.rotation.x = lerp(walkKnee + runKnee + 0.03, 2.2, tuck);
@@ -731,7 +731,7 @@ const holderEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
 const holderInverse = new THREE.Matrix4();
-const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3(), pumpTarget = new THREE.Vector3();
+const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3();
 // Elbows point down, back and a little outward, so the arms clear the body.
 const POLE_R = new THREE.Vector3(-0.42, -0.78, -0.42), POLE_L = new THREE.Vector3(0.42, -0.78, -0.42);
 // How each hand sits on a gun, in the gun's coordinates (+Z forward, +Y up). Hands rest with
@@ -741,7 +741,9 @@ const RIGHT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 
 const LEFT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
 const RIGHT_WRIST = new THREE.Vector3(-0.024, -0.012, -0.072);
 const LEFT_WRIST = new THREE.Vector3(0.06, -0.026, -0.01);
-const handOffset = new THREE.Vector3(), handGoal = new THREE.Quaternion();
+const handOffset = new THREE.Vector3(), handGoal = new THREE.Quaternion(), leftGoal = new THREE.Quaternion();
+const mirrorWrist = new THREE.Vector3(), mirrorHand = new THREE.Quaternion();
+const ARM_SWING = 0.085;
 
 function keyedPath(t, keys, out) {
   if (t <= keys[0][0]) return out.copy(keys[0][1]);
@@ -775,7 +777,11 @@ function poseGun(dt, ease) {
     const beat = player.walkPhase;
     holderPos.y += Math.sin(beat * 2) * 0.007 * run;
     holderPos.x += Math.sin(beat) * 0.004 * run;
-    if (m.runOneHand) holderPos.z += Math.sin(beat) * 0.05 * run;
+    if (m.runOneHand) {
+      // A long, even arm swing, rising slightly as the hand comes forward.
+      holderPos.z += Math.sin(beat) * ARM_SWING * run;
+      holderPos.y += Math.sin(beat) * 0.022 * run;
+    }
     rx = lerp(rx, m.runRx + Math.sin(beat * 2) * 0.025, run);
     ry = lerp(ry, m.runRy - chest.rotation.y * 0.6, run);
     rz = lerp(rz, m.runRz + Math.sin(beat) * 0.03, run);
@@ -861,18 +867,27 @@ function poseGun(dt, ease) {
     if (m.shell) m.shell.visible = false;
   }
   if (tuck > 0) leftTarget.lerp(foreChest, tuck);
-  // With a one-handed carry, the free arm pumps opposite the gun.
-  if (m.runOneHand && run > 0.001 && !r) {
-    const pump = -Math.sin(player.walkPhase);
-    leftTarget.lerp(pumpTarget.set(0.12, avatar.dims.shoulderY - 0.27 + pump * 0.04, 0.12 + pump * 0.11), run);
-  }
 
   // Targets are where the palms go; each wrist sits back from its palm along the hand.
   const wrist = (target, offset) => target.add(handOffset.copy(offset).applyQuaternion(holderQuat));
-  solveArm(armR, wrist(rightTarget, RIGHT_WRIST), POLE_R);
-  solveArm(armL, wrist(leftTarget, LEFT_WRIST), POLE_L);
-  poseHand(armR, handGoal.copy(holderQuat).multiply(RIGHT_GRIP), 1);
-  poseHand(armL, handGoal.copy(holderQuat).multiply(LEFT_GRIP), m.runOneHand && !r ? 1 - run : 1);
+  const rightWrist = wrist(rightTarget, RIGHT_WRIST);
+  const leftWrist = wrist(leftTarget, LEFT_WRIST);
+  handGoal.copy(holderQuat).multiply(RIGHT_GRIP);
+  solveArm(armR, rightWrist, POLE_R);
+  poseHand(armR, handGoal, 1);
+
+  // A sprinting pistol leaves the left arm free: it mirrors the gun arm across the body,
+  // half a stride out of phase, with the palms facing each other.
+  leftGoal.copy(holderQuat).multiply(LEFT_GRIP);
+  const freeArm = m.runOneHand && !r ? run : 0;
+  if (freeArm > 0.001) {
+    const beat = Math.sin(player.walkPhase) * run;
+    mirrorWrist.set(-rightWrist.x, rightWrist.y - beat * 0.044, rightWrist.z - beat * ARM_SWING * 2);
+    leftWrist.lerp(mirrorWrist, freeArm);
+    leftGoal.slerp(mirrorHand.set(handGoal.x, -handGoal.y, -handGoal.z, handGoal.w), freeArm);
+  }
+  solveArm(armL, leftWrist, POLE_L);
+  poseHand(armL, leftGoal, 1);
 }
 
 function updateCamera(dt) {

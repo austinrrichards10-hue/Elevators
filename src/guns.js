@@ -72,7 +72,7 @@ function buildGunModel(id) {
     model.readyPos.set(-0.1, 0.05, 0.24);
     model.reloadPos.set(-0.03, 0.09, 0.27);
     // A pistol stays low in one hand, leaving the other arm free to pump.
-    model.runPos.set(-0.12, -0.05, 0.24);
+    model.runPos.set(-0.145, 0.05, 0.2);
     model.runRx = 0.42;
     model.runRy = 0;
     model.runRz = 0.12;
