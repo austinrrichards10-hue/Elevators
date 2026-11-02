@@ -1,6 +1,6 @@
 # Hollow Snow
 
-A low-poly third-person shooter set in a frozen, fog-bound forest. Light the three wardfires, reach the altar and defeat the Hollow King.
+A third-person shooter set in a frozen, fog-bound forest, with all models and textures generated in code. Light the three wardfires, reach the altar and defeat the Hollow King.
 
 Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN.
 

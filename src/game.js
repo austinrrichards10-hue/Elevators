@@ -1,29 +1,57 @@
 // Game loop, player, enemies, objectives and HUD.
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const RENDER_HEIGHT = 420;
 
 const canvas = $('view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-renderer.setPixelRatio(1);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.NoToneMapping;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 400);
-const world = buildWorld(scene);
-
-function resize() {
-  const aspect = innerWidth / innerHeight;
-  renderer.setSize(Math.round(RENDER_HEIGHT * aspect), RENDER_HEIGHT, false);
-  camera.aspect = aspect;
-  camera.updateProjectionMatrix();
-}
-addEventListener('resize', resize);
-resize();
+const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 900);
+const world = buildWorld(renderer, scene);
+const pipeline = createPipeline(renderer, scene, camera);
+addEventListener('resize', pipeline.resize);
+pipeline.resize();
 
 const heroine = buildHeroine();
 scene.add(heroine.root);
 
-const muzzleLight = new THREE.PointLight(0xffc48a, 0, 16, 1.7);
+const muzzleLight = new THREE.PointLight(0xffc48a, 0, 14, 1.8);
 scene.add(muzzleLight);
+const muzzleFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: new THREE.Color(5, 3, 1.6), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+muzzleFlash.scale.setScalar(0.34);
+muzzleFlash.visible = false;
+scene.add(muzzleFlash);
+
+// Footprints left in the snow.
+const FOOTPRINTS = 220;
+const footprints = new THREE.InstancedMesh(
+  new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x5f6c8e, transparent: true, opacity: 0.42, depthWrite: false }),
+  FOOTPRINTS,
+);
+footprints.frustumCulled = false;
+footprints.count = 0;
+scene.add(footprints);
+let footprintNext = 0;
+let footSide = 1;
+const footprintDummy = new THREE.Object3D();
+
+function leaveFootprint() {
+  footSide = -footSide;
+  const s = Math.sin(heroine.root.rotation.y), c = Math.cos(heroine.root.rotation.y);
+  const x = player.pos.x - c * footSide * 0.1, z = player.pos.z + s * footSide * 0.1;
+  footprintDummy.position.set(x, groundHeight(x, z) + 0.035, z);
+  footprintDummy.rotation.set(0, heroine.root.rotation.y, 0);
+  footprintDummy.scale.set(0.2, 1, 0.38);
+  footprintDummy.updateMatrix();
+  footprints.setMatrixAt(footprintNext, footprintDummy.matrix);
+  footprints.instanceMatrix.needsUpdate = true;
+  footprintNext = (footprintNext + 1) % FOOTPRINTS;
+  footprints.count = Math.min(FOOTPRINTS, footprints.count + 1);
+  burst(new THREE.Vector3(x, footprintDummy.position.y + 0.05, z), 0xf2f5ff, 3, 0.9);
+}
 
 const game = {
   state: 'title',
@@ -50,6 +78,8 @@ const player = {
   dodgeDir: new THREE.Vector3(),
   sinceHurt: 99,
   walkPhase: 0,
+  stride: 0,
+  swingTarget: new THREE.Vector3(),
   stepDist: 0,
   recoil: 0,
   shake: 0,
@@ -144,7 +174,7 @@ const sparks = {
 const sparkGeo = new THREE.BufferGeometry();
 sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparks.pos, 3));
 sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparks.col, 3));
-const sparkPoints = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 0.11, vertexColors: true }));
+const sparkPoints = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 0.06, map: TEX.softDot, transparent: true, depthWrite: false, vertexColors: true }));
 sparkPoints.frustumCulled = false;
 scene.add(sparkPoints);
 
@@ -257,6 +287,8 @@ function fire() {
   const hit = origin.clone().addScaledVector(aimDir, bestT);
   heroine.muzzle.getWorldPosition(muzzlePos);
   muzzleLight.position.copy(muzzlePos);
+  muzzleFlash.position.copy(muzzlePos);
+  muzzleFlash.visible = true;
   burst(muzzlePos, 0xffd9a0, 3, 1.6);
   tracerGeo.attributes.position.setXYZ(0, muzzlePos.x, muzzlePos.y, muzzlePos.z);
   tracerGeo.attributes.position.setXYZ(1, hit.x, hit.y, hit.z);
@@ -360,39 +392,72 @@ function updatePlayer(dt) {
   player.pos.y = groundHeight(player.pos.x, player.pos.z);
 
   player.stepDist += step;
-  if (player.stepDist > 1.7) { player.stepDist = 0; Sfx.step(); }
-  if (moving || player.aimT > 0) player.bodyYaw = angleLerp(player.bodyYaw, player.yaw, 1 - Math.exp(-14 * dt));
+  if (player.stepDist > 1.25) { player.stepDist = 0; Sfx.step(); leaveFootprint(); }
+  if (moving || player.aimT > 0) player.bodyYaw = angleLerp(player.bodyYaw, player.yaw, 1 - Math.exp(-11 * dt));
 
-  // Pose
-  const { root, legL, legR, armL, armR, head } = heroine;
+  // Blend between standing and walking so the gait eases in and out.
+  const stride = moving || player.dodgeT > 0 ? (sprinting ? 1 : 0.68) : 0;
+  player.stride += (stride - player.stride) * (1 - Math.exp(-9 * dt));
+  player.walkPhase += step * (sprinting ? 2.15 : 2.7);
+  poseHeroine(dt, move, moving);
+}
+
+function poseHeroine(dt, move, moving) {
+  const { root, chest, head, legL, legR, armL, armR, swing } = heroine;
+  const amount = player.stride;
+  const ph = player.walkPhase;
+  const breathe = Math.sin(game.time * 1.5);
+  const ease = (rate) => 1 - Math.exp(-rate * dt);
+
   root.position.copy(player.pos);
+  root.position.y += Math.abs(Math.sin(ph)) * 0.035 * amount - 0.02 * amount;
   root.rotation.y = player.bodyYaw;
-  root.rotation.x = player.dodgeT > 0 ? 0.5 : 0;
-  player.walkPhase += step * 2.5;
-  const swing = moving ? Math.sin(player.walkPhase) * (sprinting ? 0.85 : 0.6) : 0;
-  legL.rotation.x = swing;
-  legR.rotation.x = -swing;
-  armL.rotation.x = -swing * 0.6;
-  armL.rotation.z = 0.08;
-  head.rotation.x = -player.pitch * 0.25;
+  root.rotation.x += ((player.dodgeT > 0 ? 0.42 : 0) - root.rotation.x) * ease(18);
 
-  let aimAngle;
-  if (player.reloadT > 0) aimAngle = -0.6;
-  else if (player.aimT > 0) aimAngle = -Math.PI / 2 - player.pitch - player.recoil * 3;
-  else aimAngle = -1.15 + swing * 0.12;
-  armR.rotation.x += (aimAngle - armR.rotation.x) * (1 - Math.exp(-22 * dt));
-  armR.rotation.z = player.aimT > 0 ? 0.1 : -0.12;
+  // Thighs swing opposite; each knee bends as its foot passes under the body.
+  const gait = (leg, phase) => {
+    leg.thigh.rotation.x = Math.sin(phase) * -0.72 * amount;
+    leg.shin.rotation.x = (0.08 + Math.max(0, Math.cos(phase)) * 1.05) * amount + 0.02;
+  };
+  gait(legL, ph);
+  gait(legR, ph + Math.PI);
+
+  chest.rotation.x = 0.1 * amount + breathe * 0.008 - player.pitch * 0.12;
+  chest.rotation.y = Math.sin(ph) * 0.11 * amount;
+  chest.position.y = 0.98 + breathe * 0.004;
+  head.rotation.x = -player.pitch * 0.42 - 0.1 * amount;
+  head.rotation.y = -chest.rotation.y;
+
+  armL.upper.rotation.x = Math.sin(ph) * 0.42 * amount - 0.04;
+  armL.upper.rotation.z = 0.1;
+  armL.fore.rotation.x = -0.2 - amount * 0.45;
+
+  let upper, fore;
+  if (player.reloadT > 0) { upper = -0.5; fore = -1.5; }
+  else if (player.aimT > 0) { upper = -Math.PI / 2 - player.pitch - player.recoil * 3 + 0.1 * Math.sin(ph) * amount * 0.2; fore = -0.06; }
+  else { upper = -0.3 - Math.sin(ph) * 0.2 * amount; fore = -1.05; }
+  armR.upper.rotation.x += (upper - armR.upper.rotation.x) * ease(20);
+  armR.fore.rotation.x += (fore - armR.fore.rotation.x) * ease(20);
+  armR.upper.rotation.z = player.aimT > 0 ? -0.04 : -0.14;
+
+  // The fur trails against the direction of travel and settles when she stops.
+  const s = Math.sin(root.rotation.y), c = Math.cos(root.rotation.y);
+  const speed = moving ? (player.dodgeT > 0 ? 1.4 : amount) : 0;
+  const worldX = moving ? move.x * speed : 0, worldZ = moving ? move.z * speed : 0;
+  const localZ = worldX * s + worldZ * c, localX = worldX * c - worldZ * s;
+  const target = player.swingTarget.set(-localX * 0.11, 0.03 * speed, -localZ * 0.2 + Math.sin(ph * 2) * 0.012 * amount);
+  swing.value.lerp(target, ease(7));
 }
 
 function updateCamera() {
   const pitch = player.pitch + player.recoil;
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
   const s = Math.sin(player.yaw), c = Math.cos(player.yaw);
-  const distance = 2.9;
+  const distance = 3;
   camera.position.set(
-    player.pos.x - s * cp * distance - c * 0.62,
-    player.pos.y + 1.5 - sp * distance,
-    player.pos.z - c * cp * distance + s * 0.62,
+    player.pos.x - s * cp * distance - c * 0.68,
+    player.pos.y + 1.62 - sp * distance,
+    player.pos.z - c * cp * distance + s * 0.68,
   );
   camera.position.y = Math.max(camera.position.y, groundHeight(camera.position.x, camera.position.z) + 0.3);
   if (player.shake > 0) {
@@ -683,9 +748,7 @@ function updateObjectives(dt) {
 
   for (const ward of world.wards) {
     if (ward.lit) {
-      ward.light.intensity = 40 + Math.sin(game.time * 11 + ward.x) * 7;
-      ward.flame.scale.y = 1 + Math.sin(game.time * 15 + ward.z) * 0.14;
-      ward.flame.rotation.y += dt * 2;
+      ward.light.intensity = 60 + Math.sin(game.time * 11 + ward.x) * 8 + Math.sin(game.time * 23 + ward.z) * 5;
       continue;
     }
     const dist = Math.hypot(player.pos.x - ward.x, player.pos.z - ward.z);
@@ -789,14 +852,13 @@ function update(dt) {
 // Slow orbit behind the title screen.
 function updateTitle(dt) {
   game.time += dt;
-  const a = game.time * 0.1;
+  const a = game.time * 0.12;
   player.pos.y = groundHeight(player.pos.x, player.pos.z);
-  heroine.root.position.copy(player.pos);
-  heroine.root.rotation.y = a * 0.4 + 2.4;
-  heroine.armR.rotation.x = -1.15;
-  const lookAt = new THREE.Vector3(player.pos.x, player.pos.y + 1.15, player.pos.z);
-  camera.position.set(player.pos.x + Math.sin(a) * 1.5, player.pos.y + 1.2, player.pos.z - 3.3);
-  camera.lookAt(lookAt);
+  player.aimT = 0;
+  poseHeroine(dt, player.swingTarget, false);
+  heroine.root.rotation.y = Math.PI + 0.25 + Math.sin(a) * 0.12;
+  camera.position.set(player.pos.x - 0.95 + Math.sin(a) * 0.2, player.pos.y + 1.28, player.pos.z - 2.75);
+  camera.lookAt(player.pos.x - 0.75, player.pos.y + 1.12, player.pos.z);
 }
 
 let last = performance.now();
@@ -810,12 +872,12 @@ function frame(now) {
   if (game.state === 'playing' || game.state === 'title') {
     muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 60);
     tracerT -= dt;
-    if (tracerT <= 0) tracer.visible = false;
+    if (tracerT <= 0) { tracer.visible = false; muzzleFlash.visible = false; }
     updateSparks(dt);
     updateSubtitles(dt);
-    world.updateSnow(dt, camera.position);
+    world.update(dt, game.time, camera.position, player.pos);
   }
-  renderer.render(scene, camera);
+  pipeline.render(dt, game.time);
 }
 requestAnimationFrame(frame);
 
