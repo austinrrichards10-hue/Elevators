@@ -442,9 +442,22 @@ function faceRelief(x, y) {
   z += 0.0056 * bell(y + 0.0765, 0.0052) * bell(x, 0.0185);
   z += 0.0068 * bell(y + 0.0905, 0.0062) * bell(x, 0.0155);
   z -= 0.0022 * bell(y + 0.0835, 0.0019) * bell(x, 0.0175);
-  // Chin.
-  z += 0.0125 * bell(y + 0.116, 0.018) * bell(x, 0.03);
+  // A small rounding at the point of the chin.
+  z += 0.005 * bell(y + 0.112, 0.012) * bell(x, 0.024);
   return z;
+}
+
+// A sphere falls away towards the neck; this carries the centre of the lower face
+// forward instead, so the profile runs down from the lips to a defined chin.
+function chinFill(x, y) {
+  if (y >= -0.02) return 0;
+  let y0 = y;
+  for (let i = 0; i < 4; i++) y0 = y / (1 + 0.08 * jawAmount(y0));
+  const sphere = Math.sqrt(Math.max(0, FACE_R * FACE_R - y0 * y0)) * (1 - 0.14 * jawAmount(y0));
+  const target = 0.098 - 0.012 * THREE.MathUtils.smoothstep(-y, 0.04, 0.118);
+  const blend = THREE.MathUtils.smoothstep(-y, 0.02, 0.05);
+  const width = lerp(0.062, 0.03, THREE.MathUtils.smoothstep(-y, 0.05, 0.115));
+  return Math.max(0, target - sphere) * blend * bell(x, width);
 }
 
 function faceGeometry() {
@@ -456,7 +469,7 @@ function faceGeometry() {
     const k = jawAmount(y0);
     const x = x0 * (1 - 0.46 * k), y = y0 * (1 + 0.08 * k);
     // The front stays full down to the chin; only the back narrows towards the neck.
-    const z = z0 > 0 ? z0 * (1 - 0.14 * k) + faceRelief(x, y) : z0 * (1 - 0.5 * k) * 1.2;
+    const z = z0 > 0 ? z0 * (1 - 0.14 * k) + chinFill(x, y) + faceRelief(x, y) : z0 * (1 - 0.5 * k) * 1.2;
     pos.setXYZ(i, x, y, z);
   }
   geo.computeVertexNormals();
@@ -469,7 +482,7 @@ function faceDepth(x, y) {
   for (let i = 0; i < 4 && y < 0; i++) y0 = y / (1 + 0.08 * jawAmount(y0));
   const k = jawAmount(y0);
   const x0 = x / (1 - 0.46 * k);
-  return Math.sqrt(Math.max(0, FACE_R * FACE_R - x0 * x0 - y0 * y0)) * (1 - 0.14 * k) + faceRelief(x, y);
+  return Math.sqrt(Math.max(0, FACE_R * FACE_R - x0 * x0 - y0 * y0)) * (1 - 0.14 * k) + chinFill(x, y) + faceRelief(x, y);
 }
 
 // A small sheet draped over the face at (cx, cy), with optional tilt and bend.
