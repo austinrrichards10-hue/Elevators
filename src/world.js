@@ -285,6 +285,10 @@ function swayMaterial(params) {
         float swayPhase = instanceMatrix[3].x * 0.7 + instanceMatrix[3].z * 0.5;
         transformed.xz += sin(uTime * 0.85 + swayPhase) * position.y * 0.0065 * vec2(1.0, 0.6);
         #endif`);
+    // Branches right in front of the camera dissolve so they can't block the view.
+    shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+      float nearFade = smoothstep(1.3, 3.8, length(vViewPosition));
+      if (nearFade < 1.0 && fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) > nearFade) discard;`);
   };
   material.customProgramCacheKey = () => 'sway';
   return material;

@@ -266,22 +266,93 @@ function mistTexture() {
   });
 }
 
-function irisTexture() {
-  return canvasTexture(128, 64, (c, w, h) => {
-    c.fillStyle = '#e9e6e2';
-    c.fillRect(0, 0, w, h);
-    // The sphere's front (+Z) falls at u = 0.25 on three's sphere mapping.
-    const x = w * 0.25, y = h / 2;
-    const g = c.createRadialGradient(x, y, 2, x, y, 13);
-    g.addColorStop(0, '#111');
-    g.addColorStop(0.3, '#1b1b22');
-    g.addColorStop(0.36, '#5f88a8');
-    g.addColorStop(0.8, '#32546f');
-    g.addColorStop(1, '#10171f');
-    c.fillStyle = g;
+// A large almond eye with a teal iris, painted on a card that sits on the face.
+function eyeTexture() {
+  return canvasTexture(128, 128, (c, w) => {
+    const almond = () => {
+      c.beginPath();
+      c.moveTo(8, 72);
+      c.quadraticCurveTo(58, -6, 120, 58);
+      c.quadraticCurveTo(70, 132, 8, 72);
+      c.closePath();
+    };
+    c.save();
+    almond();
+    c.clip();
+    c.fillStyle = '#f6f4f2';
+    c.fillRect(0, 0, w, w);
+    const iris = c.createLinearGradient(0, 16, 0, 108);
+    iris.addColorStop(0, '#0b3f52');
+    iris.addColorStop(0.45, '#14788f');
+    iris.addColorStop(1, '#49d3dc');
+    c.fillStyle = iris;
     c.beginPath();
-    c.arc(x, y, 13, 0, 6.3);
+    c.ellipse(64, 62, 34, 42, 0, 0, 6.3);
     c.fill();
+    c.fillStyle = '#04161f';
+    c.beginPath();
+    c.ellipse(64, 58, 13, 19, 0, 0, 6.3);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.95)';
+    c.beginPath();
+    c.ellipse(50, 42, 9, 11, 0, 0, 6.3);
+    c.fill();
+    c.beginPath();
+    c.arc(77, 80, 4.5, 0, 6.3);
+    c.fill();
+    c.restore();
+    // Heavy upper lash, thin lower line.
+    c.strokeStyle = '#141018';
+    c.lineCap = 'round';
+    c.lineWidth = 9;
+    c.beginPath();
+    c.moveTo(6, 72);
+    c.quadraticCurveTo(58, -6, 121, 57);
+    c.stroke();
+    c.lineWidth = 2.5;
+    c.beginPath();
+    c.moveTo(30, 94);
+    c.quadraticCurveTo(70, 118, 104, 80);
+    c.stroke();
+  });
+}
+
+function blushTexture() {
+  return canvasTexture(64, 64, (c, w) => {
+    const g = c.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+    g.addColorStop(0, 'rgba(236,120,132,0.5)');
+    g.addColorStop(1, 'rgba(236,120,132,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, w);
+  });
+}
+
+// A lock of hair: root at the top of the card, tapering to fine tips at the bottom.
+function hairTexture(seed) {
+  const rand = seededRandom(seed);
+  const tones = ['#147089', '#1b8aa4', '#25a4bd', '#33bdd1', '#5fd5e0'];
+  return canvasTexture(128, 512, (c, w, h) => {
+    for (let i = 0; i < 700; i++) {
+      const u = rand();
+      const edge = 1 - Math.abs(u - 0.5) * 2;
+      const len = h * (0.45 + edge * 0.55) * (0.82 + rand() * 0.18);
+      const x = lerp(6, w - 6, u);
+      c.strokeStyle = tones[Math.floor(rand() * tones.length)];
+      c.lineWidth = 1.5 + rand() * 2;
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.quadraticCurveTo(x + (rand() - 0.5) * 8, len * 0.5, lerp(x, w / 2, 0.55), len);
+      c.stroke();
+    }
+  });
+}
+
+function hairCapTexture() {
+  const w = 128, h = 256;
+  const streaks = fbm(w, h, 32, 2, 3, 81);
+  return colorTexture(w, h, (i) => {
+    const t = streaks[i];
+    return [lerp(18, 66, t), lerp(102, 196, t), lerp(126, 214, t)];
   });
 }
 
@@ -308,7 +379,10 @@ const TEX = {
   furSpotted: furTexture(72, true),
   softDot: softDotTexture(),
   mist: mistTexture(),
-  iris: irisTexture(),
+  eye: eyeTexture(),
+  blush: blushTexture(),
+  hair: hairTexture(91),
+  hairCap: hairCapTexture(),
   beam: verticalFadeTexture(),
 };
 for (const t of [TEX.snow.normal, TEX.snow.rough, TEX.snow.color]) t.repeat.set(70, 70);

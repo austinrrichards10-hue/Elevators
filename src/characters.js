@@ -14,18 +14,13 @@ function lathe(profile, sides = 14) {
   return new THREE.LatheGeometry(curve.getPoints(profile.length * 4), sides);
 }
 
-function tube(points, radius, sides = 7) {
-  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p))), 18, radius, sides);
-}
-
 /* ---------- Hanging strips (fur, rags) ---------- */
 // Every strip is baked into one mesh, with a weight the vertex shader uses to swing the tips.
 function stripGeometry(strips) {
-  const rows = 6;
   const position = [], normal = [], uv = [], weight = [], phase = [], color = [], index = [];
   const n = new THREE.Vector3();
   for (const strip of strips) {
-    const { x, y, z, angle, tilt, width, length, roll = 0, curl = 0 } = strip;
+    const { x, y, z, angle, tilt = 0, width, length, roll = 0, curl = 0, rows = 6, path = null } = strip;
     const ox = Math.sin(angle), oz = Math.cos(angle);
     const sx = Math.cos(angle), sz = -Math.sin(angle);
     const start = position.length / 3;
@@ -33,7 +28,8 @@ function stripGeometry(strips) {
     n.set(ox * 0.82, 0.58, oz * 0.82).normalize();
     for (let i = 0; i <= rows; i++) {
       const t = i / rows;
-      const out = length * t * tilt * (1 - 0.45 * t) + curl * t * t;
+      // A path overrides the default hang, for locks that need to clear the shoulders.
+      const out = path ? path(t) : length * t * tilt * (1 - 0.45 * t) + curl * t * t;
       const w = width * (1 - 0.32 * t);
       const lean = Math.sin(roll) * length * t;
       for (const u of [0, 1]) {
@@ -112,16 +108,17 @@ function stripRing({ count, y, rx, rz, tilt, width, length, jitter = 0.12, gapAt
 function buildHeroine() {
   const swing = { value: new THREE.Vector3() };
   const clothNormal = TEX.cloth;
-  const skin = new THREE.MeshStandardMaterial({ color: 0xc99a82, roughness: 0.62 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf3ded6, roughness: 0.58 });
   const wrap = new THREE.MeshStandardMaterial({ color: 0xe9e6e0, roughness: 0.96, normalMap: clothNormal });
   const dark = new THREE.MeshStandardMaterial({ color: 0x17161d, roughness: 0.9, normalMap: clothNormal });
   const leather = new THREE.MeshStandardMaterial({ color: 0x1d1a1c, roughness: 0.58, normalMap: clothNormal });
   const steel = new THREE.MeshStandardMaterial({ color: 0x3a3e4a, metalness: 0.9, roughness: 0.42 });
   const silver = new THREE.MeshStandardMaterial({ color: 0xb6bcc8, metalness: 1, roughness: 0.3 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xc6a25c, metalness: 1, roughness: 0.34 });
-  const horn = new THREE.MeshStandardMaterial({ color: 0x2c2a31, metalness: 0.35, roughness: 0.48 });
   const furPlain = stripMaterial(TEX.fur, swing);
   const furSpotted = stripMaterial(TEX.furSpotted, swing);
+  const hairLock = stripMaterial(TEX.hair, swing, { roughness: 0.5, alphaTest: 0.45, envMapIntensity: 1.1 });
+  const hairCap = new THREE.MeshStandardMaterial({ map: TEX.hairCap, roughness: 0.5 });
 
   const root = new THREE.Group();
 
@@ -159,15 +156,15 @@ function buildHeroine() {
   root.add(chest);
   const torso = part(chest, lathe([[0.122, 0], [0.108, 0.13], [0.124, 0.29], [0.135, 0.38], [0.075, 0.47]], 16), dark);
   torso.scale.z = 0.72;
-  const neck = part(chest, lathe([[0.052, 0.44], [0.046, 0.56]], 10), wrap);
+  const neck = part(chest, lathe([[0.046, 0.44], [0.036, 0.6]], 10), new THREE.MeshStandardMaterial({ color: 0xf3ded6, roughness: 0.58 }));
   neck.scale.z = 0.95;
 
   const coatStrips = stripRing({ count: 46, y: 0.28, rx: 0.2, rz: 0.15, tilt: 0.24, width: 0.16, length: 0.62, jitter: 0.24 });
   const mantleStrips = stripRing({ count: 58, y: 0.46, rx: 0.25, rz: 0.17, tilt: 0.5, width: 0.16, length: 0.56, jitter: 0.26, curl: 0.03 });
   const capeStrips = stripRing({ count: 50, y: 0.52, rx: 0.16, rz: 0.12, tilt: 1.05, width: 0.14, length: 0.38, jitter: 0.24, curl: -0.03 });
   const ruffStrips = [
-    ...stripRing({ count: 44, y: 0.58, rx: 0.09, rz: 0.085, tilt: 1.35, width: 0.125, length: 0.25, jitter: 0.22, curl: -0.03 }),
-    ...stripRing({ count: 26, y: 0.61, rx: 0.07, rz: 0.07, tilt: 1.5, width: 0.1, length: 0.15 }),
+    ...stripRing({ count: 44, y: 0.53, rx: 0.09, rz: 0.085, tilt: 1.35, width: 0.125, length: 0.25, jitter: 0.22, curl: -0.03 }),
+    ...stripRing({ count: 26, y: 0.545, rx: 0.075, rz: 0.075, tilt: 1.5, width: 0.1, length: 0.15 }),
   ];
   stripMesh(chest, coatStrips, furPlain);
   stripMesh(chest, mantleStrips, furPlain);
@@ -175,10 +172,8 @@ function buildHeroine() {
   stripMesh(chest, ruffStrips, furPlain);
 
   // Thick scarf bands wound over the ruff.
-  const scarf = part(chest, new THREE.TorusGeometry(0.1, 0.05, 10, 22).rotateX(Math.PI / 2), wrap, 0, 0.56, 0);
-  scarf.rotation.x = 0.16;
-  const scarfTop = part(chest, new THREE.TorusGeometry(0.083, 0.036, 10, 22).rotateX(Math.PI / 2), wrap, 0, 0.615, 0.008);
-  scarfTop.rotation.x = -0.14;
+  const scarf = part(chest, new THREE.TorusGeometry(0.082, 0.032, 10, 22).rotateX(Math.PI / 2), wrap, 0, 0.525, 0);
+  scarf.rotation.x = 0.12;
   part(chest, new THREE.BoxGeometry(0.03, 0.2, 0.012), gold, 0.03, 0.38, 0.132).rotation.z = 0.12;
 
   // Arms: upper arm pivots at the shoulder, forearm at the elbow.
@@ -221,69 +216,128 @@ function buildHeroine() {
   gun.add(muzzle);
   armR.fore.add(gun);
 
-  // Head, wrapped so only the eyes show.
+  // Head, with a soft face that narrows to a small chin.
   const head = new THREE.Group();
-  head.position.y = 0.6;
+  head.position.y = 0.625;
   chest.add(head);
-  const face = part(head, new THREE.SphereGeometry(0.098, 20, 16), skin, 0, 0.055, 0);
+  const faceGeo = new THREE.SphereGeometry(0.098, 32, 24);
+  const facePos = faceGeo.attributes.position;
+  for (let i = 0; i < facePos.count; i++) {
+    const y = facePos.getY(i);
+    if (y >= 0) continue;
+    const narrow = 1 - 0.5 * Math.pow(-y / 0.098, 1.7);
+    facePos.setX(i, facePos.getX(i) * narrow);
+    facePos.setZ(i, facePos.getZ(i) * (0.72 + narrow * 0.28));
+  }
+  faceGeo.computeVertexNormals();
+  const face = part(head, faceGeo, skin, 0, 0.055, 0);
   face.scale.set(0.9, 1.14, 0.98);
-  const brow = part(head, new THREE.SphereGeometry(0.064, 12, 8), skin, 0, 0.085, 0.066);
-  brow.scale.set(1.15, 0.3, 0.5);
-  const nose = part(head, new THREE.ConeGeometry(0.014, 0.05, 6), skin, 0, 0.06, 0.098);
-  nose.rotation.x = 0.28;
+  part(head, new THREE.SphereGeometry(0.0045, 8, 6), skin, 0, 0.022, 0.095);
+  const mouth = part(head, new THREE.TorusGeometry(0.009, 0.0016, 5, 12, 2.1), new THREE.MeshStandardMaterial({ color: 0xa8505c, roughness: 0.6 }), 0, 0.0, 0.0795);
+  mouth.rotation.z = Math.PI * 1.17;
+
+  const eyeMat = new THREE.MeshStandardMaterial({ map: TEX.eye, alphaTest: 0.5, roughness: 0.2, emissive: 0xffffff, emissiveMap: TEX.eye, emissiveIntensity: 0.16 });
+  const blushMat = new THREE.MeshBasicMaterial({ map: TEX.blush, transparent: true, depthWrite: false });
+  const browMat = new THREE.MeshStandardMaterial({ color: 0x176f88, roughness: 0.7 });
+  const eyeGeo = new THREE.PlaneGeometry(0.06, 0.064, 6, 6);
+  const eyePos = eyeGeo.attributes.position;
+  for (let i = 0; i < eyePos.count; i++) {
+    const x = eyePos.getX(i), y = eyePos.getY(i);
+    eyePos.setZ(i, -(x * x + y * y) * 4.5);
+  }
+  eyeGeo.computeVertexNormals();
   for (const side of [-1, 1]) {
-    const eye = part(head, new THREE.SphereGeometry(0.0145, 14, 10), new THREE.MeshStandardMaterial({ map: TEX.iris, roughness: 0.12 }), side * 0.034, 0.066, 0.076);
-    eye.rotation.y = side * 0.1;
-    const lid = part(head, new THREE.SphereGeometry(0.0172, 12, 6, 0, 6.3, 0, 1.25), new THREE.MeshStandardMaterial({ color: 0x1b1214, roughness: 0.75 }), side * 0.034, 0.068, 0.0735);
-    lid.rotation.x = 0.25;
-    lid.scale.x = 1.28;
+    const eye = part(head, eyeGeo, eyeMat, side * 0.04, 0.06, 0.0858);
+    eye.rotation.y = side * 0.42;
+    eye.scale.x = side;
+    eye.material.side = THREE.DoubleSide;
+    eye.castShadow = false;
+    const blush = part(head, new THREE.PlaneGeometry(0.038, 0.024), blushMat, side * 0.051, 0.027, 0.0745);
+    blush.rotation.y = side * 0.55;
+    blush.castShadow = false;
+    const brow = part(head, new THREE.BoxGeometry(0.034, 0.0028, 0.002), browMat, side * 0.04, 0.097, 0.0845);
+    brow.rotation.set(0, side * 0.42, side * -0.2);
+    brow.castShadow = false;
   }
 
-  // Head wrap in three pieces: crown, back of the head and the face veil.
-  const crownCloth = part(head, new THREE.SphereGeometry(0.122, 24, 12, 0, 6.29, 0, 1.28), wrap, 0, 0.082, -0.006);
-  crownCloth.scale.set(1, 1.2, 1.08);
-  const backCloth = part(head, new THREE.SphereGeometry(0.119, 24, 8, 2.35, 4.7, 1.2, 0.75), wrap, 0, 0.082, -0.006);
-  backCloth.scale.set(1, 1.2, 1.08);
-  const veil = part(head, new THREE.SphereGeometry(0.114, 24, 12, 0, 6.29, 1.74, 1.3), wrap, 0, 0.09, 0.006);
-  veil.scale.set(0.95, 1.15, 1.09);
+  // Hair: a fitted cap, a fringe, side locks and two long twin tails.
+  const crown = part(head, new THREE.SphereGeometry(0.106, 28, 12, 0, 6.29, 0, 1.12), hairCap, 0, 0.062, -0.002);
+  crown.scale.set(0.98, 1.1, 1.05);
+  const backHair = part(head, new THREE.SphereGeometry(0.105, 24, 10, 2.75, 3.9, 1.08, 1), hairCap, 0, 0.062, -0.002);
+  backHair.scale.set(0.98, 1.1, 1.05);
 
-  // Turban folds.
-  for (let i = 0; i < 9; i++) {
-    const r = 0.122 - Math.abs(i - 2) * 0.008;
-    const fold = part(head, new THREE.TorusGeometry(r, 0.021, 8, 26), wrap, 0, 0.13 + i * 0.013, -0.006 - i * 0.003);
-    fold.rotation.set(Math.PI / 2 + 0.2 + (i % 3 - 1) * 0.14, (i % 2 - 0.5) * 0.15, 0);
-    fold.scale.set(1, 1.06, 1);
+  const fringe = [];
+  for (let i = -6; i <= 6; i++) {
+    const a = i * 0.14;
+    fringe.push({ x: Math.sin(a) * 0.092, y: 0.172 - Math.abs(i) * 0.003, z: Math.cos(a) * 0.098, angle: a, tilt: 0.16, width: 0.036, length: 0.066 + Math.abs(i) * 0.008 + Math.random() * 0.01, roll: -i * 0.035 });
   }
-  const top = part(head, new THREE.SphereGeometry(0.1, 16, 10), wrap, 0, 0.215, -0.022);
-  top.scale.y = 0.62;
+  stripMesh(head, fringe, hairLock);
 
-  // Gold circlet and the row of metal points under the eyes.
-  const circlet = part(head, new THREE.TorusGeometry(0.128, 0.0055, 6, 30), gold, 0, 0.131, 0.004);
-  circlet.rotation.x = Math.PI / 2 + 0.2;
-  const gem = part(head, new THREE.OctahedronGeometry(0.018, 0), new THREE.MeshStandardMaterial({ color: 0xbfd7f2, metalness: 0.2, roughness: 0.08 }), 0, 0.122, 0.132);
-  gem.scale.y = 1.4;
-  for (let i = -5; i <= 5; i++) {
-    const a = i * 0.13;
-    const point = part(head, new THREE.ConeGeometry(0.0055, 0.028, 4), silver, Math.sin(a) * 0.112, 0.03, Math.cos(a) * 0.116);
-    point.rotation.x = Math.PI;
+  const sideLocks = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 6; i++) {
+      const a = side * (1.1 + i * 0.09);
+      sideLocks.push({ x: Math.sin(a) * 0.096, y: 0.135, z: Math.cos(a) * 0.09, angle: a, tilt: 0.1, width: 0.055, length: 0.3 + Math.random() * 0.08 });
+    }
   }
-
-  // Branching horn piece rising from the back of the right shoulder.
-  const hornPaths = [
-    [[-0.08, 0.3, -0.13], [-0.2, 0.42, -0.2], [-0.33, 0.62, -0.2], [-0.4, 0.84, -0.14]],
-    [[-0.2, 0.42, -0.2], [-0.34, 0.45, -0.24], [-0.5, 0.56, -0.22], [-0.6, 0.72, -0.16]],
-    [[-0.3, 0.57, -0.2], [-0.42, 0.65, -0.22], [-0.48, 0.81, -0.19], [-0.47, 0.95, -0.15]],
-    [[-0.13, 0.36, -0.16], [-0.25, 0.34, -0.25], [-0.42, 0.37, -0.26], [-0.56, 0.47, -0.22]],
-  ];
-  hornPaths.forEach((path, i) => part(chest, tube(path, i === 0 ? 0.03 : 0.021), horn));
-
-  // Tail of the head wrap, falling down the back.
-  const tail = [];
-  for (let i = 0; i < 10; i++) {
-    const angle = Math.PI + (i - 4.5) * 0.22;
-    tail.push({ x: Math.sin(angle) * 0.09, y: 0.12, z: Math.cos(angle) * 0.1, angle, tilt: 0.34, width: 0.08, length: 0.36 + Math.random() * 0.12 });
+  const nape = [];
+  for (let i = 0; i < 18; i++) {
+    const a = Math.PI + (i - 8.5) * 0.15;
+    nape.push({ x: Math.sin(a) * 0.098, y: 0.09, z: Math.cos(a) * 0.1, angle: a, tilt: 0.18, width: 0.06, length: 0.26 + Math.random() * 0.1 });
   }
-  stripMesh(head, tail, furPlain);
+  stripMesh(head, sideLocks, hairLock);
+  stripMesh(head, nape, hairLock);
+
+  // Twin tails hang from the chest frame so their long fall stays steady when the head tilts.
+  const tails = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 36; i++) {
+      const length = 1.3 + Math.random() * 0.26;
+      const spread = 0.25 + Math.random() * 0.13;
+      tails.push({
+        x: side * 0.095,
+        y: 0.785 + (Math.random() - 0.5) * 0.025,
+        z: -0.045,
+        angle: side * (Math.PI / 2 + 0.42 + (Math.random() - 0.5) * 0.55),
+        width: 0.058 + Math.random() * 0.024,
+        length,
+        rows: 16,
+        path: (t) => spread * (1 - Math.exp(-t * 6)) + 0.05 * t,
+      });
+    }
+    part(chest, new THREE.BoxGeometry(0.03, 0.045, 0.03), dark, side * 0.096, 0.79, -0.045);
+    part(chest, new THREE.BoxGeometry(0.033, 0.011, 0.033), new THREE.MeshStandardMaterial({ color: 0xc8305f, roughness: 0.45 }), side * 0.096, 0.807, -0.045);
+  }
+  stripMesh(chest, tails, hairLock);
+
+  // Earmuffs in the cape's shaggy fur, with a fur band over the head.
+  const band = part(head, new THREE.TorusGeometry(0.115, 0.012, 8, 28, Math.PI), wrap, 0, 0.065, 0.004);
+  band.scale.y = 1.12;
+  const bandFur = [];
+  for (let i = 1; i < 20; i++) {
+    const a = (i / 20) * Math.PI;
+    const px = Math.cos(a) * 0.117;
+    bandFur.push({ x: px, y: 0.068 + Math.sin(a) * 0.133, z: 0.004, angle: i % 2 ? 0 : Math.PI, tilt: 0.9, width: 0.03, length: 0.026 + Math.random() * 0.01 });
+  }
+  stripMesh(head, bandFur, furPlain);
+
+  for (const side of [-1, 1]) {
+    const muff = new THREE.Group();
+    muff.position.set(side * 0.112, 0.06, 0);
+    muff.rotation.z = side * -Math.PI / 2;
+    const base = part(muff, new THREE.SphereGeometry(0.05, 16, 12), wrap);
+    base.scale.y = 0.85;
+    // The ring's axis points away from the head; shaggy tiers lie back over the cup.
+    stripMesh(muff, stripRing({ count: 26, y: 0.022, rx: 0.044, rz: 0.044, tilt: 0.75, width: 0.042, length: 0.05, jitter: 0.25 }), furPlain);
+    stripMesh(muff, stripRing({ count: 22, y: 0.046, rx: 0.026, rz: 0.026, tilt: 1.15, width: 0.04, length: 0.04, jitter: 0.25 }), furPlain);
+    stripMesh(muff, stripRing({ count: 14, y: 0.056, rx: 0.008, rz: 0.008, tilt: 1.35, width: 0.032, length: 0.032, jitter: 0.25 }), furPlain);
+    for (const [a, r] of [[0.7, 0.03], [2.6, 0.034], [4.4, 0.026]]) {
+      const spot = part(muff, new THREE.SphereGeometry(0.0062, 7, 6), dark, Math.sin(a) * r, 0.052, Math.cos(a) * r);
+      spot.scale.set(0.8, 0.5, 1.5);
+      spot.castShadow = false;
+    }
+    head.add(muff);
+  }
 
   // Charm chain and eye ornament at the right hip.
   for (let i = 0; i < 6; i++) part(root, new THREE.OctahedronGeometry(0.016 - i * 0.001, 0), silver, -0.31, 1.0 - i * 0.055, -0.03);
