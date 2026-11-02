@@ -12,7 +12,7 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 | Right click | Aim |
 | R | Reload |
 | 1-5 | Switch weapon |
-| Shift | Sprint |
+| Shift | Sprint (the gun is lowered and can't fire) |
 | Space | Dodge |
 | E | Hold to interact |
 | M | Mute |

@@ -49,6 +49,12 @@ function buildGunModel(id) {
     readyRz: 0.25,
     aimPos: new THREE.Vector3(-0.07, 0.21, 0.27),
     reloadPos: new THREE.Vector3(-0.03, 0.08, 0.27),
+    // Carried while sprinting: long guns slung diagonally across the chest.
+    runPos: new THREE.Vector3(-0.075, -0.02, 0.145),
+    runRx: -0.62,
+    runRy: 0.95,
+    runRz: 0.42,
+    runOneHand: false,
   };
 
   if (id === 'pistol') {
@@ -65,6 +71,12 @@ function buildGunModel(id) {
     model.aimPos.set(-0.04, 0.2, 0.37);
     model.readyPos.set(-0.1, 0.05, 0.24);
     model.reloadPos.set(-0.03, 0.09, 0.27);
+    // A pistol stays low in one hand, leaving the other arm free to pump.
+    model.runPos.set(-0.1, -0.02, 0.17);
+    model.runRx = 0.42;
+    model.runRy = 0;
+    model.runRz = 0.12;
+    model.runOneHand = true;
   } else if (id === 'smg') {
     box(group, steel, 0.04, 0.055, 0.25, 0, 0.03, 0.07);
     box(moving, bright, 0.012, 0.012, 0.03, 0.022, 0.045, 0.02);

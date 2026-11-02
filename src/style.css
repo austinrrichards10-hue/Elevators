@@ -12,6 +12,7 @@ html, body { height: 100%; overflow: hidden; background: #2b3552; color: #eef1ff
 #compass-dist { font-size: 13px; opacity: .85; }
 #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #0a0e22; transition: transform .08s; }
 #crosshair.hit { background: #ff5470; transform: scale(2); }
+#crosshair.lowered { opacity: .22; }
 #prompt { position: absolute; top: 62%; left: 50%; transform: translateX(-50%); padding: 6px 14px; background: rgba(10, 14, 34, .6); font-size: 17px; white-space: nowrap; }
 
 .bar { height: 12px; background: rgba(10, 14, 34, .65); border: 1px solid rgba(238, 241, 255, .4); }

@@ -76,6 +76,8 @@ const player = {
   sinceHurt: 99,
   walkPhase: 0,
   stride: 0,
+  sprinting: false,
+  runBlend: 0,
   gaitDir: 1,
   strafeLean: 0,
   stepDist: 0,
@@ -345,6 +347,8 @@ function updateDroppedMags(dt) {
 }
 
 /* ---------- Combat ---------- */
+// How far out of the sprint carry the gun must be before it can fire.
+const GUN_READY_BLEND = 0.3;
 const muzzlePos = new THREE.Vector3();
 const aimDir = new THREE.Vector3();
 const shotDir = new THREE.Vector3();
@@ -437,6 +441,7 @@ function traceShot(def, dir) {
 
 function tryFire() {
   const def = GUNS[gunId];
+  if (player.sprinting || player.runBlend > GUN_READY_BLEND) return;
   if (player.dodge || player.fireCd > 0 || (player.cycle && player.cycle.blocking)) return;
   if (player.reload) {
     // Shells can be interrupted to fire what's already loaded.
@@ -546,7 +551,12 @@ function updatePlayer(dt) {
   const move = moveInput();
   const moving = move.lengthSq() > 0;
   const ads = aiming && !player.reload && !player.dodge;
-  const sprinting = keys.ShiftLeft && moving && player.stamina > 1 && player.aimT <= 0.6 && !player.reload && !ads;
+  const sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && player.stamina > 1 && !player.reload && !ads && !player.dodge;
+  player.sprinting = sprinting;
+  // Sprinting lowers the gun; it has to come back up before she can fire again.
+  if (sprinting) { player.aimT = 0; triggerBuffered = false; }
+  player.runBlend += ((sprinting ? 1 : 0) - player.runBlend) * (1 - Math.exp(-(sprinting ? 7 : 10) * dt));
+  $('crosshair').classList.toggle('lowered', player.runBlend > GUN_READY_BLEND);
   player.stamina = clamp(player.stamina + (sprinting ? -24 : 16) * dt, 0, 100);
   if (player.sinceHurt > 6) player.hp = Math.min(100, player.hp + 3 * dt);
 
@@ -589,7 +599,7 @@ function updatePlayer(dt) {
   // Blend between standing and walking so the gait eases in and out.
   const stride = moving && !player.dodge ? (sprinting ? 1 : ads ? 0.42 : 0.68) : 0;
   player.stride += (stride - player.stride) * (1 - Math.exp(-9 * dt));
-  player.walkPhase += step * (sprinting ? 2.2 : 3) * player.gaitDir;
+  player.walkPhase += step * (sprinting ? 1.95 : 2.55) * player.gaitDir;
   poseAvatar(dt, move, moving);
   avatar.simulate(dt);
 }
@@ -614,8 +624,12 @@ function poseAvatar(dt, move, moving) {
   // Dodge tumble.
   let tuck = 0;
   qYaw.setFromAxisAngle(UP, player.bodyYaw);
+  const run = player.runBlend;
+  const walk = Math.max(0, amount - run);
   root.position.copy(player.pos);
-  root.position.y += Math.abs(Math.sin(ph)) * 0.03 * amount - 0.015 * amount;
+  // Walking dips as the legs spread; running rises into the airborne part of each stride.
+  const stepWave = Math.abs(Math.sin(ph));
+  root.position.y += -stepWave * 0.022 * walk + (stepWave - 0.4) * 0.055 * run;
   if (player.dodge) {
     const d = player.dodge;
     const u = clamp(d.t / d.dur, 0, 1);
@@ -635,28 +649,36 @@ function poseAvatar(dt, move, moving) {
   }
   player.tuck = tuck;
 
-  hips.position.y = avatar.dims.hips - 0.03 * amount;
-  hips.rotation.z = player.strafeLean;
-  hips.rotation.y = Math.sin(ph) * 0.05 * amount;
+  // The body sinks and tips into a run, and the pelvis turns with the leading leg.
+  hips.position.y = avatar.dims.hips - 0.012 * walk - 0.045 * run;
+  hips.rotation.x = 0.12 * run;
+  hips.rotation.z = player.strafeLean - Math.cos(ph) * (0.018 * walk + 0.03 * run);
+  hips.rotation.y = Math.sin(ph) * (0.07 * walk + 0.16 * run);
 
-  // Thighs swing opposite; each knee bends as its foot passes under the body.
+  // Each thigh reaches forward further than it trails, and the knee folds through the
+  // backswing, carrying the foot high in a run, before straightening to land.
   const gaitScale = 1 - Math.abs(localSide) * 0.35;
   const gait = (leg, phase, splay) => {
-    const walkThigh = Math.sin(phase) * -0.72 * amount * gaitScale;
-    const walkKnee = (0.08 + Math.max(0, Math.cos(phase)) * 1.05) * amount + 0.03;
-    leg.thigh.rotation.x = lerp(walkThigh, -1.9, tuck);
-    leg.shin.rotation.x = lerp(walkKnee, 2.2, tuck);
+    const swing = Math.sin(phase);
+    const fold = Math.max(0, Math.cos(phase + 0.35));
+    const walkThigh = (swing * -0.5 - 0.06) * walk;
+    const walkKnee = (0.1 + fold * fold * 0.85) * walk;
+    const runThigh = (swing * -0.62 - 0.26) * run;
+    const runKnee = (0.3 + fold * fold * 1.6) * run;
+    leg.thigh.rotation.x = lerp((walkThigh + runThigh) * gaitScale, -1.9, tuck);
+    leg.shin.rotation.x = lerp(walkKnee + runKnee + 0.03, 2.2, tuck);
     leg.thigh.rotation.z = splay * (0.03 + Math.abs(localSide) * amount * 0.1);
   };
   gait(legL, ph, 1);
   gait(legR, ph + Math.PI, -1);
 
-  chest.rotation.x = lerp(0.07 * amount + breathe * 0.008 - player.pitch * 0.1, 0.72, tuck);
-  chest.rotation.y = lerp(Math.sin(ph) * 0.09 * amount - player.aimBlend * 0.14, 0, tuck);
+  // Shoulders counter the hips, and the head stays level with the run's forward lean.
+  chest.rotation.x = lerp(0.05 * walk + 0.2 * run + breathe * 0.008 - player.pitch * 0.1 * (1 - run), 0.72, tuck);
+  chest.rotation.y = lerp(Math.sin(ph) * (-0.12 * walk - 0.24 * run) - player.aimBlend * 0.14, 0, tuck);
   chest.rotation.z = -player.strafeLean * 0.6;
   chest.position.y = avatar.dims.chest + breathe * 0.002;
-  head.rotation.x = lerp(-player.pitch * 0.5 - 0.05 * amount, 0.45, tuck);
-  head.rotation.y = -chest.rotation.y;
+  head.rotation.x = lerp(-player.pitch * 0.5 * (1 - run) - 0.04 * walk - 0.3 * run, 0.45, tuck);
+  head.rotation.y = -chest.rotation.y - hips.rotation.y;
 
   poseGun(dt, ease);
 }
@@ -707,7 +729,7 @@ const holderEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
 const holderInverse = new THREE.Matrix4();
-const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3();
+const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3(), pumpTarget = new THREE.Vector3();
 const POLE_R = new THREE.Vector3(-0.42, -0.88, -0.18), POLE_L = new THREE.Vector3(0.42, -0.88, -0.14);
 
 function keyedPath(t, keys, out) {
@@ -734,6 +756,19 @@ function poseGun(dt, ease) {
   holderPos.y += player.kick * 0.14;
   rx -= player.kick * 1.5;
   holderPos.y += Math.sin(player.walkPhase * 2) * 0.008 * player.stride;
+
+  // Sprint carry: the gun bounces with each step and sways against the shoulders.
+  const run = player.runBlend;
+  if (run > 0.001) {
+    holderPos.lerp(m.runPos, run);
+    const beat = player.walkPhase;
+    holderPos.y += Math.sin(beat * 2) * 0.014 * run;
+    holderPos.x += Math.sin(beat) * 0.012 * run;
+    if (m.runOneHand) holderPos.z += Math.sin(beat) * 0.07 * run;
+    rx = lerp(rx, m.runRx + Math.sin(beat * 2) * 0.05, run);
+    ry = lerp(ry, m.runRy - chest.rotation.y * 0.6, run);
+    rz = lerp(rz, m.runRz + Math.sin(beat) * 0.06, run);
+  }
 
   // Raises into place after a swap.
   rx += player.equip * 0.9;
@@ -815,6 +850,11 @@ function poseGun(dt, ease) {
     if (m.shell) m.shell.visible = false;
   }
   if (tuck > 0) leftTarget.lerp(foreChest, tuck);
+  // With a one-handed carry, the free arm pumps opposite the gun.
+  if (m.runOneHand && run > 0.001 && !r) {
+    const pump = -Math.sin(player.walkPhase);
+    leftTarget.lerp(pumpTarget.set(0.13, avatar.dims.shoulderY - 0.24 + pump * 0.045, 0.05 + pump * 0.13), run);
+  }
 
   solveArm(armR, rightTarget, POLE_R);
   solveArm(armL, leftTarget, POLE_L);
@@ -1265,7 +1305,7 @@ const ROOM_VIEWS = {
   Legs: { y: 0.42, dist: 1.25, yaw: 0.3, pitch: 0.05 },
   Hands: { y: 0.95, dist: 0.8, yaw: 0.2, pitch: 0.22 },
 };
-const ROOM_POSES = ['Idle', 'Aim', 'Walk', 'Reload'];
+const ROOM_POSES = ['Idle', 'Aim', 'Walk', 'Run', 'Reload'];
 
 const roomSet = new THREE.Group();
 roomSet.position.y = ROOM_Y;
@@ -1346,6 +1386,7 @@ function closeRoom() {
   player.reload = null;
   player.aimT = 0;
   player.stride = 0;
+  player.runBlend = 0;
   player.ammo[gunId] = GUNS[gunId].mag;
   camera.near = 0.1;
   camera.fov = 58;
@@ -1398,10 +1439,12 @@ function updateRoom(dt) {
   player.bodyYaw = 0;
   player.pitch = 0;
 
-  const walking = roomPose === 'Walk';
+  const running = roomPose === 'Run';
+  const walking = roomPose === 'Walk' || running;
   roomMove.set(0, 0, walking ? 1 : 0);
-  player.stride += ((walking ? 0.68 : 0) - player.stride) * (1 - Math.exp(-9 * dt));
-  if (walking) player.walkPhase += dt * 4.3 * 3;
+  player.stride += (((running ? 1 : walking ? 0.68 : 0)) - player.stride) * (1 - Math.exp(-9 * dt));
+  player.runBlend += ((running ? 1 : 0) - player.runBlend) * (1 - Math.exp(-(running ? 7 : 10) * dt));
+  if (walking) player.walkPhase += dt * (running ? 6.9 * 1.95 : 4.3 * 2.55);
   player.aimT = roomPose === 'Aim' ? 1 : 0;
   if (player.reload) updateReload(dt);
   else if (roomPose === 'Reload') startRoomReload();
