@@ -171,20 +171,35 @@ addEventListener('mouseup', (e) => {
   if (e.button === 0) releaseArrow();
   if (e.button === 2) aiming = false;
 });
+// Only a locked mouse turns the camera. A free cursor (say, when the browser refused to
+// re-lock right after a pause) reports huge jumps as it leaves and re-enters the window.
+// Some browsers also send the odd wild reading under pointer lock, so those are dropped.
+const MOUSE_SPIKE = 200;
+let skipMouse = 0;
 addEventListener('mousemove', (e) => {
-  if (game.state !== 'playing') return;
+  if (game.state !== 'playing' || document.pointerLockElement !== canvas) return;
+  if (skipMouse > 0) { skipMouse--; return; }
+  if (Math.abs(e.movementX) > MOUSE_SPIKE || Math.abs(e.movementY) > MOUSE_SPIKE) return;
   const sensitivity = 0.0023 * (camera.fov / 58);
   player.yaw -= e.movementX * sensitivity;
   player.pitch = clamp(player.pitch - e.movementY * sensitivity, -0.85, 0.95);
 });
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement === canvas) pointerWasLocked = true;
-  else if (pointerWasLocked && game.state === 'playing') setPaused(true);
+  if (document.pointerLockElement === canvas) {
+    pointerWasLocked = true;
+    // The first readings after locking can carry the cursor's jump to the centre.
+    skipMouse = 2;
+  } else if (pointerWasLocked && game.state === 'playing') setPaused(true);
 });
 
+// Raw mouse input avoids the jumps some systems add with acceleration; not every browser
+// supports it, so fall back to a plain lock.
 function lockPointer() {
-  const request = canvas.requestPointerLock();
-  if (request && request.catch) request.catch(() => {});
+  const plain = () => { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); };
+  try {
+    const request = canvas.requestPointerLock({ unadjustedMovement: true });
+    if (request && request.catch) request.catch(plain);
+  } catch { plain(); }
 }
 
 function setPaused(paused) {
@@ -596,8 +611,12 @@ const holderPos = new THREE.Vector3();
 const holderEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
-const aimQuat = new THREE.Quaternion(), restQuat = new THREE.Quaternion(), tuckQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.75, 0, 0.9, 'YXZ'));
-const aimAxis = new THREE.Vector3(), anchor = new THREE.Vector3(), toAnchor = new THREE.Vector3(), aimGrip = new THREE.Vector3(), restGrip = new THREE.Vector3();
+const aimQuat = new THREE.Quaternion(), restQuat = new THREE.Quaternion();
+const aimAxis = new THREE.Vector3(), anchor = new THREE.Vector3(), toAnchor = new THREE.Vector3(), aimGrip = new THREE.Vector3(), restGrip = new THREE.Vector3(), liftGrip = new THREE.Vector3();
+// How far behind the chest the slung bow's grip sits, and how much of the draw-out blend is
+// spent lifting it off her back.
+const BOW_BACK_Z = -0.105;
+const BOW_LIFT = 0.4;
 const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3(), restHand = new THREE.Vector3();
 const poleR = new THREE.Vector3();
 // Elbows point down, back and a little outward, so the arms clear the body. At full draw
@@ -623,7 +642,6 @@ function poseBow(dt, ease) {
   const wantAim = (player.aimT > 0 || aiming || player.drawing) && !player.dodge;
   player.aimBlend += ((wantAim ? 1 : 0) - player.aimBlend) * ease(12);
   const blend = smooth(player.aimBlend);
-  const tuck = player.tuck;
   const run = player.runBlend;
   const shoulderL = armL.upper.position, shoulderR = armR.upper.position;
   const reachL = (armL.a + armL.b) * 0.97, reachR = (armR.a + armR.b) * 0.96;
@@ -640,30 +658,38 @@ function poseBow(dt, ease) {
   aimGrip.copy(anchor).addScaledVector(aimAxis, reachAlong);
   m.drawLength = Math.max(0.3, reachAlong - 0.03);
 
-  // Lowered: carried in the left hand at her side, swinging with her stride.
+  // Put away: slung diagonally across her back, top over the right shoulder, bouncing a
+  // little with her stride.
   const swing = Math.sin(player.walkPhase) * player.stride;
-  restGrip.set(shoulderL.x + 0.05, shoulderL.y - reachL * 0.93, 0.05 - swing * (0.05 + run * 0.08));
-  holderEuler.set(0.18 - swing * 0.2, 0, -0.14);
-  restQuat.setFromEuler(holderEuler);
+  restGrip.set(0, shoulderL.y - 0.1 + Math.abs(swing) * (0.006 + run * 0.012), BOW_BACK_Z);
+  restQuat.setFromEuler(holderEuler.set(0, 0, 0.6));
 
-  holderPos.lerpVectors(restGrip, aimGrip, blend);
-  holderQuat.slerpQuaternions(restQuat, aimQuat, blend);
-  if (tuck > 0) {
-    holderPos.lerp(leftTarget.set(0.08, shoulderL.y - 0.2, 0.15), tuck);
-    holderQuat.slerp(tuckQuat, tuck);
+  // Taking it out, it comes off the back and up over the left shoulder before swinging
+  // round to the front, so it never passes through her.
+  const lift = Math.min(1, blend / BOW_LIFT);
+  if (blend < BOW_LIFT) {
+    holderPos.lerpVectors(restGrip, liftGrip.set(shoulderL.x + 0.06, shoulderL.y + 0.2, -0.04), smooth(lift));
+    holderQuat.slerpQuaternions(restQuat, aimQuat, smooth(lift) * 0.5);
+  } else {
+    const u = smooth((blend - BOW_LIFT) / (1 - BOW_LIFT));
+    holderPos.lerpVectors(liftGrip.set(shoulderL.x + 0.06, shoulderL.y + 0.2, -0.04), aimGrip, u);
+    holderQuat.slerpQuaternions(restQuat, aimQuat, 0.5 + u * 0.5);
   }
   holder.matrix.compose(holderPos, holderQuat, holderScale);
 
   // The string only comes back once the bow is up.
   m.setDraw(player.draw * blend, player.drawing);
 
-  // Left hand on the grip.
+  // Left hand reaches back for the grip; put away, it hangs and swings with her stride.
   leftTarget.copy(holderPos).add(handOffset.copy(LEFT_WRIST).applyQuaternion(holderQuat));
+  restHand.set(shoulderL.x + 0.04, shoulderL.y - reachL, 0.03 - swing * (0.06 + run * 0.1));
+  leftTarget.lerpVectors(restHand, leftTarget, smooth(lift));
   leftGoal.copy(holderQuat).multiply(LEFT_GRIP);
+  leftGoal.slerpQuaternions(HAND_DOWN, leftGoal, smooth(lift));
   solveArm(armL, leftTarget, POLE_L);
   poseHand(armL, leftGoal, 1);
 
-  // Right hand on the string while aiming; otherwise hanging and swinging opposite the bow.
+  // Right hand on the string while aiming; otherwise hanging and swinging opposite the left.
   rightTarget.copy(m.nock).applyMatrix4(holder.matrix).add(handOffset.copy(RIGHT_WRIST).applyQuaternion(holderQuat));
   restHand.set(shoulderR.x - 0.04, shoulderR.y - reachR, 0.03 + swing * (0.06 + run * 0.1));
   rightTarget.lerpVectors(restHand, rightTarget, blend);
