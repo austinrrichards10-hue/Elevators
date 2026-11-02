@@ -50,8 +50,8 @@ function collide(p, colliders, pad) {
 
 // A verlet chain pinned to a point on the body, with a springy pull towards a rest shape.
 class Chain {
-  constructor(anchor, offset, { count, segment, rest, stiffness, damping = 0.985, gravity = -8.5, pad = 0.02, wind = 0.5 }) {
-    Object.assign(this, { anchor, offset, count, segment, rest, stiffness, damping, gravity, pad, wind });
+  constructor(anchor, offset, { count, segment, rest, stiffness, damping = 0.95, gravity = -6, pad = 0.02, wind = 0.2, keepSide = 0 }) {
+    Object.assign(this, { anchor, offset, count, segment, rest, stiffness, damping, gravity, pad, wind, keepSide });
     this.pos = Array.from({ length: count }, () => new THREE.Vector3());
     this.prev = Array.from({ length: count }, () => new THREE.Vector3());
     this.time = Math.random() * 10;
@@ -74,6 +74,8 @@ class Chain {
     if (v3.distanceToSquared(pos[0]) > 4) { this.reset(); return; }
     pos[0].copy(v3);
     this.anchor.getWorldQuaternion(q1);
+    // Centre of the head, which the side limit below measures from.
+    const rootX = this.anchor.matrixWorld.elements[12], rootY = this.anchor.matrixWorld.elements[13], rootZ = this.anchor.matrixWorld.elements[14];
     const gust = Math.sin(this.time * 1.3) * this.wind + Math.sin(this.time * 3.7) * this.wind * 0.3;
     for (let i = 1; i < count; i++) {
       const p = pos[i], o = prev[i];
@@ -95,6 +97,13 @@ class Chain {
         const len = v2.length() || 1e-5;
         pos[i].copy(pos[i - 1]).addScaledVector(v2, segment / len);
         collide(pos[i], colliders, this.pad);
+        // Each twin tail stays on its own side of the body, so they can't tangle.
+        if (this.keepSide && i > 1) {
+          v2.set(1, 0, 0).applyQuaternion(q1);
+          const across = (pos[i].x - rootX) * v2.x + (pos[i].y - rootY) * v2.y + (pos[i].z - rootZ) * v2.z;
+          const short = 0.03 - across * this.keepSide;
+          if (short > 0) pos[i].addScaledVector(v2, short * this.keepSide);
+        }
       }
     }
   }
@@ -256,15 +265,15 @@ class Skirt {
       const vx = (p.x - o.x) * damping, vy = (p.y - o.y) * damping, vz = (p.z - o.z) * damping;
       o.copy(p);
       p.x += vx;
-      p.y += vy - 7 * h * h;
+      p.y += vy - 4 * h * h;
       p.z += vz;
     };
     for (let c = 0; c < this.columns; c++) {
       this.waist[c].copy(this.restWaist[c]).applyMatrix4(m);
-      verlet(this.mid[c], this.midPrev[c], 0.965);
-      verlet(this.hem[c], this.hemPrev[c], 0.975);
-      this.mid[c].lerp(v2.copy(this.restMid[c]).applyMatrix4(m), 0.09);
-      this.hem[c].lerp(v2.copy(this.restHem[c]).applyMatrix4(m), 0.055);
+      verlet(this.mid[c], this.midPrev[c], 0.88);
+      verlet(this.hem[c], this.hemPrev[c], 0.9);
+      this.mid[c].lerp(v2.copy(this.restMid[c]).applyMatrix4(m), 0.3);
+      this.hem[c].lerp(v2.copy(this.restHem[c]).applyMatrix4(m), 0.2);
     }
     for (let pass = 0; pass < 2; pass++) {
       for (let c = 0; c < this.columns; c++) {
@@ -380,10 +389,16 @@ function addLock(builder, points, width, thick, sideRef = new THREE.Vector3(1, 0
   }
 }
 
-const pointed = (peak, at = 0.32) => (t) => (t < at ? lerp(peak * 0.62, peak, t / at) : peak * Math.pow(1 - (t - at) / (1 - at), 0.72));
+// Closes at both ends so no open tube can show the dark outline inside it.
+const pointed = (peak, at = 0.32) => (t) => {
+  if (t < 0.06) return peak * lerp(0.08, 0.62, t / 0.06);
+  return t < at ? peak * lerp(0.62, 1, (t - 0.06) / (at - 0.06)) : peak * Math.pow(1 - (t - at) / (1 - at), 0.72);
+};
 
-function hairCap(builder, faceCenterY) {
-  // A smooth skull cap: crown, and the back of the head down to the nape.
+function addHairCap(head, hair, faceCenterY) {
+  // A smooth skull cap: crown, and the back of the head down to the nape. It's an open
+  // shell, so it shows hair on both sides and takes no outline that could peek out.
+  const builder = new GeometryBuilder();
   const shape = (geo, sx, sy, sz, y, z) => {
     const m = new THREE.Matrix4().compose(new THREE.Vector3(0, y, z), new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
     return [geo, m];
@@ -393,69 +408,85 @@ function hairCap(builder, faceCenterY) {
     shape(new THREE.SphereGeometry(0.12, 30, 12, 2.72, 3.98, 1.15, 1.15), 0.98, 1.05, 1.06, faceCenterY + 0.012, -0.004),
   ];
   for (const [geo, m] of parts) builder.addMesh(geo, m, 1);
+  const material = hair.clone();
+  material.side = THREE.DoubleSide;
+  piece(head, builder.build(), material, 0, 0, 0, 0);
 }
 
-function buildFace(head, skin, eyeMap, centerY, { browColor, mouthColor, mouthCurve }) {
-  const geo = new THREE.SphereGeometry(0.112, 44, 34);
+// The head is a sphere gently narrowed into a soft, rounded jaw.
+const FACE_R = 0.112;
+const jawAmount = (y) => (y < 0 ? Math.pow(Math.min(1, -y / FACE_R), 1.7) : 0);
+
+function faceGeometry() {
+  const geo = new THREE.SphereGeometry(FACE_R, 48, 36);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    x *= 0.91;
-    if (y < 0) {
-      // Taper hard into a small pointed chin.
-      const k = Math.pow(-y / 0.112, 1.45);
-      x *= 1 - 0.58 * k;
-      z *= 1 - 0.34 * k;
-      y *= 1 + 0.2 * k;
-    }
-    if (z > 0) z *= 0.93;
-    pos.setXYZ(i, x, y, z);
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const k = jawAmount(y);
+    pos.setXYZ(i, x * 0.94 * (1 - 0.4 * k), y * (1 + 0.1 * k), z * (1 - 0.24 * k) * (z > 0 ? 0.94 : 1));
   }
   geo.computeVertexNormals();
-  piece(head, geo, skin, 0, centerY, 0, 0.0022);
+  return geo;
+}
 
-  const eyeMat = new THREE.MeshBasicMaterial({ map: eyeMap, alphaTest: 0.5, side: THREE.DoubleSide, fog: true });
-  const blushMat = new THREE.MeshBasicMaterial({ map: TEX.blush, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const browMat = new THREE.MeshBasicMaterial({ color: browColor });
-  const eyeGeo = new THREE.PlaneGeometry(0.07, 0.088, 8, 8);
-  const eyePos = eyeGeo.attributes.position;
-  for (let i = 0; i < eyePos.count; i++) {
-    const x = eyePos.getX(i), y = eyePos.getY(i);
-    eyePos.setZ(i, -(x * x + y * y) * 4.2);
+// Depth of the front of the face at a point, so features can lie right on the skin.
+function faceDepth(x, y) {
+  let y0 = y;
+  for (let i = 0; i < 4 && y < 0; i++) y0 = y / (1 + 0.1 * jawAmount(y0));
+  const k = jawAmount(y0);
+  const x0 = x / (0.94 * (1 - 0.4 * k));
+  return Math.sqrt(Math.max(0, FACE_R * FACE_R - x0 * x0 - y0 * y0)) * (1 - 0.24 * k) * 0.94;
+}
+
+// A small sheet draped over the face at (cx, cy), with optional tilt and bend.
+function facePatch(width, height, cx, cy, { flip = false, tilt = 0, bend = 0, segments = 10 } = {}) {
+  const geo = new THREE.PlaneGeometry(width, height, segments, segments);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const c = Math.cos(tilt), s = Math.sin(tilt);
+  for (let i = 0; i < pos.count; i++) {
+    const px = pos.getX(i), py = pos.getY(i);
+    const x = cx + px * c - py * s;
+    const y = cy + px * s + py * c + bend * px * px;
+    pos.setXYZ(i, x, y, faceDepth(x, y) + 0.0013);
+    if (flip) uv.setX(i, 1 - uv.getX(i));
   }
-  eyeGeo.computeVertexNormals();
-  const eyeY = centerY - 0.018;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function buildFace(head, skin, eyeMap, centerY, { browColor, mouthColor, mouthBend }) {
+  piece(head, faceGeometry(), skin, 0, centerY, 0, 0.0022);
+
+  const features = new THREE.Group();
+  features.position.y = centerY;
+  head.add(features);
+  const eyeMat = new THREE.MeshBasicMaterial({ map: eyeMap, alphaTest: 0.5, side: THREE.DoubleSide });
+  const blushMat = new THREE.MeshBasicMaterial({ map: TEX.blush, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const browMat = new THREE.MeshBasicMaterial({ color: browColor, side: THREE.DoubleSide });
   for (const side of [-1, 1]) {
-    const eye = new THREE.Mesh(eyeGeo, eyeMat);
-    eye.position.set(side * 0.046, eyeY, 0.0925);
-    eye.rotation.y = side * 0.4;
-    eye.scale.x = side;
-    head.add(eye);
-
-    const blush = new THREE.Mesh(new THREE.PlaneGeometry(0.044, 0.028), blushMat);
-    blush.position.set(side * 0.058, centerY - 0.054, 0.0735);
-    blush.rotation.y = side * 0.62;
-    blush.scale.x = side;
-    head.add(blush);
-
-    // Thin brows, raised at the inner end for that soft, worried look.
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.0028, 0.002), browMat);
-    brow.position.set(side * 0.046, centerY + 0.052, 0.094);
-    brow.rotation.set(0, side * 0.42, side * -0.34);
-    head.add(brow);
+    features.add(new THREE.Mesh(facePatch(0.056, 0.074, side * 0.047, -0.022, { flip: side < 0 }), eyeMat));
+    features.add(new THREE.Mesh(facePatch(0.04, 0.024, side * 0.058, -0.061, { flip: side < 0, segments: 6 }), blushMat));
+    // Thin brows, raised at the inner end for a soft, gentle look.
+    features.add(new THREE.Mesh(facePatch(0.04, 0.0026, side * 0.047, 0.03, { tilt: side * -0.16, segments: 6 }), browMat));
   }
   // Barely-there nose and a small mouth.
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.0034, 8, 6), skin);
-  nose.position.set(0, centerY - 0.044, 0.0915);
-  head.add(nose);
-  const noseShade = new THREE.Mesh(new THREE.PlaneGeometry(0.007, 0.0028), new THREE.MeshBasicMaterial({ color: 0xc9a29c }));
-  noseShade.position.set(0, centerY - 0.048, 0.0908);
-  head.add(noseShade);
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.0012, 5, 12, 0.3), new THREE.MeshBasicMaterial({ color: mouthColor }));
-  // A very shallow curve: level for the worried look, slightly up for a small smile.
-  mouth.position.set(0, centerY - 0.082 + (mouthCurve > 0 ? 0.05 : -0.05), 0.0735);
-  mouth.rotation.z = mouthCurve > 0 ? Math.PI * 1.5 - 0.15 : Math.PI * 0.5 - 0.15;
-  head.add(mouth);
+  features.add(new THREE.Mesh(facePatch(0.006, 0.0028, 0, -0.054, { segments: 2 }), new THREE.MeshBasicMaterial({ color: 0xd2aca6, side: THREE.DoubleSide })));
+  features.add(new THREE.Mesh(facePatch(0.019, 0.0021, 0, -0.08, { bend: mouthBend, segments: 6 }), new THREE.MeshBasicMaterial({ color: mouthColor, side: THREE.DoubleSide })));
+}
+
+// A full fringe: overlapping locks falling from the crown to just above the eyes.
+function addFringe(builder, locks) {
+  for (const [rootX, tipX, tipY, width] of locks) {
+    const midX = lerp(rootX, tipX, 0.75);
+    const surface = (x, y) => faceDepth(x, y - 0.075) + 0.019;
+    addLock(builder, [
+      [rootX * 0.4, 0.2, 0.035],
+      [midX, 0.172, surface(midX, 0.15) + 0.004],
+      [lerp(midX, tipX, 0.5), lerp(0.172, tipY, 0.6), surface(lerp(midX, tipX, 0.5), lerp(0.172, tipY, 0.6))],
+      [tipX, tipY, surface(tipX, tipY) - 0.004],
+    ], pointed(width, 0.3), pointed(0.012, 0.3), new THREE.Vector3(1, 0, 0.08), 14, 10, 0.9);
+  }
 }
 
 /* ---------- Rig ---------- */
@@ -492,7 +523,7 @@ function buildRig() {
     upper.add(fore);
     return { upper, fore, side };
   };
-  const rig = { root, hips, chest, head, holder, legL: leg(0.082), legR: leg(-0.082), armL: arm(1), armR: arm(-1) };
+  const rig = { root, hips, chest, head, holder, legL: leg(0.076), legR: leg(-0.076), armL: arm(1), armR: arm(-1) };
 
   // Physics collision proxies.
   const proxy = (parent, x, y, z, r) => {
@@ -533,9 +564,9 @@ function addHand(fore, skin, nail) {
 
 function standardLeg(leg, upperMat, lowerMat, shoeMat, band) {
   const split = -0.15;
-  piece(leg.thigh, lathe([[0.075, 0.02], [0.074, split]], 14), upperMat);
-  piece(leg.thigh, lathe([[0.074, split], [0.066, -0.28], [0.05, -0.39]], 14), lowerMat);
-  if (band) piece(leg.thigh, new THREE.CylinderGeometry(0.0755, 0.0745, 0.024, 16), band, 0, split, 0, 0.002);
+  piece(leg.thigh, lathe([[0.064, 0.02], [0.067, split]], 14), upperMat);
+  piece(leg.thigh, lathe([[0.067, split], [0.062, -0.28], [0.05, -0.39]], 14), lowerMat);
+  if (band) piece(leg.thigh, new THREE.CylinderGeometry(0.0685, 0.0675, 0.024, 16), band, 0, split, 0, 0.002);
   piece(leg.shin, lathe([[0.05, 0], [0.054, -0.1], [0.042, -0.26], [0.034, -0.36]], 14), lowerMat);
   const shoe = piece(leg.shin, new THREE.SphereGeometry(0.052, 14, 10), shoeMat, 0, -0.375, 0.035);
   shoe.scale.set(0.78, 0.55, 1.72);
@@ -554,12 +585,15 @@ function dressTeal(rig, scene) {
 
   standardLeg(legL, skin, black, black, teal);
   standardLeg(legR, skin, black, black, teal);
-  piece(hips, lathe([[0.1, 0.17], [0.118, 0.05], [0.112, -0.04]], 16), black);
+  // The hips stay inside the skirt so they can't poke through its pleats.
+  piece(hips, lathe([[0.084, 0.17], [0.09, 0.05], [0.085, -0.04]], 16), black, 0, 0, 0, 0).scale.z = 0.72;
 
-  // Fitted sleeveless blouse.
-  const torso = piece(chest, lathe([[0.083, -0.015], [0.08, 0.045], [0.104, 0.145], [0.1, 0.205], [0.056, 0.255]], 18), shirt);
+  // Fitted sleeveless blouse, with shoulders that run smoothly out to the arms.
+  const torso = piece(chest, lathe([[0.083, -0.015], [0.08, 0.045], [0.104, 0.145], [0.112, 0.2], [0.08, 0.245], [0.042, 0.268]], 18), shirt);
   torso.scale.z = 0.72;
   piece(chest, lathe([[0.085, 0.018], [0.086, -0.012]], 18), teal, 0, 0, 0, 0.002).scale.z = 0.74;
+  const yoke = piece(chest, new THREE.SphereGeometry(0.1, 18, 12), skin, 0, ARM.y - 0.004, -0.002, 0.0022);
+  yoke.scale.set(1.5, 0.34, 0.54);
   for (const side of [-1, 1]) {
     const bust = piece(chest, new THREE.SphereGeometry(0.043, 12, 10), shirt, side * 0.04, 0.148, 0.05, 0);
     bust.scale.set(1, 0.92, 0.72);
@@ -570,7 +604,7 @@ function dressTeal(rig, scene) {
 
   // The tie is its own small piece of cloth.
   const tieChain = new Chain(chest, new THREE.Vector3(0, 0.25, 0.068), {
-    count: 6, segment: 0.05, rest: () => new THREE.Vector3(0, -0.98, 0.12), stiffness: (i) => (i < 3 ? 0.2 : 0.07), pad: 0.012, damping: 0.97, wind: 0.8, gravity: -6,
+    count: 6, segment: 0.05, rest: () => new THREE.Vector3(0, -0.98, 0.12), stiffness: (i) => (i < 3 ? 0.5 : 0.3), pad: 0.012, damping: 0.9, wind: 0.15, gravity: -5,
   });
   const tieMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.52, vertexColors: true });
   sims.push({ chain: tieChain, ribbon: new Ribbon(scene, tieChain, {
@@ -583,7 +617,7 @@ function dressTeal(rig, scene) {
   // Bare upper arm, long detached sleeves flaring to the wrist.
   for (const arm of [armL, armR]) {
     piece(arm.upper, lathe([[0.04, 0.012], [0.041, -0.08], [0.03, -ARM.upper]], 12), skin);
-    piece(arm.upper, new THREE.SphereGeometry(0.038, 12, 10), skin, 0, 0.002, 0, 0);
+    piece(arm.upper, new THREE.SphereGeometry(0.036, 12, 10), skin, 0, -0.002, 0, 0.0022);
     piece(arm.upper, lathe([[0.043, -0.075], [0.046, -0.14], [0.05, -ARM.upper]], 14), black);
     piece(arm.upper, new THREE.CylinderGeometry(0.046, 0.046, 0.012, 14), teal, 0, -0.078, 0, 0.002);
     piece(arm.fore, lathe([[0.03, 0], [0.024, -0.12], [0.022, -ARM.fore]], 12), skin);
@@ -598,22 +632,16 @@ function dressTeal(rig, scene) {
 
   // Face and sculpted hair.
   const centerY = 0.075;
-  buildFace(head, skin, TEX.eyeTeal, centerY, { browColor: 0x176f88, mouthColor: 0x8b4a52, mouthCurve: -1 });
+  buildFace(head, skin, TEX.eyeTeal, centerY, { browColor: 0x1b7e96, mouthColor: 0x96555c, mouthBend: 0.4 });
 
   const static_ = new GeometryBuilder();
-  hairCap(static_, centerY);
-  const up = 0.205;
-  // Long fringe sweeping from a high parting, with one lock falling between the eyes.
-  const bangs = [
-    [[0.0, up, 0.03], [-0.008, 0.172, 0.108], [-0.006, 0.11, 0.122], [-0.002, 0.058, 0.114], 0.022],
-    [[0.008, up, 0.03], [0.026, 0.172, 0.106], [0.03, 0.128, 0.12], [0.026, 0.096, 0.114], 0.028],
-    [[-0.012, up, 0.025], [-0.036, 0.17, 0.102], [-0.038, 0.13, 0.118], [-0.03, 0.098, 0.112], 0.028],
-    [[-0.016, up, 0.024], [-0.06, 0.166, 0.095], [-0.068, 0.126, 0.108], [-0.064, 0.096, 0.1], 0.028],
-    [[0.016, up, 0.025], [0.058, 0.164, 0.095], [0.068, 0.124, 0.106], [0.066, 0.094, 0.098], 0.028],
-    [[-0.024, up - 0.004, 0.015], [-0.076, 0.15, 0.084], [-0.09, 0.09, 0.09], [-0.088, 0.046, 0.08], 0.028],
-    [[0.03, up - 0.004, 0.015], [0.088, 0.145, 0.07], [0.098, 0.085, 0.078], [0.096, 0.04, 0.072], 0.026],
-  ];
-  for (const [a, b, c, d, w] of bangs) addLock(static_, [a, b, c, d], pointed(w), pointed(0.013), new THREE.Vector3(1, 0, 0.1), 14, 10, 0.9);
+  addHairCap(head, hair, centerY);
+  addFringe(static_, [
+    [0.002, 0.003, 0.082, 0.024],
+    [0.012, 0.03, 0.098, 0.027], [-0.012, -0.027, 0.096, 0.027],
+    [0.024, 0.056, 0.093, 0.028], [-0.024, -0.054, 0.095, 0.028],
+    [0.034, 0.08, 0.07, 0.024], [-0.034, -0.08, 0.072, 0.024],
+  ]);
   // Back of the head falls in broad locks to the nape.
   for (let i = 0; i < 11; i++) {
     const a = Math.PI + (i - 5) * 0.31;
@@ -642,10 +670,10 @@ function dressTeal(rig, scene) {
   for (const side of [-1, 1]) {
     const restTail = (i) => {
       const f = Math.min(1, (i - 1) / 3);
-      return new THREE.Vector3(side * lerp(0.62, 0.08, f), lerp(0.12, -0.98, f), lerp(-0.5, -0.12, f)).normalize();
+      return new THREE.Vector3(side * lerp(0.56, 0.06, f), lerp(0.08, -0.98, f), lerp(-0.5, -0.14, f)).normalize();
     };
     const chain = new Chain(head, new THREE.Vector3(side * 0.112, 0.17, -0.058), {
-      count: 13, segment: 0.098, rest: restTail, stiffness: (i) => [0, 0.5, 0.32, 0.17, 0.08, 0.04, 0.025][i] || 0.016, pad: 0.03, damping: 0.984, gravity: -8.5, wind: 0.8,
+      count: 13, segment: 0.098, rest: restTail, stiffness: (i) => [0, 0.7, 0.55, 0.4, 0.28, 0.2, 0.15][i] || 0.11, pad: 0.03, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
     });
     const flat = new THREE.Vector3(1, 0, 0);
     sims.push({ chain, ribbon: new Ribbon(scene, chain, {
@@ -658,7 +686,7 @@ function dressTeal(rig, scene) {
     // Long side locks framing the face.
     const restLock = () => new THREE.Vector3(side * 0.02, -0.99, 0.08).normalize();
     const lock = new Chain(head, new THREE.Vector3(side * 0.103, 0.11, 0.042), {
-      count: 7, segment: 0.058, rest: restLock, stiffness: (i) => (i < 3 ? 0.3 : 0.1), pad: 0.012, damping: 0.97, wind: 0.5, gravity: -6,
+      count: 7, segment: 0.058, rest: restLock, stiffness: (i) => (i < 3 ? 0.55 : 0.35), pad: 0.012, damping: 0.9, wind: 0.12, gravity: -5,
     });
     sims.push({ chain: lock, ribbon: new Ribbon(scene, lock, {
       material: hair, sideAxis: new THREE.Vector3(0, 0, 1), sides: 8, sub: 2, repeat: 1.2, outline: 0.0026,
@@ -680,12 +708,16 @@ function dressCrimson(rig, scene) {
 
   standardLeg(legL, skin, skin, black);
   standardLeg(legR, skin, skin, black);
-  piece(hips, lathe([[0.1, 0.17], [0.118, 0.05], [0.112, -0.04]], 16), cloth);
+  piece(hips, lathe([[0.084, 0.17], [0.09, 0.05], [0.085, -0.04]], 16), black, 0, 0, 0, 0).scale.z = 0.72;
 
-  const torso = piece(chest, lathe([[0.084, -0.015], [0.082, 0.045], [0.106, 0.145], [0.1, 0.205], [0.056, 0.255]], 18), cloth);
+  const torso = piece(chest, lathe([[0.084, -0.015], [0.082, 0.045], [0.106, 0.145], [0.112, 0.2], [0.08, 0.245], [0.042, 0.268]], 18), cloth);
   torso.scale.z = 0.72;
   piece(chest, lathe([[0.042, 0.23], [0.032, 0.34]], 12), skin, 0, 0, 0, 0.0016);
-  piece(chest, new THREE.BoxGeometry(0.046, 0.02, 0.12), crimson, 0, 0.245, 0, 0.002).scale.x = 2.1;
+  const yoke = piece(chest, new THREE.SphereGeometry(0.1, 18, 12), cloth, 0, ARM.y - 0.004, -0.002, 0.0022);
+  yoke.scale.set(1.5, 0.34, 0.54);
+  // A soft stand collar around the neck.
+  const collar = piece(chest, new THREE.TorusGeometry(0.041, 0.012, 8, 20).rotateX(Math.PI / 2), crimson, 0, 0.268, 0, 0.002);
+  collar.scale.z = 0.92;
   const strap = piece(chest, new THREE.BoxGeometry(0.014, 0.3, 0.006), black, 0, 0.13, 0.082, 0);
   strap.rotation.z = 0.62;
   for (const y of [0.05, 0.09, 0.13, 0.17]) {
@@ -705,19 +737,15 @@ function dressCrimson(rig, scene) {
   sims.push({ cloth: new Skirt(scene, hips, { y: 0.145, waist: 0.102, hem: 0.22, length: 0.3, material: skirtMat, body: [0.62, 0.65, 0.78], trim: [0.42, 0.03, 0.09] }) });
 
   const centerY = 0.075;
-  buildFace(head, skin, TEX.eyeRed, centerY, { browColor: 0x7a1c3a, mouthColor: 0x8b4a52, mouthCurve: 1 });
+  buildFace(head, skin, TEX.eyeRed, centerY, { browColor: 0x9c2a4e, mouthColor: 0x96555c, mouthBend: 2.5 });
 
   const static_ = new GeometryBuilder();
-  hairCap(static_, centerY);
-  const up = 0.205;
-  const bangs = [
-    [[0.0, up, 0.035], [-0.03, 0.17, 0.106], [-0.052, 0.102, 0.118], [-0.03, 0.068, 0.112], 0.04],
-    [[0.008, up, 0.035], [0.032, 0.17, 0.105], [0.056, 0.106, 0.114], [0.036, 0.07, 0.11], 0.04],
-    [[-0.002, up, 0.03], [0.0, 0.17, 0.11], [0.002, 0.12, 0.122], [0.002, 0.082, 0.116], 0.03],
-    [[-0.024, up - 0.004, 0.015], [-0.076, 0.15, 0.084], [-0.094, 0.09, 0.086], [-0.094, 0.03, 0.074], 0.033],
-    [[0.03, up - 0.004, 0.015], [0.084, 0.148, 0.074], [0.098, 0.088, 0.076], [0.098, 0.03, 0.068], 0.032],
-  ];
-  for (const [a, b, c, d, w] of bangs) addLock(static_, [a, b, c, d], pointed(w), pointed(0.014), new THREE.Vector3(1, 0, 0.1), 14, 10, 0.9);
+  addHairCap(head, hair, centerY);
+  addFringe(static_, [
+    [0.001, 0.001, 0.09, 0.028],
+    [0.014, 0.038, 0.092, 0.032], [-0.014, -0.038, 0.09, 0.032],
+    [0.03, 0.074, 0.074, 0.03], [-0.03, -0.074, 0.076, 0.03],
+  ]);
   for (let i = 0; i < 11; i++) {
     const a = Math.PI + (i - 5) * 0.31;
     const sx = Math.sin(a), cz = Math.cos(a);
@@ -734,7 +762,7 @@ function dressCrimson(rig, scene) {
   // Twin ringlets: solid spirals that swing as a piece from each side of the head.
   for (const side of [-1, 1]) {
     const group = new THREE.Group();
-    group.position.set(side * 0.13, 0.13, -0.022);
+    group.position.set(side * 0.112, 0.125, -0.022);
     const helix = [];
     const turns = 3.2, length = 0.28;
     for (let i = 0; i <= 44; i++) {
@@ -744,11 +772,13 @@ function dressCrimson(rig, scene) {
       helix.push([Math.cos(a) * radius, -t * length, Math.sin(a) * radius]);
     }
     const spiral = new GeometryBuilder();
-    addLock(spiral, helix, (t) => lerp(0.034, 0.012, t), (t) => lerp(0.034, 0.012, t), new THREE.Vector3(0.2, 1, 0.1).normalize(), 90, 10, 0.92);
+    // Both ends taper shut; the start also tucks into the side of the head.
+    const coil = (t) => lerp(0.034, 0.012, t) * Math.min(1, 0.1 + t * 22) * (t > 0.97 ? (1 - t) / 0.03 + 0.03 : 1);
+    addLock(spiral, helix, coil, coil, new THREE.Vector3(0.2, 1, 0.1).normalize(), 90, 10, 0.92);
     piece(group, spiral.build(), hair, 0, 0, 0, 0.0028);
     head.add(group);
     const chain = new Chain(head, group.position, {
-      count: 3, segment: 0.1, rest: () => new THREE.Vector3(side * 0.08, -0.99, -0.02), stiffness: () => 0.05, pad: 0.03, damping: 0.982, gravity: -7, wind: 0.7,
+      count: 3, segment: 0.1, rest: () => new THREE.Vector3(side * 0.08, -0.99, -0.02), stiffness: () => 0.3, pad: 0.03, damping: 0.9, gravity: -5, wind: 0.15,
     });
     sims.push({ cloth: new Pendulum(group, chain) });
   }

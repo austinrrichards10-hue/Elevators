@@ -691,7 +691,7 @@ const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
 const holderInverse = new THREE.Matrix4();
 const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3();
-const POLE_R = new THREE.Vector3(-0.8, -0.65, -0.1), POLE_L = new THREE.Vector3(0.7, -0.75, -0.05);
+const POLE_R = new THREE.Vector3(-0.42, -0.88, -0.18), POLE_L = new THREE.Vector3(0.42, -0.88, -0.14);
 
 function keyedPath(t, keys, out) {
   if (t <= keys[0][0]) return out.copy(keys[0][1]);
