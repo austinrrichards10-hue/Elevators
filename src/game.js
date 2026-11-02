@@ -629,7 +629,7 @@ function poseAvatar(dt, move, moving) {
   root.position.copy(player.pos);
   // Walking dips as the legs spread; running rises into the airborne part of each stride.
   const stepWave = Math.abs(Math.sin(ph));
-  root.position.y += -stepWave * 0.022 * walk + (stepWave - 0.4) * 0.055 * run;
+  root.position.y += -stepWave * 0.012 * walk + (stepWave - 0.4) * 0.03 * run;
   if (player.dodge) {
     const d = player.dodge;
     const u = clamp(d.t / d.dur, 0, 1);
@@ -652,8 +652,9 @@ function poseAvatar(dt, move, moving) {
   // The body sinks and tips into a run, and the pelvis turns with the leading leg.
   hips.position.y = avatar.dims.hips - 0.012 * walk - 0.045 * run;
   hips.rotation.x = 0.12 * run;
-  hips.rotation.z = player.strafeLean - Math.cos(ph) * (0.018 * walk + 0.03 * run);
-  hips.rotation.y = Math.sin(ph) * (0.07 * walk + 0.16 * run);
+  // Almost no side-to-side roll: that rocking is what reads as a waddle.
+  hips.rotation.z = player.strafeLean - Math.cos(ph) * (0.004 * walk + 0.006 * run);
+  hips.rotation.y = Math.sin(ph) * (0.035 * walk + 0.07 * run);
 
   // Each thigh reaches forward further than it trails, and the knee folds through the
   // backswing, carrying the foot high in a run, before straightening to land.
@@ -667,14 +668,15 @@ function poseAvatar(dt, move, moving) {
     const runKnee = (0.3 + fold * fold * 1.6) * run;
     leg.thigh.rotation.x = lerp((walkThigh + runThigh) * gaitScale, -1.9, tuck);
     leg.shin.rotation.x = lerp(walkKnee + runKnee + 0.03, 2.2, tuck);
-    leg.thigh.rotation.z = splay * (0.03 + Math.abs(localSide) * amount * 0.1);
+    // Standing, the legs rest slightly apart; in motion the feet track under the body.
+    leg.thigh.rotation.z = splay * (0.03 * (1 - amount) - 0.012 * walk - 0.035 * run + Math.abs(localSide) * amount * 0.1);
   };
   gait(legL, ph, 1);
   gait(legR, ph + Math.PI, -1);
 
   // Shoulders counter the hips, and the head stays level with the run's forward lean.
   chest.rotation.x = lerp(0.05 * walk + 0.2 * run + breathe * 0.008 - player.pitch * 0.1 * (1 - run), 0.72, tuck);
-  chest.rotation.y = lerp(Math.sin(ph) * (-0.12 * walk - 0.24 * run) - player.aimBlend * 0.14, 0, tuck);
+  chest.rotation.y = lerp(Math.sin(ph) * (-0.06 * walk - 0.11 * run) - player.aimBlend * 0.14, 0, tuck);
   chest.rotation.z = -player.strafeLean * 0.6;
   chest.position.y = avatar.dims.chest + breathe * 0.002;
   head.rotation.x = lerp(-player.pitch * 0.5 * (1 - run) - 0.04 * walk - 0.3 * run, 0.45, tuck);
@@ -730,7 +732,8 @@ const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
 const holderInverse = new THREE.Matrix4();
 const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3(), pumpTarget = new THREE.Vector3();
-const POLE_R = new THREE.Vector3(-0.42, -0.88, -0.18), POLE_L = new THREE.Vector3(0.42, -0.88, -0.14);
+// Elbows point down and back, staying close to the body instead of flaring out.
+const POLE_R = new THREE.Vector3(-0.12, -0.8, -0.6), POLE_L = new THREE.Vector3(0.12, -0.8, -0.6);
 
 function keyedPath(t, keys, out) {
   if (t <= keys[0][0]) return out.copy(keys[0][1]);
@@ -762,12 +765,12 @@ function poseGun(dt, ease) {
   if (run > 0.001) {
     holderPos.lerp(m.runPos, run);
     const beat = player.walkPhase;
-    holderPos.y += Math.sin(beat * 2) * 0.014 * run;
-    holderPos.x += Math.sin(beat) * 0.012 * run;
-    if (m.runOneHand) holderPos.z += Math.sin(beat) * 0.07 * run;
-    rx = lerp(rx, m.runRx + Math.sin(beat * 2) * 0.05, run);
+    holderPos.y += Math.sin(beat * 2) * 0.007 * run;
+    holderPos.x += Math.sin(beat) * 0.004 * run;
+    if (m.runOneHand) holderPos.z += Math.sin(beat) * 0.05 * run;
+    rx = lerp(rx, m.runRx + Math.sin(beat * 2) * 0.025, run);
     ry = lerp(ry, m.runRy - chest.rotation.y * 0.6, run);
-    rz = lerp(rz, m.runRz + Math.sin(beat) * 0.06, run);
+    rz = lerp(rz, m.runRz + Math.sin(beat) * 0.03, run);
   }
 
   // Raises into place after a swap.
@@ -853,7 +856,7 @@ function poseGun(dt, ease) {
   // With a one-handed carry, the free arm pumps opposite the gun.
   if (m.runOneHand && run > 0.001 && !r) {
     const pump = -Math.sin(player.walkPhase);
-    leftTarget.lerp(pumpTarget.set(0.13, avatar.dims.shoulderY - 0.24 + pump * 0.045, 0.05 + pump * 0.13), run);
+    leftTarget.lerp(pumpTarget.set(0.075, avatar.dims.shoulderY - 0.25 + pump * 0.04, 0.09 + pump * 0.1), run);
   }
 
   solveArm(armR, rightTarget, POLE_R);
