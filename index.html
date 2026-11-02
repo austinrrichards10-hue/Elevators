@@ -50,7 +50,14 @@
 </section>
 
 <aside id="room" class="hidden">
-  <button id="close-room" class="secondary">Back to menu</button>
+  <header class="room-head">
+    <p class="room-kicker">Hollow Snow</p>
+    <h2>Character Room</h2>
+  </header>
+  <div class="room-actions">
+    <button id="close-room" class="secondary">Back to menu</button>
+    <button class="secondary mute-toggle"></button>
+  </div>
   <h3>View</h3>
   <div class="chips" id="room-views"></div>
   <h3>Pose</h3>
@@ -76,9 +83,7 @@
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script src="assets/characters.js"></script>
-<script src="assets/sorceress.js"></script>
-<script src="src/glb.js"></script>
+<script src="assets/characters.js"></script><script src="src/glb.js"></script>
 <script src="src/textures.js"></script>
 <script src="src/render.js"></script>
 <script src="src/audio.js"></script>

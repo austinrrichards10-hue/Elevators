@@ -1323,7 +1323,7 @@ function updateTitle(dt) {
 }
 
 /* ---------- Character room ---------- */
-// A plain studio high above the map, for looking over the character up close.
+// A moody studio high above the map, for looking over the character up close.
 const ROOM_Y = 400;
 const ROOM_VIEWS = {
   Full: { y: 0.8, dist: 2.7, yaw: 0.3, pitch: 0.05 },
@@ -1340,13 +1340,100 @@ const ROOM_POSES = ['Idle', 'Aim', 'Walk', 'Run', 'Reload'];
 const roomSet = new THREE.Group();
 roomSet.position.y = ROOM_Y;
 roomSet.visible = false;
-const roomWall = new THREE.Mesh(new THREE.SphereGeometry(9, 32, 20), new THREE.MeshBasicMaterial({ color: 0x4a5372, side: THREE.BackSide, fog: false }));
-const roomFloor = new THREE.Mesh(new THREE.CircleGeometry(9, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x79819c, roughness: 0.85, fog: false }));
+// Backdrop: night-blue overhead fading to a rose glow behind the character, with faint stars.
+const roomWall = new THREE.Mesh(new THREE.SphereGeometry(9, 48, 32), new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  depthWrite: false,
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform float uTime; varying vec3 vDir;
+    float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
+    void main() {
+      float h = vDir.y;
+      vec3 top = vec3(0.025, 0.03, 0.09);
+      vec3 mid = vec3(0.09, 0.07, 0.19);
+      vec3 low = vec3(0.32, 0.12, 0.22);
+      vec3 c = mix(low, mid, smoothstep(-0.05, 0.35, h));
+      c = mix(c, top, smoothstep(0.3, 0.9, h));
+      // A soft halo low on the wall, behind wherever the camera looks from.
+      float halo = exp(-pow(h - 0.12, 2.0) * 18.0);
+      c += vec3(0.45, 0.16, 0.3) * halo * 0.35;
+      vec3 cell = floor(vDir * 140.0);
+      float star = step(0.996, hash(cell)) * smoothstep(0.15, 0.6, h);
+      star *= 0.6 + 0.4 * sin(uTime * 1.7 + hash(cell + 3.0) * 40.0);
+      c += vec3(0.9, 0.9, 1.0) * star * 0.8;
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+}));
+
+// Glossy dark floor whose shine falls off away from the stage.
+const roomFloorCanvas = document.createElement('canvas');
+roomFloorCanvas.width = roomFloorCanvas.height = 256;
+{
+  const g = roomFloorCanvas.getContext('2d');
+  const grad = g.createRadialGradient(128, 128, 8, 128, 128, 128);
+  grad.addColorStop(0, '#585a7a');
+  grad.addColorStop(0.35, '#2a2b45');
+  grad.addColorStop(1, '#0b0c18');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+}
+const roomFloorTex = new THREE.CanvasTexture(roomFloorCanvas);
+roomFloorTex.colorSpace = THREE.SRGBColorSpace;
+const roomFloor = new THREE.Mesh(new THREE.CircleGeometry(9, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: roomFloorTex, roughness: 0.32, metalness: 0.35, fog: false }));
+roomFloor.position.y = -0.07;
 roomFloor.receiveShadow = true;
-const roomMark = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.65, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc2cc, fog: false }));
-roomMark.position.y = 0.004;
-roomSet.add(roomWall, roomFloor, roomMark);
+
+// Stage: a low stone disc with a glowing inlay at its edge.
+const roomStage = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.96, 0.07, 72), new THREE.MeshStandardMaterial({ color: 0x2c2f4c, roughness: 0.45, metalness: 0.25, fog: false }));
+roomStage.position.y = -0.035;
+roomStage.receiveShadow = true;
+const roomRing = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.008, 8, 120).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff8fb0).multiplyScalar(2.4), fog: false }));
+roomRing.position.y = 0.001;
+const roomMark = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.635, 72).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffc2cc).multiplyScalar(0.8), transparent: true, opacity: 0.55, fog: false }));
+roomMark.position.y = 0.002;
+
+// Studio lights: a warm key and two colored rims so the silhouette reads against the dark.
+const roomKey = new THREE.SpotLight(0xffe6d8, 26, 9, 0.55, 0.6, 1.6);
+roomKey.position.set(1.6, 3.2, 2.4);
+roomKey.target.position.set(0, 0.9, 0);
+const roomRimPink = new THREE.PointLight(0xff5c8a, 9, 6, 1.6);
+roomRimPink.position.set(-1.5, 1.8, -1.4);
+const roomRimBlue = new THREE.PointLight(0x5fb4ff, 7, 6, 1.6);
+roomRimBlue.position.set(1.6, 1.2, -1.5);
+
+// Slow glowing motes drifting upward around the stage.
+const MOTE_COUNT = 160;
+const motePositions = new Float32Array(MOTE_COUNT * 3);
+const moteSeeds = [];
+for (let i = 0; i < MOTE_COUNT; i++) {
+  const r = 1.1 + Math.random() * 3.5, a = Math.random() * Math.PI * 2;
+  moteSeeds.push({ r, a, y: Math.random() * 3.2, speed: 0.05 + Math.random() * 0.12, sway: Math.random() * 6 });
+}
+const moteGeometry = new THREE.BufferGeometry();
+moteGeometry.setAttribute('position', new THREE.BufferAttribute(motePositions, 3));
+const roomMotes = new THREE.Points(moteGeometry, new THREE.PointsMaterial({
+  color: new THREE.Color(0xffd6e4).multiplyScalar(1.6), size: 0.025, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+}));
+
+roomSet.add(roomWall, roomFloor, roomStage, roomRing, roomMark, roomKey, roomKey.target, roomRimPink, roomRimBlue, roomMotes);
 scene.add(roomSet);
+
+function updateRoomSet(dt) {
+  roomWall.material.uniforms.uTime.value = game.time;
+  roomRing.material.color.setHex(0xff8fb0).multiplyScalar(2.1 + Math.sin(game.time * 1.4) * 0.4);
+  for (let i = 0; i < MOTE_COUNT; i++) {
+    const m = moteSeeds[i];
+    m.y += m.speed * dt;
+    if (m.y > 3.4) m.y = 0;
+    m.a += dt * 0.03;
+    motePositions[i * 3] = Math.cos(m.a) * m.r + Math.sin(game.time * 0.5 + m.sway) * 0.08;
+    motePositions[i * 3 + 1] = m.y;
+    motePositions[i * 3 + 2] = Math.sin(m.a) * m.r;
+  }
+  moteGeometry.attributes.position.needsUpdate = true;
+}
 
 const orbit = {
   target: new THREE.Vector3(0, 0.8, 0),
@@ -1390,6 +1477,8 @@ function openRoom() {
   $('room').classList.remove('hidden');
   roomSet.visible = true;
   world.setWeather(false);
+  Sfx.init();
+  Sfx.setRoomMusic(true);
   roomReturn.copy(player.pos);
   player.pos.set(0, ROOM_Y, 0);
   player.bodyYaw = 0;
@@ -1411,6 +1500,7 @@ function closeRoom() {
   $('title').classList.remove('hidden');
   roomSet.visible = false;
   world.setWeather(true);
+  Sfx.setRoomMusic(false);
   avatar.holder.visible = true;
   player.pos.copy(roomReturn);
   player.reload = null;
@@ -1481,6 +1571,7 @@ function updateRoom(dt) {
   updateDroppedMags(dt);
   poseAvatar(dt, roomMove, walking);
   avatar.simulate(dt);
+  updateRoomSet(dt);
 
   const ease = 1 - Math.exp(-11 * dt);
   orbit.yaw += (orbit.goal.yaw - orbit.yaw) * ease;
