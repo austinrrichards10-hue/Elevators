@@ -3,8 +3,10 @@
 const SKINS = {
   teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
   crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
+  // Re-rigged for the game and dressed in a fur jacket, pants and boots.
+  catgirl: { name: 'Snow Cat', note: 'Cat ears, tail and a fur jacket', file: 'CATGIRL_GLB', skin: 0, hair: {} },
 };
-const SKIN_ORDER = ['teal', 'crimson'];
+const SKIN_ORDER = ['teal', 'crimson', 'catgirl'];
 
 // The model's bind pose to game space: feet on the ground, centred, facing +Z.
 const MODEL_SCALE = 0.9375;

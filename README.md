@@ -21,3 +21,5 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 ## Credits
 
 Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is embedded in `assets/characters.js`.
+
+Snow Cat skin: converted from `anime-catgirl.zip` (author and license were not included in the download; add the credit here before sharing the game). Re-rigged for the game, reduced in detail, and dressed in a generated fur jacket, pants and boots; the skin under the clothing was removed from both the mesh and the texture. The file is embedded in `assets/catgirl.js`.
