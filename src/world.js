@@ -78,7 +78,14 @@ const CELL = 8;
 function addCollider(x, z, r, h = 3) {
   const key = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
   if (!colliders.has(key)) colliders.set(key, []);
-  colliders.get(key).push({ x, z, r, h });
+  const collider = { x, z, r, h };
+  colliders.get(key).push(collider);
+  return collider;
+}
+
+function removeCollider(collider) {
+  const bucket = colliders.get(`${Math.floor(collider.x / CELL)},${Math.floor(collider.z / CELL)}`);
+  if (bucket && bucket.includes(collider)) bucket.splice(bucket.indexOf(collider), 1);
 }
 
 function clearTileColliders(tx, tz) {
@@ -337,9 +344,14 @@ function swayMaterial(params) {
 /* ---------- Forest ---------- */
 const weatherMaterials = [];
 
+// Open ground with no trees: the start, the altar, and spots added during a run, such as
+// where the plane came down.
+const CLEARINGS = [[LANDMARKS.start, 7], [LANDMARKS.altar, 24]];
+// Trees cut down this run, by id, so a tile built again leaves them out.
+const felledTrees = new Set();
+
 function inClearing(x, z, extra = 0) {
-  const clear = [[LANDMARKS.start, 7], [LANDMARKS.altar, 24]];
-  return clear.some(([p, r]) => Math.hypot(x - p.x, z - p.z) < r + extra);
+  return CLEARINGS.some(([p, r]) => Math.hypot(x - p.x, z - p.z) < r + extra);
 }
 
 // Shared tree, shrub, rock and log shapes and materials. Every tile reuses them.
@@ -403,6 +415,8 @@ function plantTile(kit, tx, tz) {
   const occupied = new Set();
   const clump = (x, z) => 0.5 + 0.28 * Math.sin(x * 0.083 + 2) * Math.cos(z * 0.071) + 0.22 * Math.sin((x + z) * 0.031);
   for (const s of kit.species) s.placements = [];
+  // Each standing tree, so it can be found and cut down.
+  const trees = [];
   for (let attempt = 0; attempt < 250; attempt++) {
     const x = x0 + rand() * TILE, z = z0 + rand() * TILE;
     if (!inForest(x, z) || inClearing(x, z) || rand() > clump(x, z) + 0.28) continue;
@@ -415,7 +429,7 @@ function plantTile(kit, tx, tz) {
     for (const s of kit.species) { pick -= s.weight; if (pick <= 0) { kind = s; break; } }
     const s = lerp(kind.size[0], kind.size[1], rand());
     const shade = lerp(kind.tint[0], kind.tint[1], rand());
-    kind.placements.push({
+    const placement = {
       x, z,
       y: groundHeight(x, z),
       ry: rand() * 6.28,
@@ -423,12 +437,20 @@ function plantTile(kit, tx, tz) {
       rz: (rand() - 0.5) * 0.05,
       sx: s, sy: s * (0.88 + rand() * 0.3), sz: s,
       tint: new THREE.Color(shade * (0.94 + rand() * 0.1), shade, shade * (0.94 + rand() * 0.12)),
-    });
-    addCollider(x, z, kind.collide * s, kind.height * s);
+    };
+    // A felled tree still draws its random numbers, so the trees after it grow unchanged.
+    const id = `${tx},${tz},${attempt}`;
+    if (felledTrees.has(id)) continue;
+    const collider = addCollider(x, z, kind.collide * s, kind.height * s);
+    trees.push({ id, kind, placement, index: kind.placements.length, collider, r: kind.collide * s, height: kind.height * placement.sy });
+    kind.placements.push(placement);
   }
   for (const kind of kit.species) {
-    add(makeInstances(kind.geo.bark, kind.bark, kind.placements, true, true));
-    if (kind.leaves) add(makeInstances(kind.geo.boughs, kind.leaves, kind.placements, true, true));
+    const bark = makeInstances(kind.geo.bark, kind.bark, kind.placements, true, true);
+    const leaves = kind.leaves ? makeInstances(kind.geo.boughs, kind.leaves, kind.placements, true, true) : null;
+    add(bark);
+    add(leaves);
+    for (const tree of trees) if (tree.kind === kind) Object.assign(tree, { bark, leaves });
   }
 
   // Scattered props keep `margin` metres from the tile edge.
@@ -471,7 +493,7 @@ function plantTile(kit, tx, tz) {
     return { x, z, y: groundHeight(x, z) + 0.12, ry, rz: (rand() - 0.5) * 0.08, sx: s, sy: 1, sz: 1 };
   }, 3);
   add(makeInstances(kit.log, kit.barkMat, logs, true, false));
-  return meshes;
+  return { meshes, trees };
 }
 
 /* ---------- Terrain ---------- */
@@ -516,9 +538,10 @@ function createTiles(scene) {
   const distance = (tx, tz, focus) => Math.hypot((tx + 0.5) * TILE - focus.x, (tz + 0.5) * TILE - focus.z);
 
   const build = (tx, tz) => {
-    const meshes = [buildTerrainTile(tx * TILE, tz * TILE, terrainMat), ...plantTile(kit, tx, tz)];
+    const forest = plantTile(kit, tx, tz);
+    const meshes = [buildTerrainTile(tx * TILE, tz * TILE, terrainMat), ...forest.meshes];
     for (const mesh of meshes) scene.add(mesh);
-    tiles.set(`${tx},${tz}`, { tx, tz, meshes });
+    tiles.set(`${tx},${tz}`, { tx, tz, meshes, trees: forest.trees });
   };
   const drop = (key, tile) => {
     for (const mesh of tile.meshes) {
@@ -529,21 +552,68 @@ function createTiles(scene) {
     tiles.delete(key);
   };
 
-  // Builds the nearest missing tiles, at most `budget` of them, and drops far ones.
-  return (focus, budget) => {
-    const ftx = Math.floor(focus.x / TILE), ftz = Math.floor(focus.z / TILE);
-    const reach = Math.ceil(LOAD_RADIUS / TILE);
-    const wanted = [];
-    for (let i = -reach; i <= reach; i++) {
-      for (let j = -reach; j <= reach; j++) {
-        const tx = ftx + i, tz = ftz + j;
-        const d = distance(tx, tz, focus);
-        if (d < LOAD_RADIUS && !tiles.has(`${tx},${tz}`)) wanted.push({ tx, tz, d });
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  return {
+    // Builds the nearest missing tiles, at most `budget` of them, and drops far ones. A
+    // bigger `radius` loads further out, for views from the air.
+    stream(focus, budget, radius = LOAD_RADIUS) {
+      const ftx = Math.floor(focus.x / TILE), ftz = Math.floor(focus.z / TILE);
+      const reach = Math.ceil(radius / TILE);
+      const wanted = [];
+      for (let i = -reach; i <= reach; i++) {
+        for (let j = -reach; j <= reach; j++) {
+          const tx = ftx + i, tz = ftz + j;
+          const d = distance(tx, tz, focus);
+          if (d < radius && !tiles.has(`${tx},${tz}`)) wanted.push({ tx, tz, d });
+        }
       }
-    }
-    wanted.sort((a, b) => a.d - b.d);
-    for (const { tx, tz } of wanted.slice(0, budget)) build(tx, tz);
-    for (const [key, tile] of tiles) if (distance(tile.tx, tile.tz, focus) > UNLOAD_RADIUS) drop(key, tile);
+      wanted.sort((a, b) => a.d - b.d);
+      for (const { tx, tz } of wanted.slice(0, budget)) build(tx, tz);
+      const keep = Math.max(UNLOAD_RADIUS, radius + 50);
+      for (const [key, tile] of tiles) if (distance(tile.tx, tile.tz, focus) > keep) drop(key, tile);
+    },
+
+    // The standing tree whose trunk is nearest (x, z), if one is within `reach` of its bark.
+    findTree(x, z, reach) {
+      let best = null, bestD = reach;
+      const tx = Math.floor(x / TILE), tz = Math.floor(z / TILE);
+      for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+          const tile = tiles.get(`${tx + i},${tz + j}`);
+          if (!tile) continue;
+          for (const tree of tile.trees) {
+            if (tree.felled) continue;
+            const d = Math.hypot(tree.placement.x - x, tree.placement.z - z) - tree.r;
+            if (d < bestD) { best = tree; bestD = d; }
+          }
+        }
+      }
+      return best;
+    },
+
+    // Takes a tree out of the forest for good this run: hides its instance, drops its
+    // collider and returns what's needed to draw it on its own as it falls.
+    fellTree(tree) {
+      tree.felled = true;
+      felledTrees.add(tree.id);
+      for (const mesh of [tree.bark, tree.leaves]) {
+        if (!mesh) continue;
+        mesh.setMatrixAt(tree.index, zero);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      removeCollider(tree.collider);
+      return {
+        bark: new THREE.Mesh(tree.kind.geo.bark, tree.kind.bark),
+        leaves: tree.kind.leaves ? new THREE.Mesh(tree.kind.geo.boughs, tree.kind.leaves) : null,
+        tint: tree.placement.tint,
+      };
+    },
+
+    // Throws every tile away and forgets the felled trees, for a fresh run.
+    reset() {
+      felledTrees.clear();
+      for (const [key, tile] of tiles) drop(key, tile);
+    },
   };
 }
 
@@ -745,8 +815,8 @@ function buildWorld(renderer, scene) {
   const sunOffset = new THREE.Vector3(-0.42, 0.72, 0.55).normalize().multiplyScalar(85);
 
   buildMountains(scene);
-  const streamTiles = createTiles(scene);
-  streamTiles(LANDMARKS.start, Infinity);
+  const tiles = createTiles(scene);
+  tiles.stream(LANDMARKS.start, Infinity);
   const updateSnow = buildSnow(scene);
   const updateMist = buildMist(scene);
   const altar = buildAltar(scene);
@@ -757,9 +827,15 @@ function buildWorld(renderer, scene) {
       for (const material of weatherMaterials) material.visible = visible;
     },
     // Builds the tiles around `focus`: one per call while moving, or all at once after a
-    // jump such as a teleport.
-    stream(focus, budget = 1) {
-      streamTiles(focus, budget);
+    // jump such as a teleport. `radius` reaches further out for views from the air.
+    stream(focus, budget = 1, radius) {
+      tiles.stream(focus, budget, radius);
+    },
+    findTree: tiles.findTree,
+    fellTree: tiles.fellTree,
+    // A fresh forest for a new run: felled trees grow back and the clearings are rebuilt.
+    resetForest() {
+      tiles.reset();
     },
     update(dt, time, cameraPos, focus) {
       worldUniforms.uTime.value = time;

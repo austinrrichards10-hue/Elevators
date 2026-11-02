@@ -249,7 +249,104 @@ const Sfx = {
     this.tone(240, 140, 0.16, 0.16 + power * 0.14, 'triangle');
     this.burst(0.14 + power * 0.1, 2400, 1.1, 0.12 + power * 0.2, 'bandpass');
   },
+  swap() { this.burst(0.08, 1300, 2, 0.14, 'bandpass'); },
   arrowHit() { this.burst(0.08, 650, 1.5, 0.32, 'bandpass'); this.tone(170, 85, 0.07, 0.16, 'square'); },
   thud() { this.burst(0.16, 420, 0.8, 0.26); },
+
+  // A tone whose pitch follows a list of [seconds, frequency] points, with optional vibrato.
+  glide(points, volume, type = 'sine', vibrato = 0) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(points[0][1], t);
+    for (const [at, freq] of points.slice(1)) osc.frequency.linearRampToValueAtTime(freq, t + at);
+    const end = points[points.length - 1][0];
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(volume, t + Math.min(0.25, end * 0.2));
+    gain.gain.setValueAtTime(volume, t + end * 0.75);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + end);
+    if (vibrato) {
+      const lfo = this.ctx.createOscillator();
+      lfo.frequency.value = 5.5;
+      const depth = this.ctx.createGain();
+      depth.gain.value = vibrato;
+      lfo.connect(depth).connect(osc.frequency);
+      lfo.start(t);
+      lfo.stop(t + end);
+    }
+    osc.connect(gain).connect(this.master);
+    osc.start(t);
+    osc.stop(t + end);
+  },
+
+  // A sound that runs until stopped: filtered noise and/or a low hum. Returns a handle whose
+  // set(level) fades it and stop() ends it.
+  loop({ noise = 0, filter = 600, hum = 0, humFreq = 60 }) {
+    if (!this.ctx) return { set() {}, stop() {} };
+    const t = this.ctx.currentTime;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(this.master);
+    const nodes = [];
+    if (noise) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = filter;
+      const g = this.ctx.createGain();
+      g.gain.value = noise;
+      src.connect(f).connect(g).connect(gain);
+      src.start(t);
+      nodes.push(src);
+    }
+    if (hum) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = humFreq;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = humFreq * 4;
+      const g = this.ctx.createGain();
+      g.gain.value = hum;
+      osc.connect(f).connect(g).connect(gain);
+      osc.start(t);
+      nodes.push(osc);
+    }
+    return {
+      set: (level, time = 0.2) => gain.gain.setTargetAtTime(level, this.ctx.currentTime, time / 3),
+      stop: () => {
+        gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+        for (const node of nodes) node.stop(this.ctx.currentTime + 0.6);
+      },
+    };
+  },
+
+  /* ---------- Wilderness ---------- */
+  // A long rising and falling howl; `level` falls off with distance.
+  howl(level = 1) {
+    const base = 340 + Math.random() * 60;
+    this.glide([[0, base * 0.8], [0.6, base * 1.35], [1.9, base * 1.25], [2.8, base * 0.9]], 0.09 * level, 'sine', 6);
+    this.glide([[0, base * 1.6], [0.6, base * 2.7], [1.9, base * 2.5], [2.8, base * 1.8]], 0.02 * level, 'sine', 8);
+  },
+  wolfYelp(level = 1) { this.glide([[0, 700], [0.12, 1100], [0.25, 600]], 0.06 * level, 'triangle'); },
+  chop() { this.burst(0.12, 700, 1.4, 0.55, 'bandpass'); this.tone(150, 70, 0.12, 0.3, 'triangle'); },
+  axeSwing() { this.burst(0.18, 1800, 0.9, 0.12, 'bandpass'); },
+  treeCreak() { this.glide([[0, 90], [0.8, 140], [1.6, 70]], 0.12, 'sawtooth', 9); },
+  treeCrash() { this.burst(1.2, 380, 0.5, 0.9); this.tone(70, 30, 0.8, 0.5); },
+  planks() { this.burst(0.08, 1200, 2, 0.35, 'bandpass'); this.tone(320, 260, 0.08, 0.12, 'triangle'); },
+  pickup() { this.tone(660, 990, 0.12, 0.12, 'triangle'); setTimeout(() => this.tone(990, 1320, 0.16, 0.1, 'triangle'), 90); },
+  craft() { this.burst(0.25, 900, 1, 0.3, 'bandpass'); setTimeout(() => this.tone(520, 780, 0.2, 0.1, 'triangle'), 120); },
+  ignite() { this.burst(1.1, 700, 0.5, 0.45); this.tone(110, 330, 0.9, 0.12); },
+  crackle(level = 1) { this.burst(0.03 + Math.random() * 0.04, 2500 + Math.random() * 2000, 2, 0.12 * level, 'bandpass'); },
+
+  /* ---------- Cutscene ---------- */
+  boom(level = 1) { this.burst(2.2, 160, 0.4, 1.2 * level); this.tone(55, 22, 1.8, 0.9 * level); },
+  branchSnap() { this.burst(0.07, 2600, 1.5, 0.5, 'bandpass'); this.burst(0.2, 900, 1, 0.35, 'bandpass'); },
+  snowSlam() { this.burst(0.7, 500, 0.6, 1); this.tone(90, 35, 0.5, 0.7); },
+  ring() { this.glide([[0, 3200], [2.4, 3150]], 0.025, 'sine'); },
   step() { this.burst(0.09, 1300, 1.4, 0.09 + Math.random() * 0.05, 'bandpass'); },
 };

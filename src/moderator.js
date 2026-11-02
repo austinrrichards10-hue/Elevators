@@ -1,11 +1,15 @@
-// Moderator menu: test switches and teleports. Open it with ` or F2 from the title
-// screen, in game or while paused. The switches live in `mod` (game.js).
+// Moderator menu: test switches, survival shortcuts and teleports. Open it with ` or F2
+// from the title screen, in game or while paused. The switches live in `mod` (game.js).
 const MOD_SWITCHES = {
   Player: [
     ['fly', 'Fly', 'Space up, C down, Shift for speed'],
     ['noclip', 'Walk through trees', 'Ignore tree and rock collisions'],
     ['instantDraw', 'Instant draw', 'The bow is fully drawn straight away'],
     ['infiniteStamina', 'Infinite stamina', ''],
+  ],
+  Survival: [
+    ['noCold', 'No cold', 'Warmth never drains'],
+    ['skipIntro', 'Skip the intro', 'Begin goes straight to the forest'],
   ],
   Display: [
     ['hideHud', 'Hide HUD', 'For clean screenshots'],
@@ -18,11 +22,16 @@ const MOD_TELEPORTS = {
   Start: () => LANDMARKS.start,
   Centre: () => ({ x: 0, z: 0 }),
   Altar: () => ({ x: LANDMARKS.altar.x, z: LANDMARKS.altar.z + 12 }),
+  'Crash site': () => ({ x: wreck.x + 14, z: wreck.z }),
+  'Axe stump': () => ({ x: STUMP_SPOT.x - 2, z: STUMP_SPOT.z + 2 }),
   'East edge': () => ({ x: WORLD_RADIUS - 30, z: 0 }),
   'West edge': () => ({ x: -(WORLD_RADIUS - 30), z: 0 }),
 };
 const MOD_ACTIONS = {
-  stamina: ['Refill stamina', () => { player.stamina = 100; }],
+  stamina: ['Heal and warm up', () => { player.stamina = 100; survival.health = 100; survival.warmth = 100; }],
+  axe: ['Give axe', () => { if (!survival.hasAxe) takeAxe(); }],
+  planks: ['+10 planks', () => { survival.planks += 10; }],
+  fire: ['Build campfire', () => { survival.planks += SURVIVAL.campfireCost; craft(0); }],
   arrows: ['Clear arrows', () => clearArrows()],
 };
 
@@ -48,6 +57,7 @@ function renderMod() {
     </header>
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>
     ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['stamina', 'arrows']))}
+    ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire']))}
     ${section('Move speed', chips('speed', MOD_SPEEDS, mod.speed, (v) => `${v}×`))}
     ${section('Game speed', chips('time', MOD_TIMES, mod.timeScale, (v) => `${v}×`))}
     ${section('Teleport', `<div class="chips">${Object.keys(MOD_TELEPORTS).map((name) => `<button data-teleport="${name}">${name}</button>`).join('')}</div>`)}
@@ -66,7 +76,7 @@ function applyMod() {
 }
 
 function openMod() {
-  if (game.state === 'room') return;
+  if (game.state === 'room' || game.state === 'cutscene' || game.state === 'dead') return;
   modReturn = game.state;
   if (game.state === 'playing') setPaused(true);
   $('pause').classList.add('hidden');
@@ -110,13 +120,13 @@ addEventListener('keydown', (e) => {
 $('open-mod').addEventListener('click', openMod);
 $('pause-mod').addEventListener('click', openMod);
 
-// Position, frame rate and arrow count, for checking spots and performance.
+// Position, frame rate, wolves nearby and warmth, for checking spots and performance.
 let infoFrames = 0;
 (function countFrames() { infoFrames++; requestAnimationFrame(countFrames); }());
 setInterval(() => {
   if (!mod.showInfo) { infoFrames = 0; return; }
   const p = player.pos;
-  $('mod-info').textContent = `x ${p.x.toFixed(1)}  y ${p.y.toFixed(1)}  z ${p.z.toFixed(1)}  ·  ${infoFrames * 2} fps  ·  ${arrows.length} arrows`;
+  $('mod-info').textContent = `x ${p.x.toFixed(1)}  y ${p.y.toFixed(1)}  z ${p.z.toFixed(1)}  ·  ${infoFrames * 2} fps  ·  ${wolves.length} wolves  ·  warmth ${Math.round(survival.warmth)}`;
   infoFrames = 0;
 }, 500);
 

@@ -84,7 +84,7 @@ const saved = loadSaved();
 // Moderator options, toggled from the moderator menu (moderator.js). They're saved with
 // the loadout so a test setup survives a reload.
 const MOD_DEFAULTS = {
-  fly: false, noclip: false, instantDraw: false, infiniteStamina: false,
+  fly: false, noclip: false, instantDraw: false, infiniteStamina: false, noCold: false, skipIntro: false,
   hideHud: false, showInfo: false, speed: 1, timeScale: 1,
 };
 const mod = { ...MOD_DEFAULTS };
@@ -151,9 +151,17 @@ addEventListener('keydown', (e) => {
   if (e.repeat) return;
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
+  // The intro can be skipped with Space, Enter or Escape.
+  if (game.state === 'cutscene' && ['Space', 'Enter', 'Escape'].includes(e.code)) { finishCutscene(); return; }
   if (e.code === 'Backquote' || e.code === 'F2') { e.preventDefault(); toggleMod(); return; }
   if (game.state !== 'playing') return;
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') { e.preventDefault(); aimLock = !aimLock; }
+  if (e.code === 'Tab') setCrafting(!survival.crafting);
+  const digit = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+  // With the crafting list open, numbers craft; otherwise they pick what's in her hands.
+  if (digit >= 0 && survival.crafting) craft(digit);
+  else if (digit === 0) setTool('bow');
+  else if (digit === 1) setTool('axe');
   // Flying uses Space to climb, so there is no dodge in the air.
   if (e.code === 'Space' && !mod.fly) startDodge();
   if (e.code === 'KeyP') setPaused(true);
@@ -162,10 +170,11 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; aiming = false; cancelDraw(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousedown', (e) => {
+  if (game.state === 'cutscene') { finishCutscene(); return; }
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
-  if (e.button === 0) startDraw();
-  if (e.button === 2) aiming = true;
+  if (e.button === 0) { if (survival.tool === 'axe') startSwing(); else startDraw(); }
+  if (e.button === 2 && survival.tool === 'bow') aiming = true;
 });
 addEventListener('mouseup', (e) => {
   if (e.button === 0) releaseArrow();
@@ -210,17 +219,75 @@ function setPaused(paused) {
   if (paused) { pointerWasLocked = false; document.exitPointerLock(); } else lockPointer();
 }
 
-$('start').addEventListener('click', () => {
-  Sfx.init();
-  $('title').classList.add('hidden');
-  $('hud').classList.remove('hidden');
+/* ---------- Runs and menus ---------- */
+// A fresh run: new crash site, the forest grown back, nothing in her pockets.
+function resetRun() {
+  clearWolves();
+  clearArrows();
+  placeWreck();
+  world.resetForest();
+  resetSurvival();
+  for (const k in keys) keys[k] = false;
+  aiming = false;
+  cancelDraw();
+  player.dodge = null;
+  player.stamina = 100;
+  player.pos.set(LANDMARKS.start.x, groundHeight(LANDMARKS.start.x, LANDMARKS.start.z), LANDMARKS.start.z);
+  world.stream(player.pos, Infinity);
+}
+
+function beginPlay() {
   game.state = 'playing';
-  player.yaw = player.bodyYaw = Math.PI;
+  for (const id of ['title', 'pause', 'dead']) $(id).classList.add('hidden');
+  $('hud').classList.remove('hidden');
+  avatar.setVisible(true);
+  camera.fov = 58;
+  camera.updateProjectionMatrix();
+  camera.up.set(0, 1, 0);
   lockPointer();
   updateMusic();
-  say('No birds. No wind in the branches. Only the snow.', 3.6);
+  say('Cold. So cold. I need to find something to make a fire.', 3.8);
+}
+
+$('start').addEventListener('click', () => {
+  Sfx.init();
+  resetRun();
+  $('title').classList.add('hidden');
+  if (mod.skipIntro) { setWreckBurning(); beginPlay(); return; }
+  game.state = 'cutscene';
+  lockPointer();
+  startCutscene();
 });
 $('resume').addEventListener('click', () => setPaused(false));
+
+// Back to the title screen, from the pause menu or after freezing. The run is cleared, so
+// the title shows her as she was before it began.
+function toMainMenu() {
+  game.state = 'title';
+  for (const id of ['pause', 'dead', 'hud']) $(id).classList.add('hidden');
+  $('title').classList.remove('hidden');
+  $('frost').style.opacity = 0;
+  pointerWasLocked = false;
+  document.exitPointerLock();
+  resetRun();
+  avatar.setVisible(true);
+  camera.fov = 58;
+  camera.updateProjectionMatrix();
+  subtitles.length = 0;
+  updateMusic();
+}
+$('pause-menu').addEventListener('click', toMainMenu);
+$('dead-menu').addEventListener('click', toMainMenu);
+$('dead-retry').addEventListener('click', () => { resetRun(); setWreckBurning(); beginPlay(); });
+
+function freezeToDeath() {
+  game.state = 'dead';
+  pointerWasLocked = false;
+  document.exitPointerLock();
+  setCrafting(false);
+  $('hud').classList.add('hidden');
+  $('dead').classList.remove('hidden');
+}
 
 /* ---------- Subtitles ---------- */
 const subtitles = [];
@@ -430,7 +497,7 @@ function angleLerp(from, to, amount) {
 // Whether she faces the crosshair: always with aim lock, otherwise only while aiming,
 // drawing or just after a shot.
 function facingAim() {
-  return aimLock || aiming || player.drawing || player.aimT > 0;
+  return aimLock || aiming || player.drawing || player.aimT > 0 || !!survival.swing;
 }
 
 function turnBody(dt, move, moving) {
@@ -478,7 +545,8 @@ function updatePlayer(dt) {
     }
     if (u >= 1) player.dodge = null;
   } else if (moving) {
-    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * mod.speed;
+    // Numb with cold, she slows down.
+    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * mod.speed * (survival.warmth < 15 ? 0.8 : 1);
     move.normalize();
     player.pos.addScaledVector(move, speed * dt);
     step = speed * dt;
@@ -604,6 +672,7 @@ function poseAvatar(dt, move, moving) {
   head.rotation.y = -chest.rotation.y - hips.rotation.y;
 
   poseBow(dt, ease);
+  poseAxe(dt);
 }
 
 /* ---------- Bow handling ---------- */
@@ -650,7 +719,7 @@ function hangingHand(out, shoulder, reach, side, swing, run) {
 function poseBow(dt, ease) {
   const m = bowModel;
   const { holder, chest, armL, armR } = avatar;
-  const wantAim = (player.aimT > 0 || aiming || player.drawing) && !player.dodge;
+  const wantAim = survival.tool === 'bow' && (player.aimT > 0 || aiming || player.drawing) && !player.dodge;
   player.aimBlend += ((wantAim ? 1 : 0) - player.aimBlend) * ease(12);
   const blend = smooth(player.aimBlend);
   const run = player.runBlend;
@@ -750,7 +819,7 @@ function updateCamera(dt) {
 function updateHud() {
   $('stamina-fill').style.width = `${player.stamina}%`;
   // The crosshair shows wherever she faces it; its ring closes in as the string comes back.
-  const showCross = player.lockCam > 0.5 || player.drawing || aiming;
+  const showCross = survival.tool === 'bow' && (player.lockCam > 0.5 || player.drawing || aiming);
   $('crosshair').classList.toggle('hidden', !showCross);
   $('draw-ring').classList.toggle('hidden', !showCross || !player.drawing);
   $('draw-ring').style.transform = `translate(-50%, -50%) scale(${lerp(2.6, 1, player.draw)})`;
@@ -765,6 +834,9 @@ function update(dt) {
   updateCamera(dt);
   updateHud();
   updateArrows(dt);
+  updateWolves(dt);
+  updateSurvival(dt);
+  updateWreck(dt);
 }
 
 // Slow drift in front of her on the title screen, so the skin choice shows.
@@ -779,6 +851,7 @@ function updateTitle(dt) {
   avatar.simulate(dt);
   camera.position.set(player.pos.x - 0.72 + Math.sin(a) * 0.14, player.pos.y + 1.12, player.pos.z - 2.45);
   camera.lookAt(player.pos.x - 0.58, player.pos.y + 0.92, player.pos.z);
+  updateWreck(dt);
 }
 
 /* ---------- Character room ---------- */
@@ -1036,6 +1109,8 @@ function updateRoom(dt) {
 }
 
 setSkin(skinId);
+initSurvival();
+placeWreck();
 renderLoadout();
 
 let last = performance.now();
@@ -1047,8 +1122,9 @@ function frame(now) {
   if (game.state === 'title') updateTitle(dt);
   if (game.state === 'playing') update(dt * mod.timeScale);
   if (game.state === 'room') updateRoom(dt);
+  if (game.state === 'cutscene') updateCutscene(dt);
   if (game.state === 'playing' || game.state === 'title') world.stream(player.pos);
-  if (game.state === 'playing' || game.state === 'title' || game.state === 'room') {
+  if (game.state === 'playing' || game.state === 'title' || game.state === 'room' || game.state === 'cutscene') {
     updateSparks(dt);
     updateSubtitles(dt);
     world.update(dt, game.time, camera.position, player.pos);
@@ -1058,4 +1134,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Exposed for debugging from the browser console.
-window.hollowSnow = { game, player, world, keys, arrows, setSkin, startDodge, startDraw, releaseArrow };
+window.hollowSnow = { game, player, world, keys, arrows, survival, wolves, setSkin, startDodge, startDraw, releaseArrow, startSwing, finishCutscene };
