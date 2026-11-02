@@ -623,18 +623,19 @@ const poleR = new THREE.Vector3();
 // the string elbow lifts out behind her.
 const POLE_R = new THREE.Vector3(-0.42, -0.78, -0.42), POLE_L = new THREE.Vector3(0.42, -0.78, -0.42);
 const DRAW_POLE_R = new THREE.Vector3(-0.7, 0.1, -0.7);
-// How each hand sits on the bow, in the bow's coordinates (+Z forward, +Y up). Hands rest
-// with fingers along -Y. The left hand wraps round the grip; the right hand's fingers
-// point forward to hook the string.
-const RIGHT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-const LEFT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
-const RIGHT_WRIST = new THREE.Vector3(-0.024, -0.012, -0.072);
-const LEFT_WRIST = new THREE.Vector3(0.06, -0.026, -0.01);
+// How each hand sits on the bow, in the bow's coordinates (+Z forward, +X to her left, +Y
+// up). Hands rest with fingers along -Y. Both make an upright fist, thumb on top, fingers
+// running forward and curling in to the left: the left round the riser, the right hooked
+// round the string.
+const GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+// Each wrist sits behind its fist, along the forearm.
+const LEFT_WRIST = new THREE.Vector3(0.024, 0, -0.07);
+const RIGHT_WRIST = new THREE.Vector3(-0.02, -0.01, -0.08);
 const handOffset = new THREE.Vector3(), handGoal = new THREE.Quaternion(), leftGoal = new THREE.Quaternion();
 const HAND_DOWN = new THREE.Quaternion();
-// Where the string comes back to: just under the chin, in the chest's coordinates above
-// shoulder height.
-const ANCHOR = new THREE.Vector3(-0.03, 0.07, 0.08);
+// Where the string comes back to: the right side of her jaw, in the chest's coordinates
+// above shoulder height.
+const ANCHOR = new THREE.Vector3(-0.065, 0.075, 0.07);
 
 // Where a free hand hangs: out to the side, clear of her hips and skirt, swinging with
 // her stride. Running bends the elbow, lifting the hand and widening the swing.
@@ -694,17 +695,20 @@ function poseBow(dt, ease) {
   leftTarget.copy(holderPos).add(handOffset.copy(LEFT_WRIST).applyQuaternion(holderQuat));
   hangingHand(restHand, shoulderL, reachL, 1, -swing, run);
   leftTarget.lerpVectors(restHand, leftTarget, smooth(lift));
-  leftGoal.copy(holderQuat).multiply(LEFT_GRIP);
-  leftGoal.slerpQuaternions(HAND_DOWN, leftGoal, smooth(lift));
+  leftGoal.copy(holderQuat).multiply(GRIP);
+  leftGoal.slerp(HAND_DOWN, 1 - smooth(lift));
   solveArm(armL, leftTarget, POLE_L);
   poseHand(armL, leftGoal, 1);
 
-  // Right hand on the string while aiming; otherwise hanging and swinging opposite the left.
+  // Right hand on the string only while drawing; otherwise it hangs at her side, even with
+  // the bow raised, rather than bunching up against the grip.
+  player.stringHand = (player.stringHand || 0) + ((player.drawing ? 1 : 0) - (player.stringHand || 0)) * ease(16);
+  const onString = smooth(player.stringHand) * blend;
   rightTarget.copy(m.nock).applyMatrix4(holder.matrix).add(handOffset.copy(RIGHT_WRIST).applyQuaternion(holderQuat));
   hangingHand(restHand, shoulderR, reachR, -1, swing, run);
-  rightTarget.lerpVectors(restHand, rightTarget, blend);
-  handGoal.copy(holderQuat).multiply(RIGHT_GRIP);
-  handGoal.slerpQuaternions(HAND_DOWN, handGoal, blend);
+  rightTarget.lerpVectors(restHand, rightTarget, onString);
+  handGoal.copy(holderQuat).multiply(GRIP);
+  handGoal.slerp(HAND_DOWN, 1 - onString);
   poleR.lerpVectors(POLE_R, DRAW_POLE_R, blend * player.draw);
   solveArm(armR, rightTarget, poleR);
   poseHand(armR, handGoal, 1);
