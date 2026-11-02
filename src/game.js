@@ -102,8 +102,23 @@ let avatar = null;
 let gunModel = null;
 
 function saveLoadout() {
-  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, gun: gunId })); } catch { /* storage is optional */ }
+  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, gun: gunId, muted: Sfx.muted })); } catch { /* storage is optional */ }
 }
+
+function renderMute() {
+  document.querySelectorAll('.mute-toggle').forEach((button) => {
+    button.textContent = Sfx.muted ? 'Sound: Off' : 'Sound: On';
+    button.setAttribute('aria-pressed', Sfx.muted);
+  });
+}
+
+function toggleMute() {
+  Sfx.toggleMute();
+  saveLoadout();
+  renderMute();
+}
+Sfx.muted = !!saved.muted;
+renderMute();
 
 function equipGun(id) {
   gunId = id;
@@ -135,6 +150,7 @@ function renderLoadout() {
 }
 
 document.addEventListener('click', (e) => {
+  if (e.target.closest('.mute-toggle')) { toggleMute(); return; }
   const button = e.target.closest('.option');
   if (!button) return;
   if (button.dataset.skin && button.dataset.skin !== skinId) { setSkin(button.dataset.skin); saveLoadout(); renderLoadout(); }
@@ -152,10 +168,10 @@ addEventListener('keydown', (e) => {
   if (['Space', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   keys[e.code] = true;
+  if (e.code === 'KeyM') toggleMute();
   if (game.state !== 'playing') return;
   if (e.code === 'KeyR') startReload();
   if (e.code === 'Space') startDodge();
-  if (e.code === 'KeyM') Sfx.toggleMute();
   if (e.code === 'KeyP') setPaused(true);
   const slot = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
   if (slot >= 0 && GUN_ORDER[slot] !== gunId) { equipGun(GUN_ORDER[slot]); Sfx.swap(); }

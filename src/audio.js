@@ -9,7 +9,7 @@ const Sfx = {
     if (this.ctx) { this.ctx.resume(); return; }
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.7;
+    this.master.gain.value = this.muted ? 0 : 0.7;
     this.master.connect(this.ctx.destination);
 
     const len = this.ctx.sampleRate * 2;
