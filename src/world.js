@@ -4,7 +4,7 @@ const FOG_COLOR = 0x98a5c2;
 const FOG_DENSITY = 0.0275;
 const FOREST_RADIUS = 135;
 const CHUNK_SIZE = 44;
-const DRAW_DISTANCE = 92;
+const DRAW_DISTANCE = 80;
 
 const worldUniforms = { uTime: { value: 0 } };
 
@@ -29,13 +29,37 @@ float fogFactor = 1.0 - exp(-fogAmount * fogAmount * vFogDepth * vFogDepth);
 gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
 #endif`;
 
+// Smooth 2D value noise in the range -1..1.
+function hash2(ix, iz) {
+  const s = Math.sin(ix * 127.1 + iz * 311.7) * 43758.5453;
+  return (s - Math.floor(s)) * 2 - 1;
+}
+
+function valueNoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z);
+  const tx = x - ix, tz = z - iz;
+  const sx = tx * tx * (3 - 2 * tx), sz = tz * tz * (3 - 2 * tz);
+  const a = hash2(ix, iz), b = hash2(ix + 1, iz), c = hash2(ix, iz + 1), d = hash2(ix + 1, iz + 1);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+
+const FLAT_SPOTS = [[LANDMARKS.start, 9, 24], ...LANDMARKS.wards.map((w) => [w, 8, 22]), [LANDMARKS.altar, 26, 42]];
+
 function groundHeight(x, z) {
+  const ridge = 1 - Math.abs(valueNoise(x / 46 + 3.1, z / 46 + 9.2));
+  let h = 6.2 * valueNoise(x / 72, z / 72)
+    + 2.6 * valueNoise(x / 31 + 11.4, z / 31 - 7.3)
+    + 4.2 * ridge * ridge - 1.7
+    + 0.62 * valueNoise(x / 11 - 4.2, z / 11 + 2.6)
+    + 0.13 * valueNoise(x / 4.3 + 8.8, z / 4.3 + 1.7);
+  // Landmarks and the start sit on gentler ground.
+  for (const [spot, inner, outer] of FLAT_SPOTS) {
+    const d = Math.hypot(x - spot.x, z - spot.z);
+    if (d < outer) h *= 0.12 + 0.88 * THREE.MathUtils.smoothstep(d, inner, outer);
+  }
   const r = Math.hypot(x, z);
-  const rim = r > WORLD_RADIUS ? (r - WORLD_RADIUS) ** 2 * 0.03 : 0;
-  return 1.2 * Math.sin(x * 0.045) * Math.cos(z * 0.05)
-    + 0.5 * Math.sin(x * 0.13 + 1) * Math.sin(z * 0.11)
-    + 0.16 * Math.sin(x * 0.41 + z * 0.23) * Math.sin(z * 0.37 - x * 0.19)
-    + rim;
+  if (r > WORLD_RADIUS) h += Math.min((r - WORLD_RADIUS) ** 2 * 0.05, 26);
+  return h;
 }
 
 // Colliders are bucketed by cell so movement only tests what is nearby.
@@ -414,7 +438,12 @@ function buildForest(scene) {
     addCollider(x, z, s * 0.8);
     return { x, z, y: groundHeight(x, z) + s * 0.08, rx: rand() * 0.5, ry: rand() * 6.28, rz: rand() * 0.5, sx: s, sy: s * (0.55 + rand() * 0.3), sz: s * (0.75 + rand() * 0.4) };
   });
-  addInstances(scene, buildRock(), stoneMat, rocks, true, false);
+  const outcrops = scatter(46, (x, z) => {
+    const s = 2.4 + rand() * 4;
+    addCollider(x, z, s * 0.72);
+    return { x, z, y: groundHeight(x, z) + s * 0.1, rx: rand() * 0.4, ry: rand() * 6.28, rz: rand() * 0.4, sx: s, sy: s * (0.7 + rand() * 0.55), sz: s * (0.7 + rand() * 0.4) };
+  });
+  addInstances(scene, buildRock(), stoneMat, rocks.concat(outcrops), true, false);
 
   const logs = scatter(55, (x, z) => {
     const ry = rand() * 6.28;
@@ -435,9 +464,12 @@ function buildTerrain(scene) {
     const x = pos.getX(i), z = pos.getZ(i);
     const y = groundHeight(x, z);
     pos.setY(i, y);
-    // Hollows hold bluer shade.
-    const tone = THREE.MathUtils.clamp(0.9 + y * 0.05, 0.78, 1);
-    colors.set([tone * 0.96, tone * 0.98, 1], i * 3);
+    // Hollows hold bluer shade; steep faces show bare rock through the snow.
+    const tone = THREE.MathUtils.clamp(0.92 + y * 0.012, 0.8, 1);
+    const slope = Math.hypot(groundHeight(x + 1, z) - y, groundHeight(x, z + 1) - y);
+    const patch = 0.5 + 0.5 * valueNoise(x / 5.5, z / 5.5);
+    const rock = THREE.MathUtils.smoothstep(slope + patch * 0.16, 0.5, 0.74);
+    colors.set([lerp(tone * 0.96, 0.27, rock), lerp(tone * 0.98, 0.29, rock), lerp(1, 0.35, rock)], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
@@ -449,6 +481,86 @@ function buildTerrain(scene) {
     vertexColors: true,
   }));
   mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+/* ---------- Mountains ---------- */
+// Rocky peaks past the playable area. They ignore the scene fog and use their own
+// distance haze, so they stay visible above the trees.
+function mountainHeight(r, angle) {
+  const x = Math.cos(angle) * r, z = Math.sin(angle) * r;
+  const envelope = THREE.MathUtils.smoothstep(r, 165, 245) * (1 - 0.55 * THREE.MathUtils.smoothstep(r, 390, 560));
+  let height = 0, amp = 1, freq = 1 / 92, weight = 1;
+  for (let i = 0; i < 6; i++) {
+    const n = 1 - Math.abs(valueNoise(x * freq + i * 17.3, z * freq - i * 9.1));
+    const ridge = n * n * weight;
+    height += ridge * amp;
+    weight = Math.min(1, ridge * 1.9);
+    amp *= 0.5;
+    freq *= 2.05;
+  }
+  return envelope * (32 + height * 215) - 8;
+}
+
+function buildMountains(scene) {
+  const segments = 460, rings = 56;
+  const positions = [], colors = [];
+  const ringRadius = (j) => 165 * Math.pow(600 / 165, j / rings);
+  const point = (i, j) => {
+    const angle = (i / segments) * Math.PI * 2, r = ringRadius(j);
+    return new THREE.Vector3(Math.cos(angle) * r, mountainHeight(r, angle), Math.sin(angle) * r);
+  };
+  const grid = [];
+  for (let j = 0; j <= rings; j++) {
+    grid[j] = [];
+    for (let i = 0; i <= segments; i++) grid[j][i] = point(i % segments, j);
+  }
+  const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3();
+  const face = (a, b, c) => {
+    ab.subVectors(b, a);
+    ac.subVectors(c, a);
+    n.crossVectors(ab, ac).normalize();
+    if (n.y < 0) n.negate();
+    const height = (a.y + b.y + c.y) / 3;
+    // Snow only holds on gentler faces; steep ones stay bare rock.
+    const grit = 0.5 + 0.5 * valueNoise(a.x / 13, a.z / 13);
+    const snowLine = THREE.MathUtils.smoothstep(height + grit * 26, 18, 56);
+    const snow = THREE.MathUtils.smoothstep(n.y + grit * 0.14, 0.36, 0.56) * snowLine;
+    const rockTone = 0.1 + grit * 0.07;
+    const r = lerp(rockTone, 0.86, snow), g = lerp(rockTone * 1.04, 0.9, snow), bl = lerp(rockTone * 1.2, 1, snow);
+    for (const v of [a, b, c]) {
+      positions.push(v.x, v.y, v.z);
+      colors.push(r, g, bl);
+    }
+  };
+  for (let j = 0; j < rings; j++) {
+    for (let i = 0; i < segments; i++) {
+      const a = grid[j][i], b = grid[j][i + 1], c = grid[j + 1][i], d = grid[j + 1][i + 1];
+      face(a, c, b);
+      face(b, c, d);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, fog: false, flatShading: true, side: THREE.DoubleSide, envMapIntensity: 0.9 });
+  const haze = { value: new THREE.Color(FOG_COLOR) };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uHaze = haze;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', 'varying float vPeakY;\n#include <common>')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPeakY = position.y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', 'uniform vec3 uHaze;\nvarying float vPeakY;\n#include <common>')
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        float hazeAmount = 1.0 - exp(-length(vViewPosition) * 0.0015);
+        hazeAmount = max(hazeAmount, 1.0 - smoothstep(0.0, 46.0, vPeakY));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, hazeAmount);`);
+  };
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.frustumCulled = false;
   scene.add(mesh);
 }
 
@@ -638,6 +750,7 @@ function buildWorld(renderer, scene) {
   scene.add(sun, sun.target);
   const sunOffset = new THREE.Vector3(-0.42, 0.72, 0.55).normalize().multiplyScalar(85);
 
+  buildMountains(scene);
   buildTerrain(scene);
   buildForest(scene);
   const updateSnow = buildSnow(scene);

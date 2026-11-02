@@ -202,7 +202,7 @@ function boughTexture(seed, snow, needles) {
 }
 
 // Long fur strip: root at the top of the card, ragged tips at the bottom.
-function furTexture(seed, spotted) {
+function furTexture(seed) {
   const rand = seededRandom(seed);
   return canvasTexture(128, 512, (c, w, h) => {
     for (let i = 0; i < 1100; i++) {
@@ -227,14 +227,6 @@ function furTexture(seed, spotted) {
     fall.addColorStop(1, 'rgba(70,80,110,0.42)');
     c.fillStyle = fall;
     c.fillRect(0, 0, w, h);
-    if (spotted) {
-      c.fillStyle = '#0b0b10';
-      for (let i = 0; i < 7; i++) {
-        c.beginPath();
-        c.ellipse(16 + rand() * (w - 32), 170 + rand() * 300, 4 + rand() * 7, 8 + rand() * 13, (rand() - 0.5) * 0.7, 0, 6.3);
-        c.fill();
-      }
-    }
   });
 }
 
@@ -266,93 +258,100 @@ function mistTexture() {
   });
 }
 
-// A large almond eye with a teal iris, painted on a card that sits on the face.
-function eyeTexture() {
-  return canvasTexture(128, 128, (c, w) => {
-    const almond = () => {
+// An anime eye on a card: a tall oval iris, dark at the top and glowing at the bottom,
+// under a heavy lash that droops softly at the outer corner (the right of the card).
+function eyeTexture(irisTop, irisMid, irisBottom, pupil) {
+  return canvasTexture(128, 160, (c, w, h) => {
+    const shape = () => {
       c.beginPath();
-      c.moveTo(8, 72);
-      c.quadraticCurveTo(58, -6, 120, 58);
-      c.quadraticCurveTo(70, 132, 8, 72);
+      c.moveTo(14, 44);
+      c.bezierCurveTo(36, 8, 96, 14, 118, 70);
+      c.bezierCurveTo(120, 112, 104, 148, 66, 150);
+      c.bezierCurveTo(36, 150, 14, 100, 14, 44);
       c.closePath();
     };
     c.save();
-    almond();
+    shape();
     c.clip();
-    c.fillStyle = '#f6f4f2';
-    c.fillRect(0, 0, w, w);
-    const iris = c.createLinearGradient(0, 16, 0, 108);
-    iris.addColorStop(0, '#0b3f52');
-    iris.addColorStop(0.45, '#14788f');
-    iris.addColorStop(1, '#49d3dc');
+    c.fillStyle = '#f7f6f6';
+    c.fillRect(0, 0, w, h);
+    const iris = c.createLinearGradient(0, 18, 0, 148);
+    iris.addColorStop(0, irisTop);
+    iris.addColorStop(0.5, irisMid);
+    iris.addColorStop(1, irisBottom);
     c.fillStyle = iris;
     c.beginPath();
-    c.ellipse(64, 62, 34, 42, 0, 0, 6.3);
+    c.ellipse(66, 84, 39, 62, 0, 0, 6.3);
     c.fill();
-    c.fillStyle = '#04161f';
+    c.strokeStyle = irisTop;
+    c.lineWidth = 3.5;
+    c.stroke();
+    c.fillStyle = pupil;
     c.beginPath();
-    c.ellipse(64, 58, 13, 19, 0, 0, 6.3);
+    c.ellipse(66, 70, 17, 30, 0, 0, 6.3);
     c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.95)';
+    // Crescent of light in the lower iris.
+    c.fillStyle = 'rgba(255,255,255,0.32)';
     c.beginPath();
-    c.ellipse(50, 42, 9, 11, 0, 0, 6.3);
+    c.ellipse(66, 122, 27, 17, 0, 0, 6.3);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.97)';
+    c.beginPath();
+    c.ellipse(48, 52, 12, 16, 0.25, 0, 6.3);
     c.fill();
     c.beginPath();
-    c.arc(77, 80, 4.5, 0, 6.3);
+    c.arc(84, 110, 5.5, 0, 6.3);
     c.fill();
     c.restore();
-    // Heavy upper lash, thin lower line.
-    c.strokeStyle = '#141018';
+
     c.lineCap = 'round';
-    c.lineWidth = 9;
+    c.strokeStyle = '#12101a';
+    c.lineWidth = 11;
     c.beginPath();
-    c.moveTo(6, 72);
-    c.quadraticCurveTo(58, -6, 121, 57);
+    c.moveTo(12, 46);
+    c.bezierCurveTo(36, 6, 96, 12, 120, 70);
     c.stroke();
+    c.lineWidth = 7;
+    c.beginPath();
+    c.moveTo(114, 62);
+    c.lineTo(125, 88);
+    c.stroke();
+    c.strokeStyle = 'rgba(40,30,44,0.75)';
     c.lineWidth = 2.5;
     c.beginPath();
-    c.moveTo(30, 94);
-    c.quadraticCurveTo(70, 118, 104, 80);
+    c.moveTo(46, 146);
+    c.quadraticCurveTo(70, 156, 92, 142);
     c.stroke();
   });
 }
 
+// Soft pink with fine diagonal hatching across the cheek.
 function blushTexture() {
-  return canvasTexture(64, 64, (c, w) => {
-    const g = c.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
-    g.addColorStop(0, 'rgba(236,120,132,0.5)');
+  return canvasTexture(96, 64, (c, w, h) => {
+    const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(236,120,132,0.42)');
     g.addColorStop(1, 'rgba(236,120,132,0)');
     c.fillStyle = g;
-    c.fillRect(0, 0, w, w);
-  });
-}
-
-// A lock of hair: root at the top of the card, tapering to fine tips at the bottom.
-function hairTexture(seed) {
-  const rand = seededRandom(seed);
-  const tones = ['#147089', '#1b8aa4', '#25a4bd', '#33bdd1', '#5fd5e0'];
-  return canvasTexture(128, 512, (c, w, h) => {
-    for (let i = 0; i < 700; i++) {
-      const u = rand();
-      const edge = 1 - Math.abs(u - 0.5) * 2;
-      const len = h * (0.45 + edge * 0.55) * (0.82 + rand() * 0.18);
-      const x = lerp(6, w - 6, u);
-      c.strokeStyle = tones[Math.floor(rand() * tones.length)];
-      c.lineWidth = 1.5 + rand() * 2;
+    c.fillRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(205,80,100,0.5)';
+    c.lineWidth = 2;
+    c.lineCap = 'round';
+    for (const x of [34, 46, 58]) {
       c.beginPath();
-      c.moveTo(x, 0);
-      c.quadraticCurveTo(x + (rand() - 0.5) * 8, len * 0.5, lerp(x, w / 2, 0.55), len);
+      c.moveTo(x + 4, 24);
+      c.lineTo(x - 4, 42);
       c.stroke();
     }
   });
 }
 
-function hairCapTexture() {
-  const w = 128, h = 256;
-  const streaks = fbm(w, h, 32, 2, 3, 81);
+// Fine streaks running along the hair, tiled over the solid hair shapes.
+function hairTexture(dark, light) {
+  const w = 128, h = 128;
+  const streaks = fbm(w, h, 24, 2, 3, 81);
   return colorTexture(w, h, (i) => {
-    const t = streaks[i];
-    return [lerp(18, 66, t), lerp(102, 196, t), lerp(126, 214, t)];
+    const t = THREE.MathUtils.smoothstep(streaks[i], 0.28, 0.72);
+    return [lerp(dark[0], light[0], t), lerp(dark[1], light[1], t), lerp(dark[2], light[2], t)];
   });
 }
 
@@ -375,14 +374,14 @@ const TEX = {
   cloth: clothNormal(),
   boughGreen: boughTexture(61, 26, ['#10251d', '#16302a', '#1c3a2c', '#0c1d18']),
   boughSnowy: boughTexture(62, 110, ['#16302a', '#1c3a2c', '#24463a']),
-  fur: furTexture(71, false),
-  furSpotted: furTexture(72, true),
+  fur: furTexture(71),
   softDot: softDotTexture(),
   mist: mistTexture(),
-  eye: eyeTexture(),
+  eyeTeal: eyeTexture('#0a3a50', '#127f9a', '#62e4e6', '#051b28'),
+  eyeRed: eyeTexture('#4a0614', '#a31230', '#f26a72', '#22020a'),
   blush: blushTexture(),
-  hair: hairTexture(91),
-  hairCap: hairCapTexture(),
+  hairTeal: hairTexture([44, 158, 178], [98, 214, 222]),
+  hairCrimson: hairTexture([186, 44, 84], [238, 88, 130]),
   beam: verticalFadeTexture(),
 };
 for (const t of [TEX.snow.normal, TEX.snow.rough, TEX.snow.color]) t.repeat.set(70, 70);

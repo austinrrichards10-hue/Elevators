@@ -20,20 +20,23 @@
     <div class="bar hp"><i id="hp-fill"></i></div>
     <div class="bar stamina"><i id="stamina-fill"></i></div>
   </div>
-  <div id="ammo"><b id="ammo-count">8</b><span>/ 8</span></div>
+  <div id="ammo"><small id="gun-name"></small><b id="ammo-count">8</b><span id="ammo-max">/ 8</span></div>
 </div>
+<div id="scope" class="hidden"></div>
 
 <div id="subtitle"></div>
 
 <section id="title" class="screen">
   <h1>Hollow Snow</h1>
   <p class="tag">The forest froze the night the king stopped dying.</p>
+  <div class="loadout"></div>
   <button id="start">Enter the forest</button>
   <ul class="keys">
     <li><b>WASD</b> move</li>
-    <li><b>Mouse</b> aim</li>
     <li><b>Left click</b> fire</li>
+    <li><b>Right click</b> aim</li>
     <li><b>R</b> reload</li>
+    <li><b>1-5</b> switch gun</li>
     <li><b>Shift</b> sprint</li>
     <li><b>Space</b> dodge</li>
     <li><b>E</b> hold to interact</li>
@@ -43,6 +46,7 @@
 
 <section id="pause" class="screen hidden">
   <h2>Paused</h2>
+  <div class="loadout"></div>
   <button id="resume">Resume</button>
 </section>
 
@@ -58,6 +62,8 @@
 <script src="src/audio.js"></script>
 <script src="src/world.js"></script>
 <script src="src/characters.js"></script>
+<script src="src/guns.js"></script>
+<script src="src/player.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>

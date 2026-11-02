@@ -2,14 +2,16 @@
 
 A third-person shooter set in a frozen, fog-bound forest, with all models and textures generated in code. Light the three wardfires, reach the altar and defeat the Hollow King.
 
-Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN.
+Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. Choose a skin and weapon on the title screen or in the pause menu.
 
 | Input | Action |
 | --- | --- |
 | WASD | Move |
-| Mouse | Aim |
+| Mouse | Look |
 | Left click | Fire |
+| Right click | Aim |
 | R | Reload |
+| 1-5 | Switch weapon |
 | Shift | Sprint |
 | Space | Dodge |
 | E | Hold to interact |
