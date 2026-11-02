@@ -30,6 +30,7 @@ src/
   game.js        Main loop, controls, camera, arrows, HUD, menus and the Character room
   moderator.js   Moderator menu: flying, speed, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
+  boots.js       Black tactical boots, shaped from the characters' own feet
   bow.js         The bow and arrow models, built in code
   world.js       The snow forest: terrain, trees and mountains, built in tiles around the player
   audio.js       All sound effects and music, synthesized in code

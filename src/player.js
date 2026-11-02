@@ -244,6 +244,7 @@ function loadSkinData(skinId) {
 
   removeSkinUnderCloth(parts);
   fitClothToLegs(parts, names);
+  addBoots(parts);
 
   // Which bones actually move vertices, so only those are updated each frame.
   const usedBones = new Set();
