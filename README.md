@@ -21,3 +21,5 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 ## Credits
 
 Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is embedded in `assets/characters.js`.
+
+Sorceress skin: converted from `sorceress.zip` (author and license not included in the download; add credit here before sharing the game). The original was unrigged, so a skeleton and skin weights were generated, and the staff and particle meshes were removed. The file is embedded in `assets/sorceress.js`.

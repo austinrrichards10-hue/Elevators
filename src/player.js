@@ -1,10 +1,12 @@
 // Player avatar: the imported character models, driven by the game's own rig.
 // "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
 const SKINS = {
-  teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
-  crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
+  teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
+  crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
+  // Converted from an unrigged FBX: its skeleton and weights were generated for this game.
+  sorceress: { name: 'Sorceress', note: 'Silver hair, red hooded cloak', file: 'SORCERESS_GLB', skin: 0, hair: {} },
 };
-const SKIN_ORDER = ['teal', 'crimson'];
+const SKIN_ORDER = ['teal', 'crimson', 'sorceress'];
 
 // The model's bind pose to game space: feet on the ground, centred, facing +Z.
 const MODEL_SCALE = 0.9375;
@@ -12,7 +14,7 @@ const MODEL_CENTER = new THREE.Vector3(0.0235, 0, -1.07);
 const modelToGame = new THREE.Matrix4().makeScale(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
   .multiply(new THREE.Matrix4().makeTranslation(-MODEL_CENTER.x, -MODEL_CENTER.y, -MODEL_CENTER.z));
 
-let characterFile = null;
+const modelFiles = new Map();
 const skinCache = new Map();
 
 /* ---------- Physics ---------- */
@@ -210,10 +212,10 @@ function makeMaterial(file, index) {
 
 function loadSkinData(skinId) {
   if (skinCache.has(skinId)) return skinCache.get(skinId);
-  if (!characterFile) characterFile = readGlb(window.CHARACTER_GLB);
-  const file = characterFile;
-  const { json } = file;
   const def = SKINS[skinId];
+  if (!modelFiles.has(def.file)) modelFiles.set(def.file, readGlb(window[def.file]));
+  const file = modelFiles.get(def.file);
+  const { json } = file;
   const skin = json.skins[def.skin];
   const inverses = file.accessor(skin.inverseBindMatrices).array;
   const names = skin.joints.map((n) => json.nodes[n].name.replace(/_\d+$/, ''));
@@ -364,22 +366,23 @@ function buildRig(data) {
   assign(chest, 'spine_02.x', 'spine_03.x', 'neck.x', 'shoulder.l', 'shoulder.r');
   assign(head, 'head.x');
 
+  // Legs and arms may be posed in the model, so each limb's rest rotation straightens it
+  // to hang down from its joint.
+  const down = new THREE.Vector3(0, -1, 0);
+  const toDown = (from, to) => new THREE.Quaternion().setFromUnitVectors(to.clone().sub(from).normalize(), down);
   const leg = (s) => {
-    const hip = j(`thigh_twist.${s}`), knee = j(`leg_stretch.${s}`);
-    const thigh = rest(new THREE.Group(), hip);
+    const hip = j(`thigh_twist.${s}`), knee = j(`leg_stretch.${s}`), ankle = j(`foot.${s}`);
+    const thigh = rest(new THREE.Group(), hip, toDown(hip, knee));
     thigh.position.subVectors(hip, hipsPos);
     hips.add(thigh);
-    const shin = rest(new THREE.Group(), knee);
-    shin.position.subVectors(knee, hip);
+    const shin = rest(new THREE.Group(), knee, toDown(knee, ankle));
+    shin.position.y = -hip.distanceTo(knee);
     thigh.add(shin);
     assign(thigh, `thigh_twist.${s}`, `thigh_stretch.${s}`);
     assign(shin, `leg_stretch.${s}`, `leg_twist.${s}`, `foot.${s}`, `toes_01.${s}`);
     return { thigh, shin };
   };
 
-  // Arms are T-posed in the model, so their rest rotation hangs them down from the shoulder.
-  const down = new THREE.Vector3(0, -1, 0);
-  const toDown = (from, to) => new THREE.Quaternion().setFromUnitVectors(to.clone().sub(from).normalize(), down);
   const arm = (s) => {
     const side = s === 'l' ? 1 : -1;
     const shoulder = j(`c_arm_twist_offset.${s}`), elbow = j(`forearm_stretch.${s}`), wrist = j(`hand.${s}`), fingerTip = j(`c_middle3.${s}`);
