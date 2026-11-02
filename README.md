@@ -26,10 +26,13 @@ index.html                 The page that runs the game
 models/
   characters/
     doomer-miku-and-teto.js  Player skins: Twin Tails (Miku) and Crimson Curls (Teto)
+  clothing/
+    apocalyptic-bodysuit.js  The bodysuit both characters wear under their jacket
 src/
   game.js        Main loop, controls, camera, arrows, HUD, menus and the Character room
   moderator.js   Moderator menu: flying, speed, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
+  outfit.js      The survival outfit: bodysuit, rugged jacket, cargo shorts and black boots
   bow.js         The bow and arrow models, built in code
   world.js       The snow forest: terrain, trees and mountains, built in tiles around the player
   audio.js       All sound effects and music, synthesized in code
@@ -44,3 +47,5 @@ Each file in `models/` is a `.glb` 3D model stored as text, because browsers won
 ## Credits
 
 Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/3d-models/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is `models/characters/doomer-miku-and-teto.js`.
+
+Bodysuit: ["Apocalyptic Underwear For RayII Procedural Shade"](https://sketchfab.com/3d-models/apocalyptic-underwear-for-rayii-procedural-shade-17bc7c1d659a48f5b6d7c4b5548027ba) by [ChamberSu1996](https://sketchfab.com/chambersu1996), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Refitted to the characters, with its texture cropped and scaled down. The file is `models/clothing/apocalyptic-bodysuit.js`. The characters' original clothes are replaced by it, a jacket, cargo shorts and boots built in code (`src/outfit.js`).
