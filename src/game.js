@@ -636,6 +636,16 @@ const HAND_DOWN = new THREE.Quaternion();
 // shoulder height.
 const ANCHOR = new THREE.Vector3(-0.03, 0.07, 0.08);
 
+// Where a free hand hangs: out to the side, clear of her hips and skirt, swinging with
+// her stride. Running bends the elbow, lifting the hand and widening the swing.
+function hangingHand(out, shoulder, reach, side, swing, run) {
+  return out.set(
+    shoulder.x + side * (0.12 + run * 0.02),
+    shoulder.y - reach * (0.93 - run * 0.28),
+    0.04 + run * 0.04 + swing * (0.07 + run * 0.12),
+  );
+}
+
 function poseBow(dt, ease) {
   const m = bowModel;
   const { holder, chest, armL, armR } = avatar;
@@ -682,7 +692,7 @@ function poseBow(dt, ease) {
 
   // Left hand reaches back for the grip; put away, it hangs and swings with her stride.
   leftTarget.copy(holderPos).add(handOffset.copy(LEFT_WRIST).applyQuaternion(holderQuat));
-  restHand.set(shoulderL.x + 0.04, shoulderL.y - reachL, 0.03 - swing * (0.06 + run * 0.1));
+  hangingHand(restHand, shoulderL, reachL, 1, -swing, run);
   leftTarget.lerpVectors(restHand, leftTarget, smooth(lift));
   leftGoal.copy(holderQuat).multiply(LEFT_GRIP);
   leftGoal.slerpQuaternions(HAND_DOWN, leftGoal, smooth(lift));
@@ -691,7 +701,7 @@ function poseBow(dt, ease) {
 
   // Right hand on the string while aiming; otherwise hanging and swinging opposite the left.
   rightTarget.copy(m.nock).applyMatrix4(holder.matrix).add(handOffset.copy(RIGHT_WRIST).applyQuaternion(holderQuat));
-  restHand.set(shoulderR.x - 0.04, shoulderR.y - reachR, 0.03 + swing * (0.06 + run * 0.1));
+  hangingHand(restHand, shoulderR, reachR, -1, swing, run);
   rightTarget.lerpVectors(restHand, rightTarget, blend);
   handGoal.copy(holderQuat).multiply(RIGHT_GRIP);
   handGoal.slerpQuaternions(HAND_DOWN, handGoal, blend);
