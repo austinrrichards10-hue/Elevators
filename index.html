@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollow Snow</title>
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="grain"></div>
+<div id="hurt"></div>
+
+<div id="hud" class="hidden">
+  <div id="objective"></div>
+  <div id="compass"><span id="compass-arrow">&#9650;</span><span id="compass-dist"></span></div>
+  <div id="boss" class="hidden"><label>The Hollow King</label><div class="bar"><i id="boss-fill"></i></div></div>
+  <div id="crosshair"></div>
+  <div id="prompt" class="hidden"></div>
+  <div id="vitals">
+    <div class="bar hp"><i id="hp-fill"></i></div>
+    <div class="bar stamina"><i id="stamina-fill"></i></div>
+  </div>
+  <div id="ammo"><b id="ammo-count">8</b><span>/ 8</span></div>
+</div>
+
+<div id="subtitle"></div>
+
+<section id="title" class="screen">
+  <h1>Hollow Snow</h1>
+  <p class="tag">The forest froze the night the king stopped dying.</p>
+  <button id="start">Enter the forest</button>
+  <ul class="keys">
+    <li><b>WASD</b> move</li>
+    <li><b>Mouse</b> aim</li>
+    <li><b>Left click</b> fire</li>
+    <li><b>R</b> reload</li>
+    <li><b>Shift</b> sprint</li>
+    <li><b>Space</b> dodge</li>
+    <li><b>E</b> hold to interact</li>
+    <li><b>M</b> mute</li>
+  </ul>
+</section>
+
+<section id="pause" class="screen hidden">
+  <h2>Paused</h2>
+  <button id="resume">Resume</button>
+</section>
+
+<section id="end" class="screen hidden">
+  <h2 id="end-title"></h2>
+  <p id="end-text" class="tag"></p>
+  <button id="restart">Play again</button>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/world.js"></script>
+<script src="src/characters.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
