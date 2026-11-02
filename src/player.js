@@ -5,30 +5,32 @@ const SKINS = {
   crimson: { name: 'Crimson Curls', note: 'The original red-haired gunslinger' },
 };
 const SKIN_ORDER = ['teal', 'crimson'];
+const HAIR_LINE_TEAL = 0x1c6f7c;
 
 const outlineCache = new Map();
-function outlineMaterial(thickness) {
-  if (outlineCache.has(thickness)) return outlineCache.get(thickness);
-  const material = new THREE.MeshBasicMaterial({ color: 0x0c1022, side: THREE.BackSide });
+function outlineMaterial(thickness, color) {
+  const key = `${thickness}/${color}`;
+  if (outlineCache.has(key)) return outlineCache.get(key);
+  const material = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normal * ${thickness.toFixed(4)};`);
   };
   material.customProgramCacheKey = () => `outline${thickness}`;
-  outlineCache.set(thickness, material);
+  outlineCache.set(key, material);
   return material;
 }
 
-function addOutline(mesh, thickness = 0.0028) {
-  const hull = new THREE.Mesh(mesh.geometry, outlineMaterial(thickness));
+function addOutline(mesh, thickness = 0.0028, color = 0x0c1022) {
+  const hull = new THREE.Mesh(mesh.geometry, outlineMaterial(thickness, color));
   hull.frustumCulled = false;
   mesh.add(hull);
 }
 
-function piece(parent, geo, material, x = 0, y = 0, z = 0, outline = 0.0028) {
+function piece(parent, geo, material, x = 0, y = 0, z = 0, outline = 0.0028, outlineColor = 0x0c1022) {
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
-  if (outline) addOutline(mesh, outline);
+  if (outline) addOutline(mesh, outline, outlineColor);
   parent.add(mesh);
   return mesh;
 }
@@ -120,7 +122,7 @@ function catmull(out, p0, p1, p2, p3, t) {
 // One continuous sheet of hair or cloth with an elliptical cross-section, rebuilt
 // along its chain each frame in world space.
 class Ribbon {
-  constructor(scene, chain, { width, thick, material, sideAxis = new THREE.Vector3(1, 0, 0), color = null, sides = 10, sub = 3, repeat = 3, outline = 0.0035 }) {
+  constructor(scene, chain, { width, thick, material, sideAxis = new THREE.Vector3(1, 0, 0), color = null, sides = 10, sub = 3, repeat = 3, outline = 0.0035, outlineColor = 0x0c1022 }) {
     Object.assign(this, { chain, width, thick, sideAxis, sides, sub });
     this.rows = (chain.count - 1) * sub + 1;
     const verts = this.rows * (sides + 1);
@@ -149,7 +151,7 @@ class Ribbon {
     this.mesh = new THREE.Mesh(geo, material);
     this.mesh.castShadow = true;
     this.mesh.frustumCulled = false;
-    if (outline) addOutline(this.mesh, outline);
+    if (outline) addOutline(this.mesh, outline, outlineColor);
     scene.add(this.mesh);
     this.path = Array.from({ length: this.rows }, () => new THREE.Vector3());
   }
@@ -404,10 +406,16 @@ function addHairCap(head, hair, faceCenterY) {
     return [geo, m];
   };
   const parts = [
-    shape(new THREE.SphereGeometry(0.121, 36, 16, 0, Math.PI * 2, 0, 1.2), 0.97, 1.03, 1.05, faceCenterY + 0.012, -0.004),
-    shape(new THREE.SphereGeometry(0.12, 30, 12, 2.72, 3.98, 1.15, 1.15), 0.98, 1.05, 1.06, faceCenterY + 0.012, -0.004),
+    shape(new THREE.SphereGeometry(0.124, 36, 16, 0, Math.PI * 2, 0, 1.25), 1.02, 1.1, 1, faceCenterY + 0.012, 0),
+    shape(new THREE.SphereGeometry(0.123, 30, 12, 2.72, 3.98, 1.15, 1.2), 1.03, 1.1, 1, faceCenterY + 0.012, 0),
   ];
-  for (const [geo, m] of parts) builder.addMesh(geo, m, 1);
+  for (const [geo, m] of parts) {
+    // A long, rounded skull: much deeper behind than in front.
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setZ(i, pos.getZ(i) * (pos.getZ(i) < 0 ? 1.34 : 1.02));
+    geo.computeVertexNormals();
+    builder.addMesh(geo, m, 1);
+  }
   const material = hair.clone();
   material.side = THREE.DoubleSide;
   piece(head, builder.build(), material, 0, 0, 0, 0);
@@ -423,19 +431,19 @@ const bell = (v, s) => Math.exp(-(v * v) / (s * s));
 function faceRelief(x, y) {
   let z = 0;
   for (const side of [-1, 1]) {
-    z -= 0.0078 * bell(x - side * 0.047, 0.03) * bell(y + 0.022, 0.027);
-    z += 0.0034 * bell(x - side * 0.056, 0.024) * bell(y + 0.066, 0.02);
+    z -= 0.0055 * bell(x - side * 0.05, 0.032) * bell(y + 0.018, 0.026);
+    z += 0.0034 * bell(x - side * 0.06, 0.026) * bell(y + 0.062, 0.022);
   }
   // Nose: a narrow bridge rising to a small tip, then cutting back in underneath.
   const along = THREE.MathUtils.smoothstep(-y, 0.024, 0.058);
   const under = y < -0.058 ? bell(y + 0.058, 0.0068) : 1;
-  z += 0.021 * along * along * under * bell(x, 0.0062 + 0.0058 * along);
+  z += 0.027 * along * along * under * bell(x, 0.0062 + 0.0058 * along);
   // Lips, with a groove where they meet.
-  z += 0.0048 * bell(y + 0.0765, 0.0052) * bell(x, 0.0185);
-  z += 0.0058 * bell(y + 0.0905, 0.0062) * bell(x, 0.0155);
+  z += 0.0056 * bell(y + 0.0765, 0.0052) * bell(x, 0.0185);
+  z += 0.0068 * bell(y + 0.0905, 0.0062) * bell(x, 0.0155);
   z -= 0.0022 * bell(y + 0.0835, 0.0019) * bell(x, 0.0175);
   // Chin.
-  z += 0.0082 * bell(y + 0.116, 0.017) * bell(x, 0.028);
+  z += 0.0125 * bell(y + 0.116, 0.018) * bell(x, 0.03);
   return z;
 }
 
@@ -446,9 +454,9 @@ function faceGeometry() {
   for (let i = 0; i < pos.count; i++) {
     const x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
     const k = jawAmount(y0);
-    const x = x0 * 0.94 * (1 - 0.4 * k), y = y0 * (1 + 0.1 * k);
+    const x = x0 * (1 - 0.46 * k), y = y0 * (1 + 0.08 * k);
     // The front stays full down to the chin; only the back narrows towards the neck.
-    const z = z0 > 0 ? z0 * (1 - 0.14 * k) * 0.94 + faceRelief(x, y) : z0 * (1 - 0.5 * k) * 1.06;
+    const z = z0 > 0 ? z0 * (1 - 0.14 * k) + faceRelief(x, y) : z0 * (1 - 0.5 * k) * 1.2;
     pos.setXYZ(i, x, y, z);
   }
   geo.computeVertexNormals();
@@ -458,10 +466,10 @@ function faceGeometry() {
 // Depth of the front of the face at a point, so features can lie right on the skin.
 function faceDepth(x, y) {
   let y0 = y;
-  for (let i = 0; i < 4 && y < 0; i++) y0 = y / (1 + 0.1 * jawAmount(y0));
+  for (let i = 0; i < 4 && y < 0; i++) y0 = y / (1 + 0.08 * jawAmount(y0));
   const k = jawAmount(y0);
-  const x0 = x / (0.94 * (1 - 0.4 * k));
-  return Math.sqrt(Math.max(0, FACE_R * FACE_R - x0 * x0 - y0 * y0)) * (1 - 0.14 * k) * 0.94 + faceRelief(x, y);
+  const x0 = x / (1 - 0.46 * k);
+  return Math.sqrt(Math.max(0, FACE_R * FACE_R - x0 * x0 - y0 * y0)) * (1 - 0.14 * k) + faceRelief(x, y);
 }
 
 // A small sheet draped over the face at (cx, cy), with optional tilt and bend.
@@ -493,29 +501,29 @@ function buildFace(head, skin, eyeMap, centerY, { browColor, mouthColor, mouthBe
   const browMat = new THREE.MeshBasicMaterial({ color: browColor, side: THREE.DoubleSide });
   // Soft shading painted onto the skin to deepen the sculpted forms.
   const shade = (color, opacity) => new THREE.MeshBasicMaterial({ map: TEX.softDot, color, opacity, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const socketShade = shade(0x8d7c9c, 0.34);
+  const socketShade = shade(0xb59aa4, 0.26);
   const cornea = new THREE.MeshStandardMaterial({ map: TEX.softDot, color: 0xffffff, roughness: 0.05, transparent: true, opacity: 0.18, depthWrite: false, envMapIntensity: 1.5, side: THREE.DoubleSide });
   const lidMat = new THREE.MeshBasicMaterial({ color: 0x12101a });
-  const eyeW = 0.056, eyeH = 0.074, eyeY = -0.022;
+  const eyeW = 0.078, eyeH = 0.0624, eyeY = -0.018;
 
   for (const side of [-1, 1]) {
-    const eyeX = side * 0.047;
-    features.add(new THREE.Mesh(facePatch(0.05, 0.024, side * 0.052, eyeY + 0.036, { segments: 8, lift: 0.0007 }), socketShade));
+    const eyeX = side * 0.05;
+    features.add(new THREE.Mesh(facePatch(0.066, 0.024, eyeX, eyeY + 0.032, { segments: 8, lift: 0.0007 }), socketShade));
     features.add(new THREE.Mesh(facePatch(eyeW, eyeH, eyeX, eyeY, { flip: side < 0, dome: 0.0035 }), eyeMat));
     // A glossy cornea catches the sky over the eye.
     features.add(new THREE.Mesh(facePatch(eyeW * 0.82, eyeH * 0.88, eyeX, eyeY - 0.002, { dome: 0.0052, lift: 0.0016 }), cornea));
     // The upper lid stands proud of the eye and overhangs it, flicking past the outer corner.
-    const lid = [[12, 46], [36, 19], [70, 13], [98, 32], [120, 70], [128, 90]].map(([u, v]) => {
-      const x = eyeX + side * (u / 128 - 0.5) * eyeW, y = eyeY + (0.5 - v / 160) * eyeH;
+    const lid = [[9, 74], [34, 34], [76, 18], [118, 28], [150, 58], [158, 72]].map(([u, v]) => {
+      const x = eyeX + side * (u / 160 - 0.5) * eyeW, y = eyeY + (0.5 - v / 128) * eyeH;
       return new THREE.Vector3(x, y, faceDepth(x, y) + 0.0042);
     });
     features.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lid), 20, 0.00165, 6), lidMat));
-    features.add(new THREE.Mesh(facePatch(0.04, 0.024, side * 0.058, -0.066, { flip: side < 0, segments: 6 }), blushMat));
-    // Thin brows, raised at the inner end for a soft, gentle look.
-    features.add(new THREE.Mesh(facePatch(0.04, 0.0026, eyeX, 0.03, { tilt: side * -0.16, segments: 6 }), browMat));
+    features.add(new THREE.Mesh(facePatch(0.042, 0.022, side * 0.068, -0.052, { flip: side < 0, segments: 6 }), blushMat));
+    // Thin arched brows, set high above the eyes.
+    features.add(new THREE.Mesh(facePatch(0.042, 0.0024, eyeX, 0.036, { tilt: side * -0.09, bend: -2.4, segments: 8 }), browMat));
 
     // Ears, sitting behind the side hair.
-    const ear = piece(head, new THREE.SphereGeometry(0.026, 12, 10), skin, side * 0.1, centerY - 0.012, -0.012, 0.0018);
+    const ear = piece(head, new THREE.SphereGeometry(0.026, 12, 10), skin, side * 0.11, centerY - 0.012, -0.018, 0.0018);
     ear.scale.set(0.3, 1.1, 0.68);
     ear.rotation.y = side * 0.32;
     const inner = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd7a9a2, roughness: 0.7 }));
@@ -524,10 +532,38 @@ function buildFace(head, skin, eyeMap, centerY, { browColor, mouthColor, mouthBe
     ear.add(inner);
   }
   // The nose and lips are sculpted into the head; these add the shadows that define them.
-  features.add(new THREE.Mesh(facePatch(0.018, 0.009, 0, -0.0625, { segments: 6, lift: 0.0006 }), shade(0xa8706e, 0.55)));
-  features.add(new THREE.Mesh(facePatch(0.027, 0.0125, 0, -0.0915, { segments: 6, lift: 0.0006 }), shade(0xe08c94, 0.6)));
-  features.add(new THREE.Mesh(facePatch(0.022, 0.0078, 0, -0.0765, { segments: 6, lift: 0.0006 }), shade(0xe08c94, 0.42)));
-  features.add(new THREE.Mesh(facePatch(0.021, 0.0019, 0, -0.0835, { bend: mouthBend, segments: 6, lift: 0.0007 }), new THREE.MeshBasicMaterial({ color: mouthColor, side: THREE.DoubleSide })));
+  features.add(new THREE.Mesh(facePatch(0.03, 0.05, 0, -0.038, { segments: 10, lift: 0.0006 }), shade(0xcdb0ab, 0.5)));
+  features.add(new THREE.Mesh(facePatch(0.016, 0.008, 0, -0.0625, { segments: 6, lift: 0.0009 }), shade(0xb88682, 0.42)));
+  features.add(new THREE.Mesh(facePatch(0.024, 0.011, 0, -0.0915, { segments: 6, lift: 0.0006 }), shade(0xe9a0a6, 0.42)));
+  features.add(new THREE.Mesh(facePatch(0.026, 0.0021, 0, -0.0835, { bend: mouthBend, segments: 8, lift: 0.0007 }), new THREE.MeshBasicMaterial({ color: mouthColor, side: THREE.DoubleSide })));
+}
+
+// Back of the head falls in broad locks to the nape, following the long skull.
+function addBackHair(builder, tipY, outerTip) {
+  for (let i = 0; i < 11; i++) {
+    const a = Math.PI + (i - 5) * 0.31;
+    const sx = Math.sin(a), cz = Math.cos(a);
+    addLock(builder, [
+      [sx * 0.07, 0.19, cz * 0.11],
+      [sx * 0.125, 0.115, cz * 0.168],
+      [sx * 0.118, 0.015, cz * 0.158],
+      [sx * 0.09, tipY - (i % 2) * outerTip, cz * 0.115],
+    ], pointed(0.052, 0.4), pointed(0.018, 0.4), new THREE.Vector3(cz, 0, -sx), 12, 8, 0.86);
+  }
+}
+
+// Long curtains of hair sweeping from a centre parting out across the forehead.
+function addSweep(builder, locks) {
+  const surface = (x, y) => faceDepth(x, y - 0.075) + 0.02;
+  for (const [root, x1, x2, tipX, tipY, width] of locks) {
+    const midY = lerp(0.16, tipY, 0.55);
+    addLock(builder, [
+      [root, 0.218, 0.03],
+      [x1, 0.19, Math.max(0.085, surface(x1, 0.17))],
+      [x2, midY, surface(x2, midY)],
+      [tipX, tipY, surface(tipX, tipY) - 0.004],
+    ], pointed(width, 0.42), pointed(0.0095, 0.42), new THREE.Vector3(1, 0, 0.06), 18, 10, 0.94);
+  }
 }
 
 // A full fringe: overlapping locks falling from the crown to just above the eyes.
@@ -588,7 +624,7 @@ function buildRig() {
     return { o, r, p: new THREE.Vector3() };
   };
   rig.proxies = [
-    proxy(head, 0, 0.075, 0, 0.118),
+    proxy(head, 0, 0.075, -0.012, 0.128),
     proxy(chest, 0, 0.13, 0, 0.12),
     proxy(chest, 0.135, 0.21, 0, 0.06),
     proxy(chest, -0.135, 0.21, 0, 0.06),
@@ -629,12 +665,12 @@ function standardLeg(leg, upperMat, lowerMat, shoeMat, band) {
 
 /* ---------- Skins ---------- */
 function dressTeal(rig, scene) {
-  const skin = new THREE.MeshStandardMaterial({ color: 0xfbe6dc, roughness: 0.68, emissive: 0x6e5046, emissiveIntensity: 0.7, envMapIntensity: 0.62 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xffefe8, roughness: 0.7, emissive: 0x8a6c62, emissiveIntensity: 0.95, envMapIntensity: 0.55 });
   const shirt = new THREE.MeshStandardMaterial({ color: 0xc5cbd6, roughness: 0.72, normalMap: TEX.cloth, normalScale: new THREE.Vector2(0.3, 0.3) });
   const black = new THREE.MeshStandardMaterial({ color: 0x14151e, roughness: 0.68, normalMap: TEX.cloth, normalScale: new THREE.Vector2(0.3, 0.3) });
   const teal = new THREE.MeshStandardMaterial({ color: 0x28a7c0, roughness: 0.5 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xc2a255, metalness: 0.9, roughness: 0.4 });
-  const hair = new THREE.MeshStandardMaterial({ map: TEX.hairTeal, roughness: 0.3, vertexColors: true, envMapIntensity: 1.2 });
+  const hair = new THREE.MeshStandardMaterial({ map: TEX.hairTeal, roughness: 0.42, vertexColors: true, emissive: 0x1d5a5e, emissiveIntensity: 0.45 });
   const sims = [];
   const { chest, head, hips, armL, armR, legL, legR } = rig;
 
@@ -687,59 +723,52 @@ function dressTeal(rig, scene) {
 
   // Face and sculpted hair.
   const centerY = 0.075;
-  buildFace(head, skin, TEX.eyeTeal, centerY, { browColor: 0x1b7e96, mouthColor: 0x96555c, mouthBend: 0.4 });
+  buildFace(head, skin, TEX.eyeTeal, centerY, { browColor: 0x4a97a2, mouthColor: 0x9c5a60, mouthBend: 2.6 });
 
   const static_ = new GeometryBuilder();
   addHairCap(head, hair, centerY);
-  // A long centre lock falling to the bridge of the nose, parted bangs either side.
-  addFringe(static_, [
-    [0.002, 0.002, 0.066, 0.027],
-    [0.014, 0.034, 0.098, 0.028], [-0.014, -0.034, 0.096, 0.028],
-    [0.026, 0.06, 0.082, 0.029], [-0.026, -0.06, 0.084, 0.029],
-    [0.034, 0.078, 0.092, 0.024], [-0.034, -0.078, 0.092, 0.024],
+  // Curtains from a centre parting, with finer locks over the forehead and one wisp between the eyes.
+  addSweep(static_, [
+    [-0.004, -0.058, -0.1, -0.106, 0.018, 0.034], [0.004, 0.058, 0.1, 0.106, 0.018, 0.034],
+    [-0.006, -0.04, -0.07, -0.072, 0.082, 0.026], [0.006, 0.042, 0.072, 0.074, 0.08, 0.026],
+    [-0.004, -0.018, -0.034, -0.032, 0.092, 0.02], [0.004, 0.02, 0.036, 0.034, 0.09, 0.02],
+    [-0.003, -0.01, -0.016, -0.014, 0.098, 0.013], [0.003, 0.011, 0.018, 0.016, 0.1, 0.013],
+    [0.0, 0.004, 0.007, 0.004, 0.066, 0.009],
   ]);
-  // Layered side locks sweep from the crown past the temple, each ending in a sharp point.
+  // Softer side hair towards the back of the temple, so the cheek stays clear in profile.
   for (const side of [-1, 1]) {
-    // Kept towards the back of the temple so the face stays clear in profile.
     const sideLocks = [
-      [[0.05, 0.205, 0.02], [0.1, 0.165, 0.026], [0.116, 0.1, 0.018], [0.11, 0.02, 0.012], 0.016],
-      [[0.07, 0.195, -0.015], [0.113, 0.15, -0.016], [0.126, 0.07, -0.024], [0.116, -0.04, -0.028], 0.019],
-      [[0.08, 0.18, -0.055], [0.116, 0.13, -0.058], [0.124, 0.05, -0.064], [0.106, -0.03, -0.066], 0.022],
+      [[0.06, 0.205, 0.0], [0.112, 0.16, -0.004], [0.13, 0.075, -0.012], [0.122, -0.03, -0.02], 0.022],
+      [[0.075, 0.19, -0.05], [0.122, 0.13, -0.058], [0.136, 0.05, -0.068], [0.118, -0.04, -0.078], 0.026],
     ];
     for (const [a, b, c, d, w] of sideLocks) {
       const flip = (p) => [p[0] * side, p[1], p[2]];
-      addLock(static_, [flip(a), flip(b), flip(c), flip(d)], pointed(w, 0.34), pointed(0.012, 0.34), new THREE.Vector3(0, 0, 1), 14, 10, 0.9);
+      addLock(static_, [flip(a), flip(b), flip(c), flip(d)], pointed(w, 0.36), pointed(0.012, 0.36), new THREE.Vector3(0, 0, 1), 14, 10, 0.92);
     }
-    // A thin wisp flicking out from the temple.
-    addLock(static_, [[side * 0.098, 0.13, 0.03], [side * 0.126, 0.11, 0.032], [side * 0.154, 0.078, 0.026]], pointed(0.0065), pointed(0.004), new THREE.Vector3(0, 1, 0), 10, 8, 0.92);
   }
-  // Back of the head falls in broad locks to the nape.
-  for (let i = 0; i < 11; i++) {
-    const a = Math.PI + (i - 5) * 0.31;
-    const sx = Math.sin(a), cz = Math.cos(a);
-    addLock(static_, [
-      [sx * 0.07, 0.17, cz * 0.08],
-      [sx * 0.118, 0.1, cz * 0.127],
-      [sx * 0.112, 0.01, cz * 0.12],
-      [sx * 0.09, -0.06 - (i % 2) * 0.03, cz * 0.1],
-    ], pointed(0.05, 0.4), pointed(0.016, 0.4), new THREE.Vector3(cz, 0, -sx), 12, 8, 0.86);
-  }
-  const hairMesh = piece(head, static_.build(), hair, 0, 0, 0, 0.0028);
+  addBackHair(static_, -0.075, 0.03);
+  const hairMesh = piece(head, static_.build(), hair, 0, 0, 0, 0.0017, HAIR_LINE_TEAL);
   hairMesh.frustumCulled = false;
 
-  // Hair ties: a slim diamond frame around the root of each tail, pink inside black.
-  const tieBlack = new THREE.MeshStandardMaterial({ color: 0x17161f, roughness: 0.45 });
-  const tiePink = new THREE.MeshStandardMaterial({ color: 0xd6336b, roughness: 0.4, emissive: 0x8a1540, emissiveIntensity: 0.7 });
+  // Hair ties: long pointed plates, dark with pink edges, rising beside the crown.
+  const tieBlack = new THREE.MeshStandardMaterial({ color: 0x2a2730, roughness: 0.42, metalness: 0.2 });
+  const tiePink = new THREE.MeshStandardMaterial({ color: 0xc23a63, roughness: 0.4, emissive: 0x6a1636, emissiveIntensity: 0.55 });
   for (const side of [-1, 1]) {
-    const center = new THREE.Vector3(side * 0.112, 0.15, -0.09);
-    for (const [radius, tube, material] of [[0.052, 0.0042, tieBlack], [0.044, 0.0034, tiePink]]) {
-      const frame = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 4, 4), material);
-      frame.position.copy(center);
-      frame.rotation.y = Math.PI / 2;
-      frame.castShadow = true;
-      head.add(frame);
-    }
+    const tie = new THREE.Group();
+    tie.position.set(side * 0.134, 0.166, -0.082);
+    tie.rotation.set(-0.3, 0, side * -0.12);
+    const edge = piece(tie, new THREE.OctahedronGeometry(1, 0), tiePink, 0, 0, 0, 0);
+    edge.scale.set(0.008, 0.052, 0.026);
+    const plate = piece(tie, new THREE.OctahedronGeometry(1, 0), tieBlack, side * 0.003, 0, 0, 0);
+    plate.scale.set(0.008, 0.041, 0.018);
+    head.add(tie);
   }
+
+  // A slim headset mic curving from the right ear towards the mouth.
+  const headsetMat = new THREE.MeshStandardMaterial({ color: 0x24252c, metalness: 0.5, roughness: 0.42 });
+  const micPath = new THREE.CatmullRomCurve3([[-0.108, 0.035, 0.022], [-0.099, 0.006, 0.058], [-0.08, -0.012, 0.081], [-0.056, -0.018, 0.092]].map((p) => new THREE.Vector3(...p)));
+  piece(head, new THREE.TubeGeometry(micPath, 16, 0.0012, 6), headsetMat, 0, 0, 0, 0);
+  piece(head, new THREE.CapsuleGeometry(0.0036, 0.009, 3, 8).rotateZ(Math.PI / 2), headsetMat, -0.052, -0.019, 0.093, 0);
 
   // Twin tails: thick, rounded sheets that leave the back of the head and fall straight down.
   for (const side of [-1, 1]) {
@@ -749,12 +778,12 @@ function dressTeal(rig, scene) {
       if (i === 3) return new THREE.Vector3(side * 0.16, -0.97, -0.12).normalize();
       return new THREE.Vector3(side * 0.035, -1, -0.015).normalize();
     };
-    const chain = new Chain(head, new THREE.Vector3(side * 0.102, 0.16, -0.078), {
+    const chain = new Chain(head, new THREE.Vector3(side * 0.112, 0.17, -0.095), {
       count: 13, segment: 0.102, rest: restTail, stiffness: (i) => [0, 0.75, 0.6, 0.45, 0.3, 0.2, 0.15][i] || 0.11, pad: 0.035, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
     });
     const flat = new THREE.Vector3(1, 0, 0);
     sims.push({ chain, ribbon: new Ribbon(scene, chain, {
-      material: hair, sideAxis: flat, sides: 14, sub: 3, repeat: 2.6, outline: 0.0026,
+      material: hair, sideAxis: flat, sides: 14, sub: 3, repeat: 2.6, outline: 0.0017, outlineColor: HAIR_LINE_TEAL,
       width: (t) => (t < 0.05 ? lerp(0.012, 0.034, t / 0.05) : t < 0.2 ? lerp(0.034, 0.066, (t - 0.05) / 0.15) : t < 0.8 ? lerp(0.066, 0.058, (t - 0.2) / 0.6) : 0.058 * Math.pow((1 - t) / 0.2, 0.7)),
       thick: (t) => (t < 0.05 ? lerp(0.01, 0.028, t / 0.05) : t < 0.8 ? lerp(0.038, 0.03, t) : 0.03 * Math.pow((1 - t) / 0.2, 0.7) + 0.0005),
       color: (t) => { const s = lerp(0.86, 1.04, Math.min(1, t * 3)); return [s, s, s]; },
@@ -762,19 +791,19 @@ function dressTeal(rig, scene) {
 
     // Long side locks framing the face.
     const restLock = () => new THREE.Vector3(side * 0.02, -0.99, 0.02).normalize();
-    const lock = new Chain(head, new THREE.Vector3(side * 0.106, 0.09, 0.016), {
+    const lock = new Chain(head, new THREE.Vector3(side * 0.112, 0.08, 0.01), {
       count: 7, segment: 0.058, rest: restLock, stiffness: (i) => (i < 3 ? 0.55 : 0.35), pad: 0.012, damping: 0.9, wind: 0.12, gravity: -5,
     });
     sims.push({ chain: lock, ribbon: new Ribbon(scene, lock, {
-      material: hair, sideAxis: new THREE.Vector3(0, 0, 1), sides: 8, sub: 2, repeat: 1.2, outline: 0.0026,
-      width: pointed(0.018, 0.25), thick: pointed(0.008, 0.25),
+      material: hair, sideAxis: new THREE.Vector3(0, 0, 1), sides: 8, sub: 2, repeat: 1.2, outline: 0.0015, outlineColor: HAIR_LINE_TEAL,
+      width: pointed(0.02, 0.25), thick: pointed(0.008, 0.25),
     }) });
   }
   return { sims, skin };
 }
 
 function dressCrimson(rig, scene) {
-  const skin = new THREE.MeshStandardMaterial({ color: 0xfbe6dc, roughness: 0.68, emissive: 0x6e5046, emissiveIntensity: 0.7, envMapIntensity: 0.62 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xffefe8, roughness: 0.7, emissive: 0x8a6c62, emissiveIntensity: 0.95, envMapIntensity: 0.55 });
   const cloth = new THREE.MeshStandardMaterial({ color: 0xd2d5e6, roughness: 0.75, normalMap: TEX.cloth, normalScale: new THREE.Vector2(0.3, 0.3) });
   const crimson = new THREE.MeshStandardMaterial({ color: 0xb3264d, roughness: 0.6 });
   const black = new THREE.MeshStandardMaterial({ color: 0x14141c, roughness: 0.6 });
@@ -823,23 +852,14 @@ function dressCrimson(rig, scene) {
     [0.014, 0.038, 0.092, 0.032], [-0.014, -0.038, 0.09, 0.032],
     [0.03, 0.074, 0.074, 0.03], [-0.03, -0.074, 0.076, 0.03],
   ]);
-  for (let i = 0; i < 11; i++) {
-    const a = Math.PI + (i - 5) * 0.31;
-    const sx = Math.sin(a), cz = Math.cos(a);
-    addLock(static_, [
-      [sx * 0.07, 0.17, cz * 0.08],
-      [sx * 0.12, 0.1, cz * 0.128],
-      [sx * 0.112, 0.01, cz * 0.12],
-      [sx * 0.08, -0.03, cz * 0.09],
-    ], pointed(0.052, 0.4), pointed(0.016, 0.4), new THREE.Vector3(cz, 0, -sx), 12, 8, 0.86);
-  }
-  const hairMesh = piece(head, static_.build(), hair, 0, 0, 0, 0.0028);
+  addBackHair(static_, -0.035, 0);
+  const hairMesh = piece(head, static_.build(), hair, 0, 0, 0, 0.0017, 0x6d1836);
   hairMesh.frustumCulled = false;
 
   // Twin ringlets: solid spirals that swing as a piece from each side of the head.
   for (const side of [-1, 1]) {
     const group = new THREE.Group();
-    group.position.set(side * 0.112, 0.125, -0.022);
+    group.position.set(side * 0.122, 0.125, -0.03);
     const helix = [];
     const turns = 3.2, length = 0.28;
     for (let i = 0; i <= 44; i++) {
@@ -852,7 +872,7 @@ function dressCrimson(rig, scene) {
     // Both ends taper shut; the start also tucks into the side of the head.
     const coil = (t) => lerp(0.034, 0.012, t) * Math.min(1, 0.1 + t * 22) * (t > 0.97 ? (1 - t) / 0.03 + 0.03 : 1);
     addLock(spiral, helix, coil, coil, new THREE.Vector3(0.2, 1, 0.1).normalize(), 90, 10, 0.92);
-    piece(group, spiral.build(), hair, 0, 0, 0, 0.0028);
+    piece(group, spiral.build(), hair, 0, 0, 0, 0.0017, 0x6d1836);
     head.add(group);
     const chain = new Chain(head, group.position, {
       count: 3, segment: 0.1, rest: () => new THREE.Vector3(side * 0.08, -0.99, -0.02), stiffness: () => 0.3, pad: 0.03, damping: 0.9, gravity: -5, wind: 0.15,
