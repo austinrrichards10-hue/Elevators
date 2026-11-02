@@ -64,37 +64,56 @@ const Sfx = {
     }
   },
 
-  /* ---------- Character room music ---------- */
-  // A slow, wintry music-box loop: warm pad chords, a plucked arpeggio with echo,
-  // and a sparse bell melody. Notes are scheduled a little ahead on the audio clock.
-  roomTrack: {
-    bpm: 72,
-    // Am  Fmaj7  C  G/B  — two bars each.
-    chords: [[57, 60, 64, 69], [53, 57, 60, 64], [48, 55, 60, 64], [47, 55, 59, 62]],
-    // Melody per two-bar chord: [beat, midi note, beats long]; beats count 0-7.
-    melody: [
-      [[0, 76, 2], [2, 74, 1], [3, 72, 1], [4, 71, 3]],
-      [[0, 72, 2], [2, 69, 2], [4, 72, 1], [5, 74, 2.5]],
-      [[0, 76, 1.5], [1.5, 79, 0.5], [2, 76, 2], [4, 72, 3]],
-      [[0, 71, 2], [2, 74, 1], [3, 72, 1], [4, 71, 1], [5, 67, 2.5]],
-    ],
+  /* ---------- Music ---------- */
+  // Looping tracks built from synth voices. Notes are scheduled a little ahead on the audio
+  // clock. Each track sets how much of the outdoor ambience stays audible under it.
+  tracks: {
+    // Character room: a slow, wintry music box. Am  Fmaj7  C  G/B, two bars each.
+    room: {
+      bpm: 72, level: 0.55, ambient: 0.15, style: 'musicbox',
+      chords: [[57, 60, 64, 69], [53, 57, 60, 64], [48, 55, 60, 64], [47, 55, 59, 62]],
+      // Melody per two-bar chord: [beat, midi note, beats long]; beats count 0-7.
+      melody: [
+        [[0, 76, 2], [2, 74, 1], [3, 72, 1], [4, 71, 3]],
+        [[0, 72, 2], [2, 69, 2], [4, 72, 1], [5, 74, 2.5]],
+        [[0, 76, 1.5], [1.5, 79, 0.5], [2, 76, 2], [4, 72, 3]],
+        [[0, 71, 2], [2, 74, 1], [3, 72, 1], [4, 71, 1], [5, 67, 2.5]],
+      ],
+    },
+    // Bedroom: cozy lo-fi. Fmaj7  Em7  Dm7  Cmaj7, with soft keys, bass, kick and crackle.
+    // No wind indoors.
+    bedroom: {
+      bpm: 76, level: 0.6, ambient: 0, style: 'lofi',
+      chords: [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]],
+      melody: [
+        [[0.5, 72, 1], [2, 76, 1.5], [4, 74, 0.5], [4.5, 72, 2.5]],
+        [[1, 71, 1], [2, 74, 1], [3, 76, 2], [6, 74, 1.5]],
+        [[0.5, 72, 1.5], [2.5, 69, 1], [4, 72, 1], [5, 77, 2.5]],
+        [[1, 76, 1], [2, 74, 0.5], [2.5, 72, 1.5], [4.5, 71, 0.5], [5, 67, 2.5]],
+      ],
+    },
   },
 
-  setRoomMusic(on) {
-    if (!this.ctx) return;
+  // Switches to a track by name, or to silence with null, crossfading the buses.
+  playMusic(name) {
+    if (!this.ctx || name === this.trackName) return;
+    this.trackName = name;
+    const track = name ? this.tracks[name] : null;
     const t = this.ctx.currentTime;
-    for (const [bus, level] of [[this.music, on ? 0.55 : 0], [this.ambient, on ? 0.15 : 1]]) {
+    for (const [bus, level] of [[this.music, track ? track.level : 0], [this.ambient, track ? track.ambient : 1]]) {
       bus.gain.cancelScheduledValues(t);
       bus.gain.setValueAtTime(bus.gain.value, t);
-      bus.gain.linearRampToValueAtTime(level, t + (on ? 1.5 : 1));
+      bus.gain.linearRampToValueAtTime(level, t + (track ? 1.5 : 1));
     }
-    if (on && !this.musicTimer) {
+    if (track) {
       this.buildMusicFx();
+      this.echo.delayTime.setValueAtTime(60 / track.bpm * 0.75, t);
+      this.track = track;
       this.musicBeat = 0;
-      this.musicStart = t + 0.1;
-      this.musicTimer = setInterval(() => this.scheduleMusic(), 200);
+      this.musicStart = t + 0.15;
+      if (!this.musicTimer) this.musicTimer = setInterval(() => this.scheduleMusic(), 200);
       this.scheduleMusic();
-    } else if (!on && this.musicTimer) {
+    } else if (this.musicTimer) {
       clearInterval(this.musicTimer);
       this.musicTimer = null;
     }
@@ -104,7 +123,6 @@ const Sfx = {
     if (this.echo) return;
     // Feedback delay for the plucks and bells, softened so repeats sit behind the pad.
     this.echo = this.ctx.createDelay(2);
-    this.echo.delayTime.value = 60 / this.roomTrack.bpm * 0.75;
     const feedback = this.ctx.createGain();
     feedback.gain.value = 0.38;
     const tone = this.ctx.createBiquadFilter();
@@ -115,7 +133,7 @@ const Sfx = {
   },
 
   scheduleMusic() {
-    const track = this.roomTrack;
+    const track = this.track;
     const beatLen = 60 / track.bpm;
     const horizon = this.ctx.currentTime + 1.5;
     while (this.musicStart + this.musicBeat * beatLen < horizon) {
@@ -124,26 +142,87 @@ const Sfx = {
       const bar2 = beat % 8;
       const chordIndex = Math.floor(beat / 8) % track.chords.length;
       const chord = track.chords[chordIndex];
-      if (bar2 === 0) {
-        this.pad(chord, t, beatLen * 8);
-        this.pluck(chord[0] - 12, t, beatLen * 4, 0.16, 'triangle');
-        this.pluck(chord[0] - 12, t + beatLen * 4, beatLen * 4, 0.12, 'triangle');
-        for (const [at, note, len] of track.melody[chordIndex]) this.bell(note, t + at * beatLen, len * beatLen);
-      }
-      // Eighth-note arpeggio, climbing then falling across the chord.
-      const order = [0, 1, 2, 3, 2, 1];
-      for (let half = 0; half < 2; half++) {
-        const step = (bar2 * 2 + half) % order.length;
-        const note = chord[order[step]] + 12;
-        this.pluck(note, t + half * beatLen / 2, beatLen * 1.4, 0.05 + (half ? 0 : 0.015), 'sine', true);
-      }
+      if (track.style === 'lofi') this.lofiBeat(track, chord, chordIndex, bar2, t, beatLen);
+      else this.musicBoxBeat(track, chord, chordIndex, bar2, t, beatLen);
       this.musicBeat++;
     }
   },
 
+  musicBoxBeat(track, chord, chordIndex, bar2, t, beatLen) {
+    if (bar2 === 0) {
+      this.pad(chord, t, beatLen * 8);
+      this.pluck(chord[0] - 12, t, beatLen * 4, 0.16, 'triangle');
+      this.pluck(chord[0] - 12, t + beatLen * 4, beatLen * 4, 0.12, 'triangle');
+      for (const [at, note, len] of track.melody[chordIndex]) this.bell(note, t + at * beatLen, len * beatLen);
+    }
+    // Eighth-note arpeggio, climbing then falling across the chord.
+    const order = [0, 1, 2, 3, 2, 1];
+    for (let half = 0; half < 2; half++) {
+      const step = (bar2 * 2 + half) % order.length;
+      const note = chord[order[step]] + 12;
+      this.pluck(note, t + half * beatLen / 2, beatLen * 1.4, 0.05 + (half ? 0 : 0.015), 'sine', true);
+    }
+  },
+
+  lofiBeat(track, chord, chordIndex, bar2, t, beatLen) {
+    // Lazy swing: off-beat eighths land late.
+    const swing = beatLen * 0.58;
+    if (bar2 === 0) {
+      this.pad(chord, t, beatLen * 8, 0.022);
+      for (const [at, note, len] of track.melody[chordIndex]) this.bell(note, t + at * beatLen + (at % 1 ? swing - beatLen / 2 : 0), len * beatLen, 0.5);
+    }
+    // Electric-piano chord stabs, pushed a little ahead of the bar and on the "and" of two.
+    if (bar2 === 0 || bar2 === 4) this.keys(chord, t, beatLen * 1.6);
+    if (bar2 === 1 || bar2 === 5) this.keys(chord.map((n) => n + 12).slice(1), t + swing, beatLen * 0.9, 0.6);
+    // Round bass on the root, with a passing note before each change.
+    if (bar2 === 0 || bar2 === 4) this.pluck(chord[0] - 12, t, beatLen * 1.8, 0.2, 'triangle');
+    if (bar2 === 7) this.pluck(chord[0] - 10, t + swing, beatLen * 0.6, 0.12, 'triangle');
+    // Soft kick on one and three, brushed hats on the off-beats.
+    if (bar2 % 4 === 0) this.kick(t);
+    if (bar2 % 4 === 2) this.kick(t + swing, 0.5);
+    this.hat(t + swing, 0.035);
+    if (bar2 % 2 === 1) this.hat(t, 0.02);
+    // Record crackle.
+    for (let i = 0; i < 3; i++) if (Math.random() < 0.5) this.burst(0.012, 3000 + Math.random() * 3000, 1.2, 0.025 + Math.random() * 0.03, 'bandpass', this.music, t + Math.random() * beatLen);
+  },
+
+  keys(chord, t, len, volume = 1) {
+    // A sine with a quick bright attack and a gentle tremolo reads as a mellow electric piano.
+    for (const note of chord) {
+      for (const [ratio, level] of [[1, 0.032], [2, 0.01]]) {
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = this.midi(note) * ratio;
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(level * volume, t + 0.012);
+        gain.gain.exponentialRampToValueAtTime(level * volume * 0.4, t + 0.25);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
+        osc.connect(gain).connect(this.music);
+        osc.start(t);
+        osc.stop(t + len + 0.05);
+      }
+    }
+  },
+
+  kick(t, volume = 1) {
+    const osc = this.ctx.createOscillator();
+    osc.frequency.setValueAtTime(110, t);
+    osc.frequency.exponentialRampToValueAtTime(42, t + 0.18);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.32 * volume, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    osc.connect(gain).connect(this.music);
+    osc.start(t);
+    osc.stop(t + 0.35);
+  },
+
+  hat(t, volume) { this.burst(0.06, 7500, 1.5, volume, 'highpass', this.music, t); },
+
   midi(n) { return 440 * Math.pow(2, (n - 69) / 12); },
 
-  pad(chord, t, len) {
+  pad(chord, t, len, level = 0.05) {
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(500, t);
@@ -151,8 +230,8 @@ const Sfx = {
     filter.frequency.linearRampToValueAtTime(600, t + len);
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(0.05, t + len * 0.3);
-    gain.gain.setValueAtTime(0.05, t + len * 0.75);
+    gain.gain.linearRampToValueAtTime(level, t + len * 0.3);
+    gain.gain.setValueAtTime(level, t + len * 0.75);
     gain.gain.linearRampToValueAtTime(0.0001, t + len + 0.6);
     filter.connect(gain).connect(this.music);
     for (const note of chord) {
@@ -182,9 +261,9 @@ const Sfx = {
     osc.stop(t + len + 0.05);
   },
 
-  bell(note, t, len) {
+  bell(note, t, len, level = 1) {
     // Two inharmonic partials give a soft glassy bell.
-    for (const [ratio, volume] of [[1, 0.07], [2.76, 0.018]]) {
+    for (const [ratio, volume] of [[1, 0.07 * level], [2.76, 0.018 * level]]) {
       const osc = this.ctx.createOscillator();
       osc.type = 'sine';
       osc.frequency.value = this.midi(note) * ratio;
@@ -199,9 +278,9 @@ const Sfx = {
     }
   },
 
-  burst(duration, freq, q, volume, type = 'lowpass') {
+  burst(duration, freq, q, volume, type = 'lowpass', destination = this.master, at = 0) {
     if (!this.ctx) return;
-    const t = this.ctx.currentTime;
+    const t = Math.max(at, this.ctx.currentTime);
     const src = this.ctx.createBufferSource();
     src.buffer = this.noise;
     src.loop = true;
@@ -212,7 +291,7 @@ const Sfx = {
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(volume, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-    src.connect(filter).connect(gain).connect(this.master);
+    src.connect(filter).connect(gain).connect(destination);
     src.start(t, Math.random());
     src.stop(t + duration);
   },

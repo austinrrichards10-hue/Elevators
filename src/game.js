@@ -119,6 +119,11 @@ function saveLoadout() {
   try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, gun: gunId, map: mapId, muted: Sfx.muted })); } catch { /* storage is optional */ }
 }
 
+// The character room and the bedroom each have a track; the forest has only its wind.
+function updateMusic() {
+  Sfx.playMusic(game.state === 'room' ? 'room' : indoors() ? 'bedroom' : null);
+}
+
 function setMap(id) {
   mapId = id;
   const inside = indoors();
@@ -192,7 +197,12 @@ document.addEventListener('click', (e) => {
   if (!button) return;
   if (button.dataset.skin && button.dataset.skin !== skinId) { setSkin(button.dataset.skin); saveLoadout(); renderLoadout(); }
   if (button.dataset.gun && button.dataset.gun !== gunId) { equipGun(button.dataset.gun); Sfx.swap(); poseAvatar(1 / 60, new THREE.Vector3(), false); }
-  if (button.dataset.map && button.dataset.map !== mapId) setMap(button.dataset.map);
+  if (button.dataset.map && button.dataset.map !== mapId) {
+    setMap(button.dataset.map);
+    // Picking a map is a click, so audio may start here and preview the map's music.
+    Sfx.init();
+    updateMusic();
+  }
 });
 
 /* ---------- Input ---------- */
@@ -260,6 +270,7 @@ $('start').addEventListener('click', () => {
   game.state = 'playing';
   player.yaw = player.bodyYaw = Math.PI;
   lockPointer();
+  updateMusic();
   if (indoors()) {
     say('Home. The snow can stay outside tonight.', 3.6);
     return;
@@ -1552,7 +1563,7 @@ function openRoom() {
   roomSet.visible = true;
   world.setWeather(false);
   Sfx.init();
-  Sfx.setRoomMusic(true);
+  updateMusic();
   roomReturn.copy(player.pos);
   player.pos.set(0, ROOM_Y, 0);
   player.bodyYaw = 0;
@@ -1574,7 +1585,7 @@ function closeRoom() {
   $('title').classList.remove('hidden');
   roomSet.visible = false;
   world.setWeather(!indoors());
-  Sfx.setRoomMusic(false);
+  updateMusic();
   avatar.holder.visible = true;
   player.pos.copy(roomReturn);
   player.reload = null;

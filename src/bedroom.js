@@ -1,12 +1,15 @@
 // The Pink Bedroom map: a quiet room with no monsters and no weapons.
 // "Pink Bedroom (MiSide)" by zHairezt (CC-BY-4.0). See the README for the full credit.
 const BEDROOM_Y = 800;
+// The model is stored at life size; the room is drawn a little roomier than that.
+const BEDROOM_SCALE = 1.25;
 
 function buildBedroom(scene) {
   const file = readGlb(window.BEDROOM_GLB);
   const { json } = file;
   const group = new THREE.Group();
   group.position.y = BEDROOM_Y;
+  group.scale.setScalar(BEDROOM_SCALE);
   group.visible = false;
 
   let floorBox = null;
@@ -41,15 +44,16 @@ function buildBedroom(scene) {
 
   // Walls are the edges of the floor; furniture stands on it as boxes. Tiny things on the
   // floor (shoes, books) are stepped past rather than blocking her.
-  const wall = { minX: floorBox.min.x, maxX: floorBox.max.x, minZ: floorBox.min.z, maxZ: floorBox.max.z };
+  const k = BEDROOM_SCALE;
+  const wall = { minX: floorBox.min.x * k, maxX: floorBox.max.x * k, minZ: floorBox.min.z * k, maxZ: floorBox.max.z * k };
   const boxes = json.extras.colliders
-    .filter(([x0, z0, x1, z1, top]) => top > 0.22 && (x1 - x0) * (z1 - z0) > 0.02)
-    .map(([x0, z0, x1, z1]) => ({ x0, z0, x1, z1 }));
+    .filter(([x0, z0, x1, z1, top]) => top * k > 0.22 && (x1 - x0) * (z1 - z0) * k * k > 0.02)
+    .map(([x0, z0, x1, z1]) => ({ x0: x0 * k, z0: z0 * k, x1: x1 * k, z1: z1 * k }));
 
   return {
     group,
     floorY: BEDROOM_Y,
-    spawn: new THREE.Vector3(-0.75, BEDROOM_Y, 1.15),
+    spawn: new THREE.Vector3(-0.75 * k, BEDROOM_Y, 1.15 * k),
     setActive(active) { group.visible = active; },
     pushOut(pos, radius) {
       for (const b of boxes) {
@@ -76,7 +80,7 @@ function buildBedroom(scene) {
     clampCamera(pos) {
       pos.x = clamp(pos.x, wall.minX + 0.12, wall.maxX - 0.12);
       pos.z = clamp(pos.z, wall.minZ + 0.12, wall.maxZ - 0.12);
-      pos.y = clamp(pos.y, BEDROOM_Y + 0.2, BEDROOM_Y + 2.55);
+      pos.y = clamp(pos.y, BEDROOM_Y + 0.2, BEDROOM_Y + 2.55 * k);
     },
   };
 }
