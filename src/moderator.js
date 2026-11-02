@@ -1,16 +1,10 @@
-// Moderator menu: test switches, teleports and story shortcuts. Open it with ` or F2 from
-// the title screen, in game or while paused. The switches live in `mod` (game.js).
+// Moderator menu: test switches and teleports. Open it with ` or F2 from the title
+// screen, in game or while paused. The switches live in `mod` (game.js).
 const MOD_SWITCHES = {
-  Enemies: [
-    ['noEnemies', 'No enemy spawns', 'Also clears the ones already out'],
-    ['freeze', 'Freeze enemies', 'They stop moving and attacking'],
-    ['oneHit', 'One-hit kills', ''],
-  ],
   Player: [
-    ['god', 'God mode', 'Take no damage'],
     ['fly', 'Fly', 'Space up, C down, Shift for speed'],
     ['noclip', 'Walk through trees', 'Ignore tree and rock collisions'],
-    ['infiniteAmmo', 'Infinite ammo', ''],
+    ['instantDraw', 'Instant draw', 'The bow is fully drawn straight away'],
     ['infiniteStamina', 'Infinite stamina', ''],
   ],
   Display: [
@@ -18,49 +12,27 @@ const MOD_SWITCHES = {
     ['showInfo', 'Show position and FPS', ''],
   ],
 };
-const MOD_SPEEDS = [1, 2, 3, 5];
+const MOD_SPEEDS = [1, 2, 3, 5, 10];
 const MOD_TIMES = [0.25, 0.5, 1];
 const MOD_TELEPORTS = {
   Start: () => LANDMARKS.start,
-  'Wardfire 1': () => ({ x: LANDMARKS.wards[0].x + 4, z: LANDMARKS.wards[0].z }),
-  'Wardfire 2': () => ({ x: LANDMARKS.wards[1].x + 4, z: LANDMARKS.wards[1].z }),
-  'Wardfire 3': () => ({ x: LANDMARKS.wards[2].x + 4, z: LANDMARKS.wards[2].z }),
-  Altar: () => ({ x: world.altar.x, z: world.altar.z + 12 }),
+  Centre: () => ({ x: 0, z: 0 }),
+  Altar: () => ({ x: LANDMARKS.altar.x, z: LANDMARKS.altar.z + 12 }),
+  'East edge': () => ({ x: WORLD_RADIUS - 30, z: 0 }),
+  'West edge': () => ({ x: -(WORLD_RADIUS - 30), z: 0 }),
 };
 const MOD_ACTIONS = {
-  heal: ['Heal and refill', () => {
-    player.hp = 100;
-    player.stamina = 100;
-    for (const id of GUN_ORDER) player.ammo[id] = GUNS[id].mag;
-  }],
-  clear: ['Clear enemies', () => clearGhouls()],
-  ghoul: ['Spawn ghoul', () => spawnInFront(false)],
-  runner: ['Spawn runner', () => spawnInFront(true)],
-  ward: ['Light next wardfire', () => {
-    const ward = game.stage < 3 && objectiveTarget();
-    if (ward) lightWard(ward);
-  }],
-  allWards: ['Light all wardfires', () => {
-    for (const ward of world.wards) if (!ward.lit) lightWard(ward);
-  }],
+  stamina: ['Refill stamina', () => { player.stamina = 100; }],
+  arrows: ['Clear arrows', () => clearArrows()],
 };
 
 let modReturn = null;
 
-function clearGhouls() {
-  for (const enemy of game.enemies) {
-    if (!enemy.isBoss && !enemy.dead) { enemy.dead = true; enemy.deadT = 0; }
-  }
-}
-
-function spawnInFront(runner) {
-  const d = 9;
-  spawnGhoul(player.pos.x + Math.sin(player.yaw) * d, player.pos.z + Math.cos(player.yaw) * d, runner);
-}
-
+// Builds the tiles at the destination straight away, so she doesn't land in empty space.
 function teleport(spot) {
   player.pos.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
   player.dodge = null;
+  world.stream(player.pos, Infinity);
   avatar.reset();
 }
 
@@ -75,12 +47,10 @@ function renderMod() {
       <h2>Moderator</h2>
     </header>
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>
-    ${section('Enemies', MOD_SWITCHES.Enemies.map(toggle).join('') + modButtons(['clear', 'ghoul', 'runner']))}
-    ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['heal']))}
+    ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['stamina', 'arrows']))}
     ${section('Move speed', chips('speed', MOD_SPEEDS, mod.speed, (v) => `${v}×`))}
     ${section('Game speed', chips('time', MOD_TIMES, mod.timeScale, (v) => `${v}×`))}
     ${section('Teleport', `<div class="chips">${Object.keys(MOD_TELEPORTS).map((name) => `<button data-teleport="${name}">${name}</button>`).join('')}</div>`)}
-    ${section('Story', modButtons(['ward', 'allWards']))}
     ${section('Display', MOD_SWITCHES.Display.map(toggle).join(''))}
     <p class="hint"><b>\`</b> or <b>F2</b> opens and closes this menu</p>`;
 }
@@ -96,7 +66,7 @@ function applyMod() {
 }
 
 function openMod() {
-  if (game.state === 'room' || game.state === 'ended') return;
+  if (game.state === 'room') return;
   modReturn = game.state;
   if (game.state === 'playing') setPaused(true);
   $('pause').classList.add('hidden');
@@ -119,7 +89,6 @@ $('mod').addEventListener('change', (e) => {
   const key = e.target.dataset.switch;
   if (!key) return;
   mod[key] = e.target.checked;
-  if (key === 'noEnemies' && mod.noEnemies) clearGhouls();
   applyMod();
 });
 
@@ -141,14 +110,13 @@ addEventListener('keydown', (e) => {
 $('open-mod').addEventListener('click', openMod);
 $('pause-mod').addEventListener('click', openMod);
 
-// Position, frame rate and enemy count, for checking spots and performance.
+// Position, frame rate and arrow count, for checking spots and performance.
 let infoFrames = 0;
 (function countFrames() { infoFrames++; requestAnimationFrame(countFrames); }());
 setInterval(() => {
   if (!mod.showInfo) { infoFrames = 0; return; }
   const p = player.pos;
-  const alive = game.enemies.filter((e) => !e.dead).length;
-  $('mod-info').textContent = `x ${p.x.toFixed(1)}  y ${p.y.toFixed(1)}  z ${p.z.toFixed(1)}  ·  ${infoFrames * 2} fps  ·  ${alive} enemies  ·  stage ${game.stage}`;
+  $('mod-info').textContent = `x ${p.x.toFixed(1)}  y ${p.y.toFixed(1)}  z ${p.z.toFixed(1)}  ·  ${infoFrames * 2} fps  ·  ${arrows.length} arrows`;
   infoFrames = 0;
 }, 500);
 

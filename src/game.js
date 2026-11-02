@@ -1,4 +1,4 @@
-// Game loop, player, weapons, enemies, objectives and HUD.
+// Game loop, player, camera, bow and HUD.
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const smooth = (t) => { const c = clamp(t, 0, 1); return c * c * (3 - 2 * c); };
@@ -10,18 +10,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.NoToneMapping;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 1100);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 7000);
 const world = buildWorld(renderer, scene);
 const pipeline = createPipeline(renderer, scene, camera);
 addEventListener('resize', pipeline.resize);
 pipeline.resize();
-
-const muzzleLight = new THREE.PointLight(0xffc48a, 0, 14, 1.8);
-scene.add(muzzleLight);
-const muzzleFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: new THREE.Color(5, 3, 1.6), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
-muzzleFlash.scale.setScalar(0.34);
-muzzleFlash.visible = false;
-scene.add(muzzleFlash);
 
 // Footprints left in the snow.
 const FOOTPRINTS = 220;
@@ -52,13 +45,9 @@ function leaveFootprint() {
   burst(new THREE.Vector3(x, footprintDummy.position.y + 0.05, z), 0xf2f5ff, 3, 0.9);
 }
 
+
 const game = {
   state: 'title',
-  stage: 0, // 0-2 wards lit, 3 go to altar, 4 boss fight, 5 claim blade
-  enemies: [],
-  shards: [],
-  boss: null,
-  spawnTimer: 4,
   time: 0,
 };
 
@@ -67,13 +56,13 @@ const player = {
   yaw: Math.PI,
   pitch: 0.02,
   bodyYaw: Math.PI,
-  hp: 100,
   stamina: 100,
-  ammo: {},
-  fireCd: 0,
+  drawing: false,
+  draw: 0,
+  releaseCd: 0,
   aimT: 0,
   aimBlend: 0,
-  sinceHurt: 99,
+  lookBlend: 0,
   walkPhase: 0,
   stride: 0,
   sprinting: false,
@@ -82,16 +71,10 @@ const player = {
   strafeLean: 0,
   stepDist: 0,
   recoil: 0,
-  kick: 0,
-  bloom: 0,
   shake: 0,
-  reload: null,
-  cycle: null,
   dodge: null,
   tuck: 0,
-  equip: 0,
 };
-for (const id of GUN_ORDER) player.ammo[id] = GUNS[id].mag;
 
 /* ---------- Loadout ---------- */
 function loadSaved() {
@@ -101,18 +84,17 @@ const saved = loadSaved();
 // Moderator options, toggled from the moderator menu (moderator.js). They're saved with
 // the loadout so a test setup survives a reload.
 const MOD_DEFAULTS = {
-  noEnemies: false, freeze: false, oneHit: false,
-  god: false, fly: false, noclip: false, infiniteAmmo: false, infiniteStamina: false,
+  fly: false, noclip: false, instantDraw: false, infiniteStamina: false,
   hideHud: false, showInfo: false, speed: 1, timeScale: 1,
 };
-const mod = { ...MOD_DEFAULTS, ...(saved.mod || {}) };
+const mod = { ...MOD_DEFAULTS };
+for (const key in MOD_DEFAULTS) if (saved.mod && key in saved.mod) mod[key] = saved.mod[key];
 let skinId = SKINS[saved.skin] ? saved.skin : 'teal';
-let gunId = GUNS[saved.gun] ? saved.gun : 'pistol';
 let avatar = null;
-let gunModel = null;
+const bowModel = buildBowModel();
 
 function saveLoadout() {
-  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, gun: gunId, muted: Sfx.muted, mod: mod })); } catch { /* storage is optional */ }
+  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, muted: Sfx.muted, mod: mod })); } catch { /* storage is optional */ }
 }
 
 // The character room has its own track; the forest has only its wind.
@@ -135,48 +117,33 @@ function toggleMute() {
 Sfx.muted = !!saved.muted;
 renderMute();
 
-function equipGun(id) {
-  gunId = id;
-  player.reload = null;
-  player.cycle = null;
-  player.equip = 1;
-  player.fireCd = Math.max(player.fireCd, 0.25);
-  avatar.holder.clear();
-  gunModel = buildGunModel(id);
-  avatar.holder.add(gunModel.group);
-  saveLoadout();
-  renderLoadout();
-}
-
 function setSkin(id) {
   skinId = id;
   if (avatar) avatar.dispose();
   avatar = createAvatar(scene, id);
-  equipGun(gunId);
+  avatar.holder.add(bowModel.group);
   poseAvatar(1 / 60, new THREE.Vector3(), false);
   avatar.reset();
 }
 
 function renderLoadout() {
-  const option = (kind, id, entry, selected) => `<button class="option" data-${kind}="${id}" aria-pressed="${selected}">${entry.name}<span>${entry.note}</span></button>`;
-  const html = `<div><h3>Skin</h3>${SKIN_ORDER.map((id) => option('skin', id, SKINS[id], id === skinId)).join('')}</div>`
-    + `<div><h3>Weapon</h3>${GUN_ORDER.map((id) => option('gun', id, GUNS[id], id === gunId)).join('')}</div>`;
+  const option = (id, entry) => `<button class="option" data-skin="${id}" aria-pressed="${id === skinId}">${entry.name}<span>${entry.note}</span></button>`;
+  const html = `<div><h3>Skin</h3>${SKIN_ORDER.map((id) => option(id, SKINS[id])).join('')}</div>`;
   document.querySelectorAll('.loadout').forEach((el) => { el.innerHTML = html; });
 }
 
 document.addEventListener('click', (e) => {
   if (e.target.closest('.mute-toggle')) { toggleMute(); return; }
   const button = e.target.closest('.option');
-  if (!button) return;
-  if (button.dataset.skin && button.dataset.skin !== skinId) { setSkin(button.dataset.skin); saveLoadout(); renderLoadout(); }
-  if (button.dataset.gun && button.dataset.gun !== gunId) { equipGun(button.dataset.gun); Sfx.swap(); poseAvatar(1 / 60, new THREE.Vector3(), false); }
+  if (button && button.dataset.skin && button.dataset.skin !== skinId) { setSkin(button.dataset.skin); saveLoadout(); renderLoadout(); }
 });
 
 /* ---------- Input ---------- */
 const keys = {};
-let firing = false;
-let triggerBuffered = false;
 let aiming = false;
+// Ctrl switches between free look, where the mouse swings the camera around her and she
+// faces where she walks, and aim lock, where she always faces the crosshair.
+let aimLock = false;
 let pointerWasLocked = false;
 
 addEventListener('keydown', (e) => {
@@ -186,24 +153,22 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') toggleMute();
   if (e.code === 'Backquote' || e.code === 'F2') { e.preventDefault(); toggleMod(); return; }
   if (game.state !== 'playing') return;
+  if (e.code === 'ControlLeft' || e.code === 'ControlRight') { e.preventDefault(); aimLock = !aimLock; }
   // Flying uses Space to climb, so there is no dodge in the air.
   if (e.code === 'Space' && !mod.fly) startDodge();
   if (e.code === 'KeyP') setPaused(true);
-  if (e.code === 'KeyR') startReload();
-  const slot = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
-  if (slot >= 0 && GUN_ORDER[slot] !== gunId) { equipGun(GUN_ORDER[slot]); Sfx.swap(); }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; firing = false; aiming = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; aiming = false; cancelDraw(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousedown', (e) => {
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
-  if (e.button === 0) { firing = true; triggerBuffered = true; tryFire(); }
+  if (e.button === 0) startDraw();
   if (e.button === 2) aiming = true;
 });
 addEventListener('mouseup', (e) => {
-  if (e.button === 0) firing = false;
+  if (e.button === 0) releaseArrow();
   if (e.button === 2) aiming = false;
 });
 addEventListener('mousemove', (e) => {
@@ -225,8 +190,8 @@ function lockPointer() {
 function setPaused(paused) {
   game.state = paused ? 'paused' : 'playing';
   $('pause').classList.toggle('hidden', !paused);
-  firing = false;
   aiming = false;
+  cancelDraw();
   if (paused) { pointerWasLocked = false; document.exitPointerLock(); } else lockPointer();
 }
 
@@ -239,10 +204,8 @@ $('start').addEventListener('click', () => {
   lockPointer();
   updateMusic();
   say('No birds. No wind in the branches. Only the snow.', 3.6);
-  say('Three wardfires still stand. Light them, and the seal will break.', 4.2);
 });
 $('resume').addEventListener('click', () => setPaused(false));
-$('restart').addEventListener('click', () => location.reload());
 
 /* ---------- Subtitles ---------- */
 const subtitles = [];
@@ -303,81 +266,126 @@ function updateSparks(dt) {
   sparkGeo.attributes.color.needsUpdate = true;
 }
 
-const TRACERS = 12;
-const tracerGeo = new THREE.BufferGeometry();
-tracerGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRACERS * 6), 3));
-const tracer = new THREE.LineSegments(tracerGeo, new THREE.LineBasicMaterial({ color: 0xffe2b0, fog: false }));
-tracer.frustumCulled = false;
-tracer.visible = false;
-scene.add(tracer);
-let tracerT = 0;
-let tracerCount = 0;
+/* ---------- Bow ---------- */
+// Arrows in flight, and the ones stuck in the snow and the trees. The oldest stuck arrows
+// are cleared once there are too many.
+const arrows = [];
+const MAX_ARROWS = 40;
+const viewDir = new THREE.Vector3();
+const aimPoint = new THREE.Vector3();
+const nockWorld = new THREE.Vector3();
+const FORWARD = new THREE.Vector3(0, 0, 1);
 
-function addTracer(from, to) {
-  if (tracerT <= 0) tracerCount = 0;
-  if (tracerCount >= TRACERS) return;
-  tracerGeo.attributes.position.setXYZ(tracerCount * 2, from.x, from.y, from.z);
-  tracerGeo.attributes.position.setXYZ(tracerCount * 2 + 1, to.x, to.y, to.z);
-  tracerGeo.attributes.position.needsUpdate = true;
-  tracerCount++;
-  tracerGeo.setDrawRange(0, tracerCount * 2);
-  tracer.visible = true;
-  tracerT = 0.045;
+// What a point is buried in: 'ground', 'wood' (a trunk, rock or log) or nothing.
+function solidAt(x, y, z) {
+  const g = groundHeight(x, z);
+  if (y < g) return 'ground';
+  for (const c of nearbyColliders(x, z)) {
+    if (y < g + c.h && Math.hypot(x - c.x, z - c.z) < c.r) return 'wood';
+  }
+  return null;
 }
 
-const slamRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.86, 1, 28).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0xff3355, fog: false, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
-);
-slamRing.visible = false;
-scene.add(slamRing);
-
-// Spent magazines that fall away during a reload.
-const droppedMags = [];
-function dropMag(mesh) {
-  const copy = mesh.clone();
-  mesh.getWorldPosition(copy.position);
-  mesh.getWorldQuaternion(copy.quaternion);
-  scene.add(copy);
-  droppedMags.push({ mesh: copy, vel: new THREE.Vector3((Math.random() - 0.5) * 0.4, -0.3, (Math.random() - 0.5) * 0.4), life: 5 });
+// The point under the crosshair: the first slope or trunk along the view, or far away.
+function findAimPoint(out) {
+  camera.updateMatrixWorld();
+  camera.getWorldDirection(viewDir);
+  const origin = camera.position;
+  const start = origin.distanceTo(player.pos) * 0.6;
+  for (let t = start; t < 300; t += 0.5) {
+    if (solidAt(origin.x + viewDir.x * t, origin.y + viewDir.y * t, origin.z + viewDir.z * t)) return out.copy(origin).addScaledVector(viewDir, t);
+  }
+  return out.copy(origin).addScaledVector(viewDir, 300);
 }
 
-function updateDroppedMags(dt) {
-  for (const mag of [...droppedMags]) {
-    mag.life -= dt;
-    mag.vel.y -= 9 * dt;
-    mag.mesh.position.addScaledVector(mag.vel, dt);
-    const ground = (game.state === 'room' ? ROOM_Y : groundHeight(mag.mesh.position.x, mag.mesh.position.z)) + 0.02;
-    if (mag.mesh.position.y < ground) {
-      mag.mesh.position.y = ground;
-      if (mag.vel.y < -1) burst(mag.mesh.position, 0xf2f5ff, 2, 0.6);
-      mag.vel.set(0, 0, 0);
-    } else {
-      mag.mesh.rotation.x += dt * 3;
-    }
-    if (mag.life <= 0) {
-      scene.remove(mag.mesh);
-      droppedMags.splice(droppedMags.indexOf(mag), 1);
-    }
+function startDraw() {
+  if (player.drawing || player.dodge || player.releaseCd > 0) return;
+  player.drawing = true;
+  player.draw = 0;
+  Sfx.bowDraw();
+}
+
+function cancelDraw() {
+  player.drawing = false;
+  player.draw = 0;
+}
+
+function releaseArrow() {
+  if (!player.drawing) return;
+  const power = player.draw;
+  cancelDraw();
+  if (power < BOW.minDraw || game.state !== 'playing') return;
+
+  findAimPoint(aimPoint);
+  avatar.root.updateMatrixWorld(true);
+  bowModel.arrow.getWorldPosition(nockWorld);
+  const tip = nockWorld.clone().addScaledVector(viewDir, BOW.arrowLength);
+  const dir = aimPoint.clone().sub(tip).normalize();
+  // A half-drawn arrow wobbles off line.
+  const wobble = (1 - power) * 0.025;
+  dir.x += (Math.random() - 0.5) * wobble;
+  dir.y += (Math.random() - 0.5) * wobble;
+  dir.z += (Math.random() - 0.5) * wobble;
+  dir.normalize();
+
+  const mesh = buildArrowMesh();
+  scene.add(mesh);
+  const arrow = { mesh, tip, vel: dir.multiplyScalar(lerp(BOW.minSpeed, BOW.maxSpeed, power)), flying: true, life: 0 };
+  arrows.push(arrow);
+  placeArrow(arrow);
+  player.releaseCd = 0.3;
+  player.aimT = 1.2;
+  player.recoil = Math.min(player.recoil + 0.02 * power, 0.05);
+  Sfx.bowRelease(power);
+
+  // Stuck arrows go first; flying ones only when there are no stuck ones left.
+  while (arrows.length > MAX_ARROWS) {
+    const old = arrows.find((a) => !a.flying) || arrows[0];
+    removeArrow(old);
   }
 }
 
-/* ---------- Combat ---------- */
-// How far out of the sprint carry the gun must be before it can fire.
-const GUN_READY_BLEND = 0.3;
-const muzzlePos = new THREE.Vector3();
-const aimDir = new THREE.Vector3();
-const shotDir = new THREE.Vector3();
-const shotCenter = new THREE.Vector3();
-
-function startReload() {
-  const def = GUNS[gunId];
-  if (player.reload || player.dodge || player.ammo[gunId] >= def.mag) return;
-  player.cycle = null;
-  player.reload = { t: 0, dur: def.reload, style: def.style, fired: {}, stop: false };
-  if (def.style === 'shell') player.reload.t = -0.3;
+function placeArrow(arrow) {
+  viewDir.copy(arrow.vel).normalize();
+  arrow.mesh.quaternion.setFromUnitVectors(FORWARD, viewDir);
+  arrow.mesh.position.copy(arrow.tip).addScaledVector(viewDir, -BOW.arrowLength);
 }
 
+function removeArrow(arrow) {
+  scene.remove(arrow.mesh);
+  arrows.splice(arrows.indexOf(arrow), 1);
+}
+
+function clearArrows() {
+  for (const arrow of [...arrows]) removeArrow(arrow);
+}
+
+function updateArrows(dt) {
+  for (const arrow of [...arrows]) {
+    if (!arrow.flying) continue;
+    arrow.life += dt;
+    // Small steps so a fast arrow can't skip through a thin trunk.
+    const steps = Math.ceil((arrow.vel.length() * dt) / 0.25);
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      arrow.vel.y -= BOW.gravity * h;
+      arrow.tip.addScaledVector(arrow.vel, h);
+      const hit = solidAt(arrow.tip.x, arrow.tip.y, arrow.tip.z);
+      if (hit) {
+        // Sink the head in a little and leave the shaft standing.
+        arrow.flying = false;
+        arrow.tip.addScaledVector(arrow.vel.clone().normalize(), 0.1);
+        burst(arrow.tip, hit === 'ground' ? 0xf2f5ff : 0x8a6a4a, 6, 1.8);
+        Sfx.arrowHit();
+        break;
+      }
+    }
+    placeArrow(arrow);
+    if (arrow.flying && (arrow.life > 12 || arrow.tip.y < -200)) removeArrow(arrow);
+  }
+}
+
+/* ---------- Player ---------- */
 function moveInput() {
   const forward = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
   const strafe = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
@@ -390,6 +398,7 @@ function moveInput() {
 function startDodge() {
   if (player.dodge || player.stamina < 25) return;
   player.stamina -= 25;
+  cancelDraw();
   const dir = moveInput();
   if (dir.lengthSq() === 0) dir.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
   dir.normalize();
@@ -398,183 +407,40 @@ function startDodge() {
   Sfx.step();
 }
 
-function raySphere(origin, dir, center, radius) {
-  const ox = origin.x - center.x, oy = origin.y - center.y, oz = origin.z - center.z;
-  const b = ox * dir.x + oy * dir.y + oz * dir.z;
-  const c = ox * ox + oy * oy + oz * oz - radius * radius;
-  const disc = b * b - c;
-  if (disc < 0) return Infinity;
-  const t = -b - Math.sqrt(disc);
-  return t > 0 ? t : Infinity;
-}
-
-function hitSpheres(enemy) {
-  if (enemy.isBoss) return [{ y: 3.25, r: 0.55, head: true }, { y: 2.3, r: 0.95 }, { y: 1, r: 0.8 }];
-  return [{ y: 1.62, r: 0.26, head: true }, { y: 1.05, r: 0.42 }, { y: 0.45, r: 0.34 }];
-}
-
-// Traces one bullet or pellet. Returns whether it hit an enemy.
-function traceShot(def, dir) {
-  const origin = camera.position;
-  const minT = origin.distanceTo(player.pos) * 0.6;
-  const hits = [];
-  for (const enemy of game.enemies) {
-    if (enemy.dead) continue;
-    let best = Infinity, head = false;
-    for (const s of hitSpheres(enemy)) {
-      shotCenter.set(enemy.pos.x, enemy.pos.y + s.y, enemy.pos.z);
-      const t = raySphere(origin, dir, shotCenter, s.r);
-      if (t > minT && t < best) { best = t; head = !!s.head; }
-    }
-    if (best < def.range) hits.push({ enemy, t: best, head });
-  }
-  hits.sort((a, b) => a.t - b.t);
-
-  // Trunks and terrain stop bullets too.
-  const limit = def.pierce || !hits.length ? def.range : hits[0].t;
-  let blockT = Infinity;
-  for (let t = minT; t < limit; t += 0.5) {
-    const x = origin.x + dir.x * t, y = origin.y + dir.y * t, z = origin.z + dir.z * t;
-    const g = groundHeight(x, z);
-    if (y < g || (y < g + 3 && nearbyColliders(x, z).some((c) => Math.hypot(x - c.x, z - c.z) < c.r))) { blockT = t; break; }
-  }
-
-  const landed = hits.filter((h) => h.t < blockT);
-  const struck = def.pierce ? landed : landed.slice(0, 1);
-  for (const h of struck) {
-    let damage = h.head ? def.head : def.damage;
-    if (h.enemy.isBoss) damage = def.damage * (h.head ? 2 : 1);
-    if (def.falloff) damage *= clamp(1 - (h.t - 7) / 26, 0.25, 1);
-    damageEnemy(h.enemy, damage);
-    burst(origin.clone().addScaledVector(dir, h.t), 0x8fe8ff, 6, 3.2);
-  }
-  const endT = struck.length && !def.pierce ? struck[0].t : Math.min(blockT, def.range);
-  const end = origin.clone().addScaledVector(dir, endT);
-  if (blockT < Infinity && !(struck.length && !def.pierce)) burst(end, 0xe8eeff, 5, 2.2);
-  addTracer(muzzlePos, end);
-  return struck.length > 0;
-}
-
-function tryFire() {
-  const def = GUNS[gunId];
-  if (player.sprinting || player.runBlend > GUN_READY_BLEND) return;
-  if (player.dodge || player.fireCd > 0 || (player.cycle && player.cycle.blocking)) return;
-  if (player.reload) {
-    // Shells can be interrupted to fire what's already loaded.
-    if (player.reload.style === 'shell' && player.ammo[gunId] > 0) player.reload.stop = true;
-    return;
-  }
-  if (player.ammo[gunId] <= 0) { Sfx.click(); triggerBuffered = false; startReload(); return; }
-  triggerBuffered = false;
-  if (!mod.infiniteAmmo) player.ammo[gunId]--;
-  player.fireCd = def.rate;
-  player.aimT = 1.4;
-  player.recoil = Math.min(player.recoil + def.kick * 0.7, 0.16);
-  player.kick = Math.min(player.kick + def.kick, 0.2);
-  player.bloom = Math.min(player.bloom + def.spread * 0.6, def.spread * 2.2);
-  Sfx.gunshot(def.sound);
-  muzzleLight.intensity = 6;
-
-  camera.updateMatrixWorld();
-  camera.getWorldDirection(aimDir);
-  gunModel.muzzle.getWorldPosition(muzzlePos);
-  muzzleLight.position.copy(muzzlePos);
-  muzzleFlash.position.copy(muzzlePos);
-  muzzleFlash.scale.setScalar(def.pellets > 1 || def.scoped ? 0.55 : 0.34);
-  muzzleFlash.visible = true;
-  burst(muzzlePos, 0xffd9a0, 3, 1.6);
-
-  const base = aiming ? def.spread * 0.4 : (def.hipSpread || def.spread);
-  const moving = moveInput().lengthSq() > 0 ? 1.5 : 1;
-  const cone = (base + player.bloom) * moving;
-  let anyHit = false;
-  for (let i = 0; i < def.pellets; i++) {
-    shotDir.set(aimDir.x + (Math.random() - 0.5) * cone * 2, aimDir.y + (Math.random() - 0.5) * cone * 2, aimDir.z + (Math.random() - 0.5) * cone * 2).normalize();
-    if (traceShot(def, shotDir)) anyHit = true;
-  }
-  if (anyHit) {
-    Sfx.hit();
-    $('crosshair').classList.add('hit');
-    setTimeout(() => $('crosshair').classList.remove('hit'), 90);
-  }
-
-  // Slide, pump or bolt cycles after each shot.
-  if (def.style === 'shell') { player.cycle = { t: -0.1, dur: 0.46, kind: 'pump' }; Sfx.pump(); }
-  else if (def.scoped) { player.cycle = { t: -0.22, dur: 0.72, kind: 'bolt' }; setTimeout(() => Sfx.bolt(), 220); }
-  else player.cycle = { t: 0, dur: 0.075, kind: 'slide' };
-  gunModel.group.localToWorld(shotCenter.copy(gunModel.port));
-  burst(shotCenter, def.style === 'shell' ? 0xc0303a : 0xc6a25c, 2, 1.8);
-  if (player.ammo[gunId] <= 0 && !def.auto) triggerBuffered = false;
-}
-
-function damageEnemy(enemy, amount) {
-  enemy.hp -= mod.oneHit ? enemy.hp + 1 : amount;
-  enemy.flash = 0.08;
-  if (enemy.hp > 0) return;
-  if (enemy.isBoss) { if (!enemy.dead) killBoss(enemy); } else if (!enemy.dead) { enemy.dead = true; enemy.deadT = 0; Sfx.groan(); }
-}
-
-function hurtPlayer(amount) {
-  if ((player.dodge && player.dodge.t < 0.44) || game.state !== 'playing' || mod.god) return;
-  player.hp -= amount;
-  player.sinceHurt = 0;
-  player.shake = 0.25;
-  Sfx.hurt();
-  $('hurt').style.opacity = 1;
-  if (player.hp <= 0) {
-    player.hp = 0;
-    endGame('The snow keeps you', 'Your name joins the others beneath the pines.');
-  }
-}
-
-function endGame(title, text) {
-  game.state = 'ended';
-  document.exitPointerLock();
-  subtitles.length = 0;
-  $('subtitle').classList.remove('on');
-  $('scope').classList.add('hidden');
-  avatar.setVisible(true);
-  $('end-title').textContent = title;
-  $('end-text').textContent = text;
-  $('end').classList.remove('hidden');
-  $('hud').classList.add('hidden');
-}
-
-/* ---------- Player ---------- */
 function angleLerp(from, to, amount) {
   const d = Math.atan2(Math.sin(to - from), Math.cos(to - from));
   return from + d * amount;
 }
 
-function updatePlayer(dt) {
-  const def = GUNS[gunId];
-  player.fireCd -= dt;
-  player.aimT -= dt;
-  player.sinceHurt += dt;
-  player.equip = Math.max(0, player.equip - dt * 4);
-  player.recoil = Math.max(0, player.recoil - dt * 0.5);
-  player.kick = Math.max(0, player.kick - dt * (0.45 + player.kick * 5));
-  player.bloom = Math.max(0, player.bloom - dt * def.spread * 3);
-  player.shake = Math.max(0, player.shake - dt);
+// Whether she faces the crosshair: always with aim lock, otherwise only while aiming,
+// drawing or just after a shot.
+function facingAim() {
+  return aimLock || aiming || player.drawing || player.aimT > 0;
+}
 
-  if (player.reload) updateReload(dt);
-  if (player.cycle) {
-    player.cycle.t += dt;
-    if (player.cycle.t >= player.cycle.dur) player.cycle = null;
+function turnBody(dt, move, moving) {
+  const ease = 1 - Math.exp(-12 * dt);
+  if (facingAim()) {
+    if (moving || aiming || player.drawing || player.aimT > 0) player.bodyYaw = angleLerp(player.bodyYaw, player.yaw, ease);
+  } else if (moving) {
+    player.bodyYaw = angleLerp(player.bodyYaw, Math.atan2(move.x, move.z), 1 - Math.exp(-10 * dt));
   }
-  if ((firing && def.auto) || triggerBuffered) tryFire();
+}
+
+function updatePlayer(dt) {
+  player.releaseCd -= dt;
+  player.aimT -= dt;
+  player.recoil = Math.max(0, player.recoil - dt * 0.4);
+  player.shake = Math.max(0, player.shake - dt);
+  if (player.drawing) player.draw = mod.instantDraw ? 1 : Math.min(1, player.draw + dt / BOW.drawTime);
 
   const move = moveInput();
   const moving = move.lengthSq() > 0;
-  const ads = aiming && !player.reload && !player.dodge;
-  const sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && player.stamina > 1 && !player.reload && !ads && !player.dodge && !mod.fly;
+  const ads = (aiming || player.drawing) && !player.dodge;
+  const sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && player.stamina > 1 && !ads && !player.dodge && !mod.fly;
   player.sprinting = sprinting;
-  // Sprinting lowers the gun; it has to come back up before she can fire again.
-  if (sprinting) { player.aimT = 0; triggerBuffered = false; }
   player.runBlend += ((sprinting ? 1 : 0) - player.runBlend) * (1 - Math.exp(-(sprinting ? 7 : 10) * dt));
-  $('crosshair').classList.toggle('lowered', player.runBlend > GUN_READY_BLEND);
   player.stamina = mod.infiniteStamina ? 100 : clamp(player.stamina + (sprinting ? -24 : 16) * dt, 0, 100);
-  if (player.sinceHurt > 6) player.hp = Math.min(100, player.hp + 3 * dt);
 
   if (mod.fly) {
     flyPlayer(dt, move, moving);
@@ -617,7 +483,7 @@ function updatePlayer(dt) {
     player.stepDist += step;
     if (player.stepDist > 1.1) { player.stepDist = 0; Sfx.step(); leaveFootprint(); }
   }
-  if (moving || player.aimT > 0 || aiming) player.bodyYaw = angleLerp(player.bodyYaw, player.yaw, 1 - Math.exp(-12 * dt));
+  if (!player.dodge) turnBody(dt, move, moving);
 
   // Blend between standing and walking so the gait eases in and out.
   const stride = moving && !player.dodge ? (sprinting ? 1 : ads ? 0.42 : 0.68) : 0;
@@ -635,7 +501,7 @@ function flyPlayer(dt, move, moving) {
   player.pos.y += ((keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0)) * speed * dt;
   player.pos.y = Math.max(player.pos.y, groundHeight(player.pos.x, player.pos.z));
   player.dodge = null;
-  player.bodyYaw = angleLerp(player.bodyYaw, player.yaw, 1 - Math.exp(-12 * dt));
+  turnBody(dt, move, moving);
   player.stride += -player.stride * (1 - Math.exp(-9 * dt));
   poseAvatar(dt, move, false);
   avatar.simulate(dt);
@@ -711,236 +577,120 @@ function poseAvatar(dt, move, moving) {
   gait(legL, ph, 1);
   gait(legR, ph + Math.PI, -1);
 
-  // Shoulders counter the hips, and the head stays level with the run's forward lean.
-  chest.rotation.x = lerp(0.05 * walk + 0.2 * run + breathe * 0.008 - player.pitch * 0.1 * (1 - run), 0.72, tuck);
-  chest.rotation.y = lerp(Math.sin(ph) * (-0.06 * walk - 0.11 * run) - player.aimBlend * 0.14, 0, tuck);
+  // Shoulders counter the hips, and the head stays level with the run's forward lean. While
+  // aiming she turns side-on like an archer, and her head follows the camera's pitch.
+  player.lookBlend += ((facingAim() ? 1 : 0) - player.lookBlend) * ease(8);
+  const look = player.pitch * player.lookBlend * (1 - run);
+  chest.rotation.x = lerp(0.05 * walk + 0.2 * run + breathe * 0.008 - look * 0.1, 0.72, tuck);
+  chest.rotation.y = lerp(Math.sin(ph) * (-0.06 * walk - 0.11 * run) - player.aimBlend * 0.45, 0, tuck);
   chest.rotation.z = -player.strafeLean * 0.6;
   chest.position.y = avatar.dims.chest + breathe * 0.002;
-  head.rotation.x = lerp(-player.pitch * 0.5 * (1 - run) - 0.04 * walk - 0.3 * run, 0.45, tuck);
+  head.rotation.x = lerp(-look * 0.5 - 0.04 * walk - 0.3 * run, 0.45, tuck);
   head.rotation.y = -chest.rotation.y - hips.rotation.y;
 
-  poseGun(dt, ease);
+  poseBow(dt, ease);
 }
 
-/* ---------- Gun handling ---------- */
-function updateReload(dt) {
-  const r = player.reload;
-  const def = GUNS[gunId];
-  r.t += dt;
-  const once = (key, at, fn) => { if (!r.fired[key] && r.t / r.dur >= at) { r.fired[key] = true; fn(); } };
-
-  if (r.style === 'shell') {
-    once(`in${r.count || 0}`, 0.62, () => {
-      player.ammo[gunId]++;
-      Sfx.shell();
-    });
-    if (r.t >= r.dur) {
-      r.count = (r.count || 0) + 1;
-      if (player.ammo[gunId] >= def.mag || r.stop || firingWantsShot()) {
-        player.reload = null;
-        player.cycle = { t: -0.05, dur: 0.46, kind: 'pump', blocking: true };
-        Sfx.pump();
-        player.fireCd = Math.max(player.fireCd, 0.35);
-      } else {
-        r.t = 0;
-      }
-    }
-    return;
-  }
-
-  const m = gunModel;
-  once('out', 0.2, () => Sfx.magOut());
-  once('drop', 0.3, () => { if (m.mag) { dropMag(m.mag); m.mag.visible = false; } });
-  once('in', 0.68, () => Sfx.magIn());
-  once('rack', 0.78, () => Sfx.rack());
-  if (r.t >= r.dur) {
-    player.ammo[gunId] = def.mag;
-    if (m.mag) { m.mag.visible = true; m.mag.position.copy(m.magRest); }
-    player.reload = null;
-  }
-}
-
-function firingWantsShot() { return triggerBuffered && player.ammo[gunId] > 0; }
-
-const POUCH = new THREE.Vector3(0.14, -0.1, 0.08);
+/* ---------- Bow handling ---------- */
 const holderPos = new THREE.Vector3();
 const holderEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
-const holderInverse = new THREE.Matrix4();
-const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3();
-// Elbows point down, back and a little outward, so the arms clear the body.
+const aimQuat = new THREE.Quaternion(), restQuat = new THREE.Quaternion(), tuckQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.75, 0, 0.9, 'YXZ'));
+const aimAxis = new THREE.Vector3(), anchor = new THREE.Vector3(), toAnchor = new THREE.Vector3(), aimGrip = new THREE.Vector3(), restGrip = new THREE.Vector3();
+const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3(), restHand = new THREE.Vector3();
+const poleR = new THREE.Vector3();
+// Elbows point down, back and a little outward, so the arms clear the body. At full draw
+// the string elbow lifts out behind her.
 const POLE_R = new THREE.Vector3(-0.42, -0.78, -0.42), POLE_L = new THREE.Vector3(0.42, -0.78, -0.42);
-// How each hand sits on a gun, in the gun's coordinates (+Z forward, +Y up). Hands rest with
-// fingers along -Y. The right hand reaches forward around the grip, its palm against the
-// side; the left cups under the gun with its fingers wrapping across.
+const DRAW_POLE_R = new THREE.Vector3(-0.7, 0.1, -0.7);
+// How each hand sits on the bow, in the bow's coordinates (+Z forward, +Y up). Hands rest
+// with fingers along -Y. The left hand wraps round the grip; the right hand's fingers
+// point forward to hook the string.
 const RIGHT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
 const LEFT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
 const RIGHT_WRIST = new THREE.Vector3(-0.024, -0.012, -0.072);
 const LEFT_WRIST = new THREE.Vector3(0.06, -0.026, -0.01);
 const handOffset = new THREE.Vector3(), handGoal = new THREE.Quaternion(), leftGoal = new THREE.Quaternion();
-const mirrorWrist = new THREE.Vector3(), mirrorHand = new THREE.Quaternion();
-const ARM_SWING = 0.085;
+const HAND_DOWN = new THREE.Quaternion();
+// Where the string comes back to: just under the chin, in the chest's coordinates above
+// shoulder height.
+const ANCHOR = new THREE.Vector3(-0.03, 0.07, 0.08);
 
-function keyedPath(t, keys, out) {
-  if (t <= keys[0][0]) return out.copy(keys[0][1]);
-  for (let i = 1; i < keys.length; i++) {
-    if (t <= keys[i][0]) return out.lerpVectors(keys[i - 1][1], keys[i][1], span(t, keys[i - 1][0], keys[i][0]));
-  }
-  return out.copy(keys[keys.length - 1][1]);
-}
-
-function poseGun(dt, ease) {
-  const m = gunModel, def = GUNS[gunId];
+function poseBow(dt, ease) {
+  const m = bowModel;
   const { holder, chest, armL, armR } = avatar;
-  const wantAim = (player.aimT > 0 || aiming) && !player.reload && !player.dodge;
-  player.aimBlend += ((wantAim ? 1 : 0) - player.aimBlend) * ease(14);
-  const blend = player.aimBlend;
+  const wantAim = (player.aimT > 0 || aiming || player.drawing) && !player.dodge;
+  player.aimBlend += ((wantAim ? 1 : 0) - player.aimBlend) * ease(12);
+  const blend = smooth(player.aimBlend);
   const tuck = player.tuck;
-
-  holderPos.lerpVectors(m.readyPos, m.aimPos, blend);
-  let rx = lerp(m.readyRx, -player.pitch - chest.rotation.x, blend);
-  let ry = -chest.rotation.y * blend;
-  let rz = lerp(m.readyRz, 0, blend);
-  holderPos.z -= player.kick * 0.55;
-  holderPos.y += player.kick * 0.14;
-  rx -= player.kick * 1.5;
-  holderPos.y += Math.sin(player.walkPhase * 2) * 0.008 * player.stride;
-
-  // Sprint carry: the gun bounces with each step and sways against the shoulders.
   const run = player.runBlend;
-  if (run > 0.001) {
-    holderPos.lerp(m.runPos, run);
-    const beat = player.walkPhase;
-    holderPos.y += Math.sin(beat * 2) * 0.007 * run;
-    holderPos.x += Math.sin(beat) * 0.004 * run;
-    if (m.runOneHand) {
-      // A long, even arm swing, rising slightly as the hand comes forward.
-      holderPos.z += Math.sin(beat) * ARM_SWING * run;
-      holderPos.y += Math.sin(beat) * 0.022 * run;
-    }
-    rx = lerp(rx, m.runRx + Math.sin(beat * 2) * 0.025, run);
-    ry = lerp(ry, m.runRy - chest.rotation.y * 0.6, run);
-    rz = lerp(rz, m.runRz + Math.sin(beat) * 0.03, run);
-  }
+  const shoulderL = armL.upper.position, shoulderR = armR.upper.position;
+  const reachL = (armL.a + armL.b) * 0.97, reachR = (armR.a + armR.b) * 0.96;
 
-  // Raises into place after a swap.
-  rx += player.equip * 0.9;
-  holderPos.y -= player.equip * 0.12;
+  // Aimed: the arrow lines up under her chin, with the bow arm stretched out along it.
+  holderEuler.set(-player.pitch - player.recoil - chest.rotation.x, -chest.rotation.y, 0.12);
+  aimQuat.setFromEuler(holderEuler);
+  aimAxis.set(0, 0, 1).applyQuaternion(aimQuat);
+  anchor.copy(ANCHOR).setY(shoulderL.y + ANCHOR.y);
+  // How far along the arrow line the left hand reaches.
+  toAnchor.subVectors(anchor, shoulderL);
+  const b = toAnchor.dot(aimAxis);
+  const reachAlong = -b + Math.sqrt(Math.max(0, b * b - (toAnchor.lengthSq() - reachL * reachL)));
+  aimGrip.copy(anchor).addScaledVector(aimAxis, reachAlong);
+  m.drawLength = Math.max(0.3, reachAlong - 0.03);
 
-  const r = player.reload;
-  const u = r ? clamp(r.t / r.dur, 0, 1) : 0;
-  if (r) {
-    const w = r.style === 'shell' ? 1 : span(u, 0, 0.1) * (1 - span(u, 0.9, 1));
-    holderPos.lerp(m.reloadPos, w);
-    rx = lerp(rx, r.style === 'shell' ? -0.42 : -0.5, w);
-    rz = lerp(rz, r.style === 'shell' ? 0.65 : 0.5, w);
-    ry = lerp(ry, 0.25, w);
-  }
+  // Lowered: carried in the left hand at her side, swinging with her stride.
+  const swing = Math.sin(player.walkPhase) * player.stride;
+  restGrip.set(shoulderL.x + 0.05, shoulderL.y - reachL * 0.93, 0.05 - swing * (0.05 + run * 0.08));
+  holderEuler.set(0.18 - swing * 0.2, 0, -0.14);
+  restQuat.setFromEuler(holderEuler);
+
+  holderPos.lerpVectors(restGrip, aimGrip, blend);
+  holderQuat.slerpQuaternions(restQuat, aimQuat, blend);
   if (tuck > 0) {
-    holderPos.lerp(new THREE.Vector3(-0.02, 0.06, 0.15), tuck);
-    rx = lerp(rx, 0.75, tuck);
-    rz = lerp(rz, 0.9, tuck);
+    holderPos.lerp(leftTarget.set(0.08, shoulderL.y - 0.2, 0.15), tuck);
+    holderQuat.slerp(tuckQuat, tuck);
   }
-  // Gun poses are authored relative to shoulder height.
-  holderPos.y += avatar.dims.shoulderY - 0.215;
-  holderEuler.set(rx, ry, rz);
-  holderQuat.setFromEuler(holderEuler);
   holder.matrix.compose(holderPos, holderQuat, holderScale);
-  holderInverse.copy(holder.matrix).invert();
-  const toChest = (v) => v.clone().applyMatrix4(holder.matrix);
 
-  // Moving parts: slide, pump or bolt.
-  let travel = 0;
-  const cycle = player.cycle;
-  let rightOnBolt = 0;
-  if (cycle && cycle.t >= 0) {
-    const f = clamp(cycle.t / cycle.dur, 0, 1);
-    travel = Math.sin(f * Math.PI);
-    if (cycle.kind === 'bolt') rightOnBolt = span(f, 0, 0.18) * (1 - span(f, 0.82, 1));
-  }
-  if (r && r.style === 'mag') travel = Math.max(travel, span(u, 0.76, 0.81) * (1 - span(u, 0.83, 0.87)));
-  m.moving.position.z = -m.travel * travel;
+  // The string only comes back once the bow is up.
+  m.setDraw(player.draw * blend, player.drawing);
 
-  // Hands.
-  const grip = toChest(new THREE.Vector3(0, -0.02, 0));
-  rightTarget.copy(grip);
-  if (rightOnBolt > 0) rightTarget.lerp(toChest(m.grab.clone().add(m.moving.position)), rightOnBolt);
-
-  const fore = m.leftGrip.clone();
-  if (def.style === 'shell') fore.z += m.moving.position.z;
-  const foreChest = toChest(fore);
-
-  if (r && r.style === 'mag') {
-    const bottom = toChest(m.magBottom);
-    const below = toChest(m.magBottom.clone().add(new THREE.Vector3(0, -0.13, 0)));
-    const grab = toChest(m.grab);
-    keyedPath(u, [
-      [0.06, foreChest], [0.16, bottom], [0.2, bottom], [0.3, below], [0.47, POUCH],
-      [0.6, below], [0.68, bottom], [0.72, bottom], [0.77, grab], [0.82, toChest(m.grab.clone().add(new THREE.Vector3(0, 0, -m.travel)))],
-      [0.86, grab], [0.97, foreChest],
-    ], leftTarget);
-    // The magazine follows the left hand on its way out and on its way in.
-    if (m.mag) {
-      if (u > 0.2 && u < 0.3) {
-        m.mag.position.copy(m.magRest).add(new THREE.Vector3(0, -0.13 * span(u, 0.2, 0.3), 0));
-      } else if (u >= 0.42 && u < 0.68) {
-        m.mag.visible = true;
-        m.mag.position.copy(leftTarget).applyMatrix4(holderInverse);
-        m.mag.position.y += m.magLength * 0.9;
-      } else if (u >= 0.68) {
-        m.mag.position.copy(m.magRest);
-      }
-    }
-  } else if (r && r.style === 'shell') {
-    const port = toChest(m.loadPoint);
-    keyedPath(u, [[0.02, foreChest], [0.22, POUCH], [0.5, port], [0.66, port], [0.98, foreChest]], leftTarget);
-    if (m.shell) {
-      m.shell.visible = u > 0.2 && u < 0.62;
-      m.shell.position.copy(leftTarget).applyMatrix4(holderInverse);
-    }
-  } else {
-    leftTarget.copy(foreChest);
-    if (m.shell) m.shell.visible = false;
-  }
-  if (tuck > 0) leftTarget.lerp(foreChest, tuck);
-
-  // Targets are where the palms go; each wrist sits back from its palm along the hand.
-  const wrist = (target, offset) => target.add(handOffset.copy(offset).applyQuaternion(holderQuat));
-  const rightWrist = wrist(rightTarget, RIGHT_WRIST);
-  const leftWrist = wrist(leftTarget, LEFT_WRIST);
-  handGoal.copy(holderQuat).multiply(RIGHT_GRIP);
-  solveArm(armR, rightWrist, POLE_R);
-  poseHand(armR, handGoal, 1);
-
-  // A sprinting pistol leaves the left arm free: it mirrors the gun arm across the body,
-  // half a stride out of phase, with the palms facing each other.
+  // Left hand on the grip.
+  leftTarget.copy(holderPos).add(handOffset.copy(LEFT_WRIST).applyQuaternion(holderQuat));
   leftGoal.copy(holderQuat).multiply(LEFT_GRIP);
-  const freeArm = m.runOneHand && !r ? run : 0;
-  if (freeArm > 0.001) {
-    const beat = Math.sin(player.walkPhase) * run;
-    mirrorWrist.set(-rightWrist.x, rightWrist.y - beat * 0.044, rightWrist.z - beat * ARM_SWING * 2);
-    leftWrist.lerp(mirrorWrist, freeArm);
-    leftGoal.slerp(mirrorHand.set(handGoal.x, -handGoal.y, -handGoal.z, handGoal.w), freeArm);
-  }
-  solveArm(armL, leftWrist, POLE_L);
+  solveArm(armL, leftTarget, POLE_L);
   poseHand(armL, leftGoal, 1);
+
+  // Right hand on the string while aiming; otherwise hanging and swinging opposite the bow.
+  rightTarget.copy(m.nock).applyMatrix4(holder.matrix).add(handOffset.copy(RIGHT_WRIST).applyQuaternion(holderQuat));
+  restHand.set(shoulderR.x - 0.04, shoulderR.y - reachR, 0.03 + swing * (0.06 + run * 0.1));
+  rightTarget.lerpVectors(restHand, rightTarget, blend);
+  handGoal.copy(holderQuat).multiply(RIGHT_GRIP);
+  handGoal.slerpQuaternions(HAND_DOWN, handGoal, blend);
+  poleR.lerpVectors(POLE_R, DRAW_POLE_R, blend * player.draw);
+  solveArm(armR, rightTarget, poleR);
+  poseHand(armR, handGoal, 1);
 }
 
 function updateCamera(dt) {
-  const def = GUNS[gunId];
   const pitch = player.pitch + player.recoil;
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
   const s = Math.sin(player.yaw), c = Math.cos(player.yaw);
-  const ads = aiming && !player.reload && !player.dodge ? 1 : 0;
-  player.adsCam = (player.adsCam || 0) + (ads - (player.adsCam || 0)) * (1 - Math.exp(-13 * dt));
-  const a = player.adsCam;
-  const scopedView = def.scoped && a > 0.82;
-  const distance = lerp(2.55, def.scoped ? 0.9 : 1.55, a);
-  const shoulder = lerp(0.56, 0.4, a);
+  const ease = (rate) => 1 - Math.exp(-rate * dt);
+  // Free look sits further back and nearly centred; aim lock and aiming move in over the
+  // right shoulder.
+  const ads = (aiming || player.drawing) && !player.dodge ? 1 : 0;
+  player.adsCam = (player.adsCam || 0) + (ads - (player.adsCam || 0)) * ease(13);
+  player.lockCam = (player.lockCam || 0) + ((aimLock || ads ? 1 : 0) - (player.lockCam || 0)) * ease(7);
+  const a = player.adsCam, l = player.lockCam;
+  const distance = lerp(lerp(3.6, 2.55, l), 1.65, a);
+  const shoulder = lerp(lerp(0.18, 0.56, l), 0.42, a);
+  const height = lerp(1.5, 1.34, l);
   camera.position.set(
     player.pos.x - s * cp * distance - c * shoulder,
-    player.pos.y + 1.34 - sp * distance,
+    player.pos.y + height - sp * distance,
     player.pos.z - c * cp * distance + s * shoulder,
   );
   camera.position.y = Math.max(camera.position.y, groundHeight(camera.position.x, camera.position.z) + 0.3);
@@ -950,383 +700,22 @@ function updateCamera(dt) {
   }
   camera.lookAt(camera.position.x + s * cp, camera.position.y + sp, camera.position.z + c * cp);
 
-  const fov = lerp(58, def.aimFov, a);
-  if (Math.abs(camera.fov - fov) > 0.02) {
-    camera.fov = fov;
-    camera.updateProjectionMatrix();
-  }
-  $('scope').classList.toggle('hidden', !scopedView);
-  avatar.setVisible(!scopedView);
-}
-
-/* ---------- Enemies ---------- */
-function spawnGhoul(x, z, runner) {
-  const model = buildGhoul(runner);
-  scene.add(model.root);
-  game.enemies.push({
-    model, runner,
-    pos: new THREE.Vector3(x, groundHeight(x, z) - 1.8, z),
-    hp: runner ? 66 : 100,
-    speed: runner ? 5 : 2.7,
-    rise: 0.9,
-    attackCd: 0,
-    windup: 0,
-    phase: Math.random() * 6,
-    flash: 0,
-    dead: false,
-  });
-}
-
-function spawnNearPlayer(runner) {
-  for (let tries = 0; tries < 6; tries++) {
-    const a = Math.random() * Math.PI * 2, d = 26 + Math.random() * 10;
-    const x = player.pos.x + Math.cos(a) * d, z = player.pos.z + Math.sin(a) * d;
-    if (Math.hypot(x, z) < WORLD_RADIUS) { spawnGhoul(x, z, runner); return; }
-  }
-}
-
-function removeEnemy(enemy) {
-  scene.remove(enemy.model.root);
-  if (enemy.model.skin) enemy.model.skin.dispose();
-  game.enemies.splice(game.enemies.indexOf(enemy), 1);
-}
-
-function updateGhoul(enemy, dt) {
-  const { model, pos } = enemy;
-  model.skin.emissive.setHex(enemy.flash > 0 ? 0xffffff : 0x000000);
-  enemy.flash -= dt;
-
-  if (enemy.dead) {
-    enemy.deadT += dt;
-    model.root.rotation.x = -Math.min(enemy.deadT * 3, 1.5);
-    pos.y -= enemy.deadT > 0.8 ? dt * 0.8 : 0;
-    model.root.position.copy(pos);
-    if (enemy.deadT > 2) removeEnemy(enemy);
-    return;
-  }
-
-  const ground = groundHeight(pos.x, pos.z);
-  if (enemy.rise > 0) {
-    enemy.rise -= dt;
-    pos.y = ground - Math.max(enemy.rise, 0) * 2;
-    model.root.position.copy(pos);
-    return;
-  }
-
-  const dx = player.pos.x - pos.x, dz = player.pos.z - pos.z;
-  const dist = Math.hypot(dx, dz);
-  model.root.rotation.y = Math.atan2(dx, dz);
-  enemy.attackCd -= dt;
-
-  if (enemy.windup > 0) {
-    enemy.windup -= dt;
-    model.armL.rotation.x = model.armR.rotation.x = -2.5;
-    if (enemy.windup <= 0) {
-      if (dist < 2.1) hurtPlayer(enemy.runner ? 9 : 14);
-      enemy.attackCd = 1.2;
-    }
-  } else if (dist < 1.55 && enemy.attackCd <= 0) {
-    enemy.windup = 0.38;
-    Sfx.groan();
-  } else if (dist > 1.25) {
-    pos.x += (dx / dist) * enemy.speed * dt;
-    pos.z += (dz / dist) * enemy.speed * dt;
-    pushOutOfColliders(pos, 0.35);
-    enemy.phase += enemy.speed * dt * 2.1;
-    const swing = Math.sin(enemy.phase) * 0.7;
-    model.legL.rotation.x = swing;
-    model.legR.rotation.x = -swing;
-    model.armL.rotation.x = -1.3 - swing * 0.3;
-    model.armR.rotation.x = -1.3 + swing * 0.3;
-  }
-
-  pos.y = groundHeight(pos.x, pos.z);
-  model.root.position.copy(pos);
-  if (dist > 62) removeEnemy(enemy);
-  else if (Math.random() < dt * 0.05 && dist < 26) Sfx.groan();
-}
-
-function updateSpawns(dt) {
-  if (game.stage >= 3 || mod.noEnemies) return;
-  const lit = game.stage;
-  const lighting = world.wards.some((w) => !w.lit && w.progress > 0);
-  const cap = 3 + lit * 2 + (lighting ? 3 : 0);
-  game.spawnTimer -= dt;
-  if (game.spawnTimer > 0) return;
-  game.spawnTimer = lighting ? 1.7 : Math.max(3.2, 6 - lit);
-  const alive = game.enemies.filter((e) => !e.dead).length;
-  if (alive < cap) spawnNearPlayer(lit > 0 && Math.random() < 0.2 + lit * 0.12);
-}
-
-/* ---------- Boss ---------- */
-function startBoss() {
-  game.stage = 4;
-  const { altar } = world;
-  const model = buildBoss();
-  const x = altar.x, z = altar.z + 8;
-  model.root.rotation.y = Math.atan2(player.pos.x - x, player.pos.z - z);
-  scene.add(model.root);
-  game.boss = {
-    isBoss: true,
-    model,
-    pos: new THREE.Vector3(x, groundHeight(x, z) - 3.7, z),
-    hp: 3000,
-    maxHp: 3000,
-    rise: 3.2,
-    attackCd: 2.5,
-    phase: 0,
-    flash: 0,
-    slamT: 0,
-    summoned: 0,
-    dead: false,
-    deadT: 0,
-  };
-  game.enemies.push(game.boss);
-  $('boss').classList.remove('hidden');
-  Sfx.roar();
-  player.shake = 1.4;
-  subtitles.length = 0;
-  subtitleT = 0;
-  say('You came all this way to wake me.', 3.2);
-  say('Then kneel, little ember. The cold is patient.', 3.6);
-}
-
-function fireShards(boss, count) {
-  const from = new THREE.Vector3(boss.pos.x, boss.pos.y + 3, boss.pos.z);
-  const to = new THREE.Vector3(player.pos.x, player.pos.y + 1, player.pos.z);
-  const base = Math.atan2(to.x - from.x, to.z - from.z);
-  const flat = Math.hypot(to.x - from.x, to.z - from.z);
-  const rise = (to.y - from.y) / flat;
-  for (let i = 0; i < count; i++) {
-    const a = base + (i - (count - 1) / 2) * 0.17;
-    const mesh = new THREE.Mesh(
-      new THREE.ConeGeometry(0.17, 1.05, 5).rotateX(Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0x9fecff, fog: false }),
-    );
-    mesh.position.copy(from);
-    mesh.rotation.y = a;
-    scene.add(mesh);
-    game.shards.push({ mesh, vel: new THREE.Vector3(Math.sin(a), rise, Math.cos(a)).normalize().multiplyScalar(15), life: 5 });
-  }
-  Sfx.ice();
-}
-
-function updateShards(dt) {
-  for (const shard of [...game.shards]) {
-    shard.life -= dt;
-    shard.mesh.position.addScaledVector(shard.vel, dt);
-    const p = shard.mesh.position;
-    const hitPlayer = Math.hypot(p.x - player.pos.x, p.z - player.pos.z) < 0.7 && p.y > player.pos.y - 0.2 && p.y < player.pos.y + 1.8;
-    if (hitPlayer) hurtPlayer(13);
-    const landed = p.y < groundHeight(p.x, p.z);
-    if (landed) burst(p, 0xbff0ff, 6, 2.2);
-    if (hitPlayer || landed || shard.life <= 0) {
-      scene.remove(shard.mesh);
-      shard.mesh.geometry.dispose();
-      shard.mesh.material.dispose();
-      game.shards.splice(game.shards.indexOf(shard), 1);
-    }
-  }
-}
-
-function updateBoss(boss, dt) {
-  const { model, pos } = boss;
-  const ground = groundHeight(pos.x, pos.z);
-
-  if (boss.dead) {
-    boss.deadT += dt;
-    model.root.rotation.x = -Math.min(boss.deadT * 0.45, 0.45);
-    pos.y = ground - boss.deadT * 1.25;
-    model.root.position.copy(pos);
-    if (Math.random() < dt * 20) burst(new THREE.Vector3(pos.x, pos.y + 2.5, pos.z), 0x8fe8ff, 6, 4);
-    if (boss.deadT > 3.5) removeEnemy(boss);
-    return;
-  }
-
-  if (boss.rise > 0) {
-    boss.rise -= dt;
-    pos.y = ground - Math.max(boss.rise, 0) * 1.15;
-    model.root.position.copy(pos);
-    burst(new THREE.Vector3(pos.x, ground + 0.2, pos.z), 0xe8eeff, 2, 4);
-    return;
-  }
-
-  const ratio = boss.hp / boss.maxHp;
-  const enraged = ratio < 0.5;
-  if (boss.summoned === 0 && ratio < 0.66) {
-    boss.summoned = 1;
-    say('Rise. All of you. Rise.', 2.8);
-    for (let i = 0; i < 3; i++) spawnNearPlayer(false);
-  }
-  if (boss.summoned === 1 && ratio < 0.33) {
-    boss.summoned = 2;
-    say('I have buried kingdoms in this snow.', 3);
-    for (let i = 0; i < 4; i++) spawnNearPlayer(true);
-  }
-
-  const dx = player.pos.x - pos.x, dz = player.pos.z - pos.z;
-  const dist = Math.hypot(dx, dz);
-  model.root.rotation.y = angleLerp(model.root.rotation.y, Math.atan2(dx, dz), 1 - Math.exp(-4 * dt));
-  boss.attackCd -= dt;
-
-  const slamRadius = 6;
-  if (boss.slamT > 0) {
-    boss.slamT -= dt;
-    const charge = 1 - boss.slamT;
-    model.armR.rotation.x = -2.9 + Math.min(charge, 0.85) * 0.2;
-    slamRing.visible = true;
-    slamRing.position.set(pos.x, ground + 0.12, pos.z);
-    slamRing.scale.setScalar(Math.min(1, charge * 1.1) * slamRadius);
-    if (boss.slamT <= 0) {
-      model.armR.rotation.x = -0.6;
-      slamRing.visible = false;
-      burst(new THREE.Vector3(pos.x, ground + 0.3, pos.z), 0xe8eeff, 50, 8);
-      player.shake = 0.8;
-      Sfx.slam();
-      if (dist < slamRadius) hurtPlayer(32);
-      boss.attackCd = enraged ? 1.2 : 2;
-    }
-  } else {
-    if (dist > 4.2) {
-      const speed = enraged ? 3.5 : 2.5;
-      pos.x += (dx / dist) * speed * dt;
-      pos.z += (dz / dist) * speed * dt;
-      boss.phase += speed * dt * 1.2;
-    }
-    const swing = Math.sin(boss.phase) * 0.45;
-    model.legL.rotation.x = swing;
-    model.legR.rotation.x = -swing;
-    model.armL.rotation.x = -swing * 0.5;
-    model.armR.rotation.x += (-0.5 - model.armR.rotation.x) * (1 - Math.exp(-6 * dt));
-
-    if (boss.attackCd <= 0) {
-      if (dist < 7.5) { boss.slamT = 1; Sfx.roar(); } else {
-        fireShards(boss, enraged ? 5 : 3);
-        boss.attackCd = enraged ? 1.5 : 2.4;
-      }
-    }
-  }
-
-  pos.y = groundHeight(pos.x, pos.z);
-  model.root.position.copy(pos);
-}
-
-function killBoss(boss) {
-  boss.hp = 0;
-  boss.dead = true;
-  game.stage = 5;
-  slamRing.visible = false;
-  $('boss').classList.add('hidden');
-  Sfx.roar();
-  player.shake = 1.2;
-  for (const enemy of game.enemies) {
-    if (!enemy.isBoss && !enemy.dead) { enemy.dead = true; enemy.deadT = 0; }
-  }
-  subtitles.length = 0;
-  subtitleT = 0;
-  say('...the cold... does not end with me...', 3.6);
-  say('The seal is broken. The blade is waiting.', 3.4);
-  world.altar.ice.visible = false;
-}
-
-/* ---------- Objectives ---------- */
-function setPrompt(text) {
-  $('prompt').textContent = text || '';
-  $('prompt').classList.toggle('hidden', !text);
-}
-
-function updateObjectives(dt) {
-  let prompt = '';
-
-  for (const ward of world.wards) {
-    if (ward.lit) {
-      ward.light.intensity = 60 + Math.sin(game.time * 11 + ward.x) * 8 + Math.sin(game.time * 23 + ward.z) * 5;
-      continue;
-    }
-    const dist = Math.hypot(player.pos.x - ward.x, player.pos.z - ward.z);
-    if (dist < 3.8) {
-      if (keys.KeyE) {
-        ward.progress += dt / 3;
-        prompt = `Kindling... ${Math.floor(ward.progress * 100)}%`;
-        if (ward.progress >= 1) lightWard(ward);
-      } else {
-        prompt = 'Hold E to kindle the wardfire';
-      }
-    } else {
-      ward.progress = Math.max(0, ward.progress - dt * 0.15);
-    }
-  }
-
-  const { altar } = world;
-  const altarDist = Math.hypot(player.pos.x - altar.x, player.pos.z - altar.z);
-  altar.blade.position.y = 3 + Math.sin(game.time * 1.4) * 0.06;
-  if (game.stage < 3 && altarDist < 14) prompt = 'Sealed. The wardfires still sleep.';
-  if (game.stage === 3 && altarDist < 16) startBoss();
-  if (game.stage === 5 && (!game.boss || game.boss.deadT > 2) && altarDist < 5) {
-    prompt = 'Press E to take the blade';
-    if (keys.KeyE) endGame('The snow has stopped', 'The hilt is warm in your hand. Far behind you, three fires go out.');
-  }
-  setPrompt(prompt);
-  altar.beam.visible = game.stage === 3 || game.stage === 5;
-}
-
-function lightWard(ward) {
-  ward.lit = true;
-  ward.progress = 1;
-  ward.flame.visible = true;
-  ward.beam.visible = false;
-  player.hp = Math.min(100, player.hp + 45);
-  game.stage++;
-  Sfx.ignite();
-  burst(new THREE.Vector3(ward.x, player.pos.y + 3, ward.z), 0xff9a50, 40, 6);
-  if (game.stage === 1) say('One. Something in the trees heard that.', 3.2);
-  if (game.stage === 2) say('Two. They are moving faster now.', 3.2);
-  if (game.stage === 3) {
-    say('Three. The seal is thinning. North, to the altar.', 3.8);
-    for (const enemy of game.enemies) { if (!enemy.dead) { enemy.dead = true; enemy.deadT = 0; } }
-  }
-}
-
-function objectiveTarget() {
-  if (game.stage >= 3) return world.altar;
-  let best = null, bestD = Infinity;
-  for (const ward of world.wards) {
-    if (ward.lit) continue;
-    const d = Math.hypot(player.pos.x - ward.x, player.pos.z - ward.z);
-    if (d < bestD) { best = ward; bestD = d; }
-  }
-  return best;
-}
-
-function objectiveText() {
-  if (game.stage < 3) return `Rekindle the wardfires (${game.stage}/3)`;
-  return ['Reach the frozen altar', 'Destroy the Hollow King', 'Claim the sealed blade'][game.stage - 3];
+  // Right click zooms in further than drawing alone.
+  const fov = aiming ? 42 : lerp(58, 50, a);
+  camera.fov += (fov - camera.fov) * ease(12);
+  camera.updateProjectionMatrix();
 }
 
 /* ---------- HUD ---------- */
 function updateHud() {
-  const def = GUNS[gunId];
-  $('hp-fill').style.width = `${player.hp}%`;
   $('stamina-fill').style.width = `${player.stamina}%`;
-  $('ammo-count').textContent = player.reload && player.reload.style === 'mag' ? '--' : player.ammo[gunId];
-  $('ammo-max').textContent = `/ ${def.mag}`;
-  $('gun-name').textContent = def.name;
-  $('objective').textContent = objectiveText();
-  if (game.boss && !game.boss.dead) $('boss-fill').style.width = `${(game.boss.hp / game.boss.maxHp) * 100}%`;
-
-  const hurt = $('hurt');
-  const lowHealth = player.hp < 30 ? 0.45 : 0;
-  hurt.style.opacity = Math.max(lowHealth, parseFloat(hurt.style.opacity || 0) * 0.94);
-
-  const target = objectiveTarget();
-  const fighting = game.stage === 4;
-  $('compass').style.visibility = target && !fighting ? 'visible' : 'hidden';
-  if (target) {
-    const bearing = Math.atan2(target.x - player.pos.x, target.z - player.pos.z);
-    const relative = Math.atan2(Math.sin(player.yaw - bearing), Math.cos(player.yaw - bearing));
-    $('compass-arrow').style.transform = `rotate(${relative}rad)`;
-    $('compass-dist').textContent = `${Math.round(Math.hypot(target.x - player.pos.x, target.z - player.pos.z))} m`;
-  }
+  // The crosshair shows wherever she faces it; its ring closes in as the string comes back.
+  const showCross = player.lockCam > 0.5 || player.drawing || aiming;
+  $('crosshair').classList.toggle('hidden', !showCross);
+  $('draw-ring').classList.toggle('hidden', !showCross || !player.drawing);
+  $('draw-ring').style.transform = `translate(-50%, -50%) scale(${lerp(2.6, 1, player.draw)})`;
+  $('draw-ring').classList.toggle('full', player.draw >= 1);
+  $('look-mode').textContent = aimLock ? 'Aim locked' : 'Free look';
 }
 
 /* ---------- Main loop ---------- */
@@ -1335,19 +724,10 @@ function update(dt) {
   updatePlayer(dt);
   updateCamera(dt);
   updateHud();
-  // Frozen enemies hold still, though the dead still fall.
-  for (const enemy of [...game.enemies]) {
-    if (mod.freeze && !enemy.dead) continue;
-    if (enemy.isBoss) updateBoss(enemy, dt);
-    else updateGhoul(enemy, dt);
-  }
-  if (!mod.freeze) updateShards(dt);
-  updateDroppedMags(dt);
-  updateSpawns(dt);
-  updateObjectives(dt);
+  updateArrows(dt);
 }
 
-// Slow drift in front of her on the title screen, so skin and gun choices show.
+// Slow drift in front of her on the title screen, so the skin choice shows.
 const titleMove = new THREE.Vector3();
 function updateTitle(dt) {
   game.time += dt;
@@ -1374,7 +754,7 @@ const ROOM_VIEWS = {
   Legs: { y: 0.42, dist: 1.25, yaw: 0.3, pitch: 0.05 },
   Hands: { y: 0.95, dist: 0.8, yaw: 0.2, pitch: 0.22 },
 };
-const ROOM_POSES = ['Idle', 'Aim', 'Walk', 'Run', 'Reload'];
+const ROOM_POSES = ['Idle', 'Aim', 'Draw', 'Walk', 'Run'];
 
 const roomSet = new THREE.Group();
 roomSet.position.y = ROOM_Y;
@@ -1499,14 +879,7 @@ function setRoomView(name) {
 
 function setRoomPose(name) {
   roomPose = name;
-  player.reload = null;
-  if (name === 'Reload') startRoomReload();
   renderRoomControls();
-}
-
-function startRoomReload() {
-  player.ammo[gunId] = 0;
-  startReload();
 }
 
 function openRoom() {
@@ -1541,16 +914,14 @@ function closeRoom() {
   world.setWeather(true);
   updateMusic();
   avatar.holder.visible = true;
+  cancelDraw();
   player.pos.copy(roomReturn);
-  player.reload = null;
   player.aimT = 0;
   player.stride = 0;
   player.runBlend = 0;
-  player.ammo[gunId] = GUNS[gunId].mag;
   camera.near = 0.1;
   camera.fov = 58;
   camera.updateProjectionMatrix();
-  for (const mag of droppedMags.splice(0)) scene.remove(mag.mesh);
 }
 
 $('open-room').addEventListener('click', openRoom);
@@ -1592,8 +963,7 @@ canvas.addEventListener('wheel', (e) => {
 const roomMove = new THREE.Vector3();
 function updateRoom(dt) {
   game.time += dt;
-  player.equip = Math.max(0, player.equip - dt * 4);
-  avatar.holder.visible = $('room-gun').checked;
+  avatar.holder.visible = $('room-bow').checked;
   player.pos.set(0, ROOM_Y, 0);
   player.bodyYaw = 0;
   player.pitch = 0;
@@ -1604,10 +974,9 @@ function updateRoom(dt) {
   player.stride += (((running ? 1 : walking ? 0.68 : 0)) - player.stride) * (1 - Math.exp(-9 * dt));
   player.runBlend += ((running ? 1 : 0) - player.runBlend) * (1 - Math.exp(-(running ? 7 : 10) * dt));
   if (walking) player.walkPhase += dt * (running ? 6.9 * 1.95 : 4.3 * 2.55);
-  player.aimT = roomPose === 'Aim' ? 1 : 0;
-  if (player.reload) updateReload(dt);
-  else if (roomPose === 'Reload') startRoomReload();
-  updateDroppedMags(dt);
+  player.aimT = roomPose === 'Aim' || roomPose === 'Draw' ? 1 : 0;
+  player.drawing = roomPose === 'Draw';
+  player.draw = player.drawing ? 1 : 0;
   poseAvatar(dt, roomMove, walking);
   avatar.simulate(dt);
   updateRoomSet(dt);
@@ -1638,10 +1007,8 @@ function frame(now) {
   if (game.state === 'title') updateTitle(dt);
   if (game.state === 'playing') update(dt * mod.timeScale);
   if (game.state === 'room') updateRoom(dt);
+  if (game.state === 'playing' || game.state === 'title') world.stream(player.pos);
   if (game.state === 'playing' || game.state === 'title' || game.state === 'room') {
-    muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 60);
-    tracerT -= dt;
-    if (tracerT <= 0) { tracer.visible = false; muzzleFlash.visible = false; }
     updateSparks(dt);
     updateSubtitles(dt);
     world.update(dt, game.time, camera.position, player.pos);
@@ -1651,4 +1018,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Exposed for debugging from the browser console.
-window.hollowSnow = { game, player, world, keys, spawnGhoul, lightWard, startBoss, tryFire, setSkin, equipGun, startDodge, startReload };
+window.hollowSnow = { game, player, world, keys, arrows, setSkin, startDodge, startDraw, releaseArrow };

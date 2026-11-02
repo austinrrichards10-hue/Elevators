@@ -3,32 +3,19 @@ html, body { height: 100%; overflow: hidden; background: #2b3552; color: #eef1ff
 #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 .hidden { display: none !important; }
 
-#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 35%, rgba(170, 20, 45, .75) 100%); }
-
 #hud { position: fixed; inset: 0; pointer-events: none; }
-#objective { position: absolute; top: 22px; left: 26px; font-size: 18px; letter-spacing: .03em; text-shadow: 0 1px 4px #0a0e22; }
-#compass { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; text-shadow: 0 1px 4px #0a0e22; }
-#compass-arrow { display: block; color: #ff8fa0; font-size: 20px; line-height: 1; }
-#compass-dist { font-size: 13px; opacity: .85; }
 #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #0a0e22; transition: transform .08s; }
-#crosshair.hit { background: #ff5470; transform: scale(2); }
-#crosshair.lowered { opacity: .22; }
-#prompt { position: absolute; top: 62%; left: 50%; transform: translateX(-50%); padding: 6px 14px; background: rgba(10, 14, 34, .6); font-size: 17px; white-space: nowrap; }
+#draw-ring { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; border: 1.5px solid rgba(255, 255, 255, .75); border-radius: 50%; box-shadow: 0 0 0 1px rgba(10, 14, 34, .35); }
+#draw-ring.full { border-color: #ff8fa0; }
 
 .bar { height: 12px; background: rgba(10, 14, 34, .65); border: 1px solid rgba(238, 241, 255, .4); }
 .bar i { display: block; height: 100%; width: 100%; }
-#vitals { position: absolute; left: 26px; bottom: 26px; width: min(280px, 42vw); display: grid; gap: 5px; }
-.hp i { background: #d0304f; }
+#vitals { position: absolute; left: 26px; bottom: 26px; width: min(220px, 42vw); display: grid; gap: 5px; }
+#weapon { position: absolute; right: 28px; bottom: 20px; text-align: right; font-size: 30px; text-shadow: 0 1px 4px #0a0e22; }
+#weapon small { display: block; font-size: 14px; letter-spacing: .05em; opacity: .85; }
+#weapon small b { color: #ffc2cc; font-weight: 400; }
 .stamina { height: 6px; }
 .stamina i { background: #b9c8f2; }
-#ammo { position: absolute; right: 28px; bottom: 20px; text-align: right; text-shadow: 0 1px 4px #0a0e22; }
-#ammo small { display: block; font-size: 15px; letter-spacing: .05em; opacity: .85; }
-#scope { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at center, transparent 0 min(38vh, 42vw), #05070f min(38.4vh, 42.4vw)), linear-gradient(#05070f, #05070f) center / 1px 76vh no-repeat, linear-gradient(#05070f, #05070f) center / 76vh 1px no-repeat; }
-#ammo b { font-size: 44px; font-weight: 400; }
-#ammo span { margin-left: 6px; font-size: 18px; opacity: .75; }
-#boss { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); width: min(560px, 78vw); text-align: center; text-shadow: 0 1px 4px #0a0e22; }
-#boss label { display: block; margin-bottom: 4px; font-size: 16px; letter-spacing: .12em; }
-#boss .bar i { background: #6fd2ff; }
 
 #subtitle { position: fixed; left: 50%; bottom: 16%; width: min(820px, 90vw); transform: translateX(-50%); text-align: center; pointer-events: none; font-size: clamp(20px, 3.2vw, 34px); color: #fff0f0; text-shadow: 0 0 2px #5a0614, 0 0 8px #d21f3f, 0 0 16px #d21f3f; opacity: 0; transition: opacity .25s; }
 #subtitle.on { opacity: 1; }
@@ -37,14 +24,13 @@ html, body { height: 100%; overflow: hidden; background: #2b3552; color: #eef1ff
 #title { align-items: flex-end; padding-right: 5vw; text-align: right; background: linear-gradient(270deg, rgba(16, 21, 44, .78), rgba(16, 21, 44, 0) 72%); }
 #title .keys { justify-content: flex-end; max-width: 520px; }
 .screen { overflow-y: auto; }
-.loadout { display: grid; grid-template-columns: minmax(170px, 210px) minmax(170px, 230px); gap: 16px; text-align: left; }
+.loadout { display: grid; grid-template-columns: minmax(190px, 240px); gap: 16px; text-align: left; }
 .loadout h3 { margin-bottom: 6px; font-size: 15px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; color: #ffc2cc; }
 .loadout .option { display: block; width: 100%; margin-bottom: 5px; padding: 6px 10px; font-size: 15px; text-align: left; background: rgba(16, 21, 44, .72); border-color: rgba(238, 241, 255, .28); }
 .loadout .option span { display: block; font-size: 12px; opacity: .74; }
 .loadout .option[aria-pressed="true"] { background: #8e1b35; border-color: #ffb3bf; }
 .loadout .option:hover, .loadout .option:focus-visible { background: #6e1a33; }
 .loadout .option[aria-pressed="true"]:hover { background: #a02140; }
-@media (max-width: 640px) { .loadout { grid-template-columns: 1fr; } }
 .credit { font-size: 12px; opacity: .7; }
 .title-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 button.secondary { background: rgba(16, 21, 44, .78); border-color: rgba(238, 241, 255, .45); }

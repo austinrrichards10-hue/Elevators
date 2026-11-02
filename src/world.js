@@ -1,18 +1,24 @@
 // Terrain, forest, sky, fog, landmarks and falling snow.
-const WORLD_RADIUS = 100;
+const WORLD_RADIUS = 1000;
 const FOG_COLOR = 0x98a5c2;
 const FOG_DENSITY = 0.0275;
-const FOREST_RADIUS = 135;
-const CHUNK_SIZE = 44;
-const DRAW_DISTANCE = 80;
+const FOREST_RADIUS = WORLD_RADIUS + 35;
+// The map is too big to build at once, so terrain and forest are built in square tiles
+// around the player and thrown away once she has moved on.
+const TILE = 64;
+const TILE_SEGMENTS = 48;
+const LOAD_RADIUS = 125;
+const UNLOAD_RADIUS = 175;
 
 const worldUniforms = { uTime: { value: 0 } };
 
 const LANDMARKS = {
-  start: { x: 0, z: 76 },
-  wards: [{ x: -52, z: 26 }, { x: 54, z: 18 }, { x: 4, z: -18 }],
-  altar: { x: 0, z: -70 },
+  start: { x: 0, z: 760 },
+  altar: { x: 0, z: -700 },
 };
+
+// Landmarks that block movement. The tile they stand in adds them with its own colliders.
+const LANDMARK_COLLIDERS = [{ x: LANDMARKS.altar.x, z: LANDMARKS.altar.z, r: 2.6, h: 4 }];
 
 // Height fog: the same density curve for every material, thickest near the ground.
 THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\nvarying float vFogDepth;\nvarying float vFogHeight;\n#endif';
@@ -43,11 +49,13 @@ function valueNoise(x, z) {
   return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
 }
 
-const FLAT_SPOTS = [[LANDMARKS.start, 9, 24], ...LANDMARKS.wards.map((w) => [w, 8, 22]), [LANDMARKS.altar, 26, 42]];
+const FLAT_SPOTS = [[LANDMARKS.start, 9, 24], [LANDMARKS.altar, 26, 42]];
 
 function groundHeight(x, z) {
   const ridge = 1 - Math.abs(valueNoise(x / 46 + 3.1, z / 46 + 9.2));
-  let h = 6.2 * valueNoise(x / 72, z / 72)
+  // Broad hills and valleys across the whole map, under the local bumps.
+  let h = 16 * valueNoise(x / 380 - 5.3, z / 380 + 2.2)
+    + 6.2 * valueNoise(x / 72, z / 72)
     + 2.6 * valueNoise(x / 31 + 11.4, z / 31 - 7.3)
     + 4.2 * ridge * ridge - 1.7
     + 0.62 * valueNoise(x / 11 - 4.2, z / 11 + 2.6)
@@ -62,14 +70,22 @@ function groundHeight(x, z) {
   return h;
 }
 
-// Colliders are bucketed by cell so movement only tests what is nearby.
+// Colliders are bucketed by cell so movement only tests what is nearby. A tile owns the
+// cells inside it, so they go when the tile does. `h` is how tall the obstacle stands.
 const colliders = new Map();
 const CELL = 8;
 
-function addCollider(x, z, r) {
+function addCollider(x, z, r, h = 3) {
   const key = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
   if (!colliders.has(key)) colliders.set(key, []);
-  colliders.get(key).push({ x, z, r });
+  colliders.get(key).push({ x, z, r, h });
+}
+
+function clearTileColliders(tx, tz) {
+  const per = TILE / CELL;
+  for (let i = 0; i < per; i++) {
+    for (let j = 0; j < per; j++) colliders.delete(`${tx * per + i},${tz * per + j}`);
+  }
 }
 
 function nearbyColliders(x, z) {
@@ -319,79 +335,84 @@ function swayMaterial(params) {
 }
 
 /* ---------- Forest ---------- */
-const chunks = [];
 const weatherMaterials = [];
 
-// Splits instances into grid cells so whole cells can be culled.
-function addInstances(scene, geometry, material, placements, castShadow, tints) {
-  const cells = new Map();
-  placements.forEach((p, i) => {
-    const key = `${Math.floor(p.x / CHUNK_SIZE)},${Math.floor(p.z / CHUNK_SIZE)}`;
-    if (!cells.has(key)) cells.set(key, []);
-    cells.get(key).push(i);
-  });
-  const m = new THREE.Object3D();
-  for (const [key, indices] of cells) {
-    const mesh = new THREE.InstancedMesh(geometry, material, indices.length);
-    indices.forEach((index, n) => {
-      const p = placements[index];
-      m.position.set(p.x, p.y, p.z);
-      m.rotation.set(p.rx || 0, p.ry || 0, p.rz || 0);
-      m.scale.set(p.sx, p.sy, p.sz);
-      m.updateMatrix();
-      mesh.setMatrixAt(n, m.matrix);
-      if (tints) mesh.setColorAt(n, p.tint);
-    });
-    mesh.computeBoundingSphere();
-    mesh.castShadow = castShadow;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    const [cx, cz] = key.split(',').map(Number);
-    chunks.push({ mesh, x: (cx + 0.5) * CHUNK_SIZE, z: (cz + 0.5) * CHUNK_SIZE });
-  }
-}
-
 function inClearing(x, z, extra = 0) {
-  const clear = [[LANDMARKS.start, 7], ...LANDMARKS.wards.map((w) => [w, 7.5]), [LANDMARKS.altar, 24]];
+  const clear = [[LANDMARKS.start, 7], [LANDMARKS.altar, 24]];
   return clear.some(([p, r]) => Math.hypot(x - p.x, z - p.z) < r + extra);
 }
 
-function buildForest(scene) {
-  const rand = seededRandom(1234);
+// Shared tree, shrub, rock and log shapes and materials. Every tile reuses them.
+function buildForestKit() {
   const barkMat = new THREE.MeshStandardMaterial({ map: TEX.bark.color, normalMap: TEX.bark.normal, roughness: 0.95, vertexColors: true });
   const birchMat = new THREE.MeshStandardMaterial({ map: TEX.birch.color, normalMap: TEX.birch.normal, roughness: 0.85, vertexColors: true });
   const foliage = (map) => swayMaterial({ map, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.92, vertexColors: true, envMapIntensity: 0.85 });
   const greenMat = foliage(TEX.boughGreen);
   const snowyMat = foliage(TEX.boughSnowy);
+  return {
+    species: [
+      { weight: 0.3, geo: buildConifer(1, { height: 11.5, radius: 3, whorls: 15, perWhorl: 5, bare: 0.1, droop: 0.42, trunk: 0.27 }), height: 11.5, leaves: greenMat, bark: barkMat, collide: 0.36, size: [0.75, 1.45], tint: [0.8, 1.05] },
+      { weight: 0.2, geo: buildConifer(2, { height: 15, radius: 2.1, whorls: 19, perWhorl: 4, bare: 0.12, droop: 0.72, trunk: 0.25 }), height: 15, leaves: greenMat, bark: barkMat, collide: 0.33, size: [0.8, 1.4], tint: [0.65, 0.95] },
+      { weight: 0.1, geo: buildConifer(3, { height: 17, radius: 3.5, whorls: 9, perWhorl: 5, bare: 0.58, droop: 0.2, trunk: 0.34 }), height: 17, leaves: greenMat, bark: barkMat, collide: 0.44, size: [0.85, 1.3], tint: [0.9, 1.15] },
+      { weight: 0.14, geo: buildConifer(4, { height: 4.6, radius: 1.5, whorls: 9, perWhorl: 4, bare: 0.08, droop: 0.5, trunk: 0.09 }), height: 4.6, leaves: greenMat, bark: barkMat, collide: 0.14, size: [0.6, 1.5], tint: [0.9, 1.2] },
+      { weight: 0.17, geo: buildConifer(5, { height: 9.5, radius: 2.5, whorls: 12, perWhorl: 5, bare: 0.08, droop: 0.82, trunk: 0.22 }), height: 9.5, leaves: snowyMat, bark: barkMat, collide: 0.3, size: [0.7, 1.4], tint: [0.9, 1.05] },
+      { weight: 0.05, geo: buildBareTree(6, 12, 0.26, 11), height: 12, leaves: null, bark: barkMat, collide: 0.33, size: [0.7, 1.2], tint: [0.6, 0.95] },
+      { weight: 0.04, geo: buildBareTree(7, 11, 0.16, 15), height: 11, leaves: null, bark: birchMat, collide: 0.22, size: [0.8, 1.25], tint: [0.85, 1.05] },
+    ],
+    shrubs: [{ geo: buildShrub(201), mat: snowyMat }, { geo: buildShrub(202), mat: greenMat }],
+    rock: buildRock(),
+    stoneMat: new THREE.MeshStandardMaterial({ map: TEX.stone.color, normalMap: TEX.stone.normal, roughness: 0.92, vertexColors: true }),
+    log: buildLog(),
+    barkMat,
+  };
+}
 
-  const species = [
-    { weight: 0.3, geo: buildConifer(1, { height: 11.5, radius: 3, whorls: 15, perWhorl: 5, bare: 0.1, droop: 0.42, trunk: 0.27 }), leaves: greenMat, bark: barkMat, collide: 0.36, size: [0.75, 1.45], tint: [0.8, 1.05] },
-    { weight: 0.2, geo: buildConifer(2, { height: 15, radius: 2.1, whorls: 19, perWhorl: 4, bare: 0.12, droop: 0.72, trunk: 0.25 }), leaves: greenMat, bark: barkMat, collide: 0.33, size: [0.8, 1.4], tint: [0.65, 0.95] },
-    { weight: 0.1, geo: buildConifer(3, { height: 17, radius: 3.5, whorls: 9, perWhorl: 5, bare: 0.58, droop: 0.2, trunk: 0.34 }), leaves: greenMat, bark: barkMat, collide: 0.44, size: [0.85, 1.3], tint: [0.9, 1.15] },
-    { weight: 0.14, geo: buildConifer(4, { height: 4.6, radius: 1.5, whorls: 9, perWhorl: 4, bare: 0.08, droop: 0.5, trunk: 0.09 }), leaves: greenMat, bark: barkMat, collide: 0.14, size: [0.6, 1.5], tint: [0.9, 1.2] },
-    { weight: 0.17, geo: buildConifer(5, { height: 9.5, radius: 2.5, whorls: 12, perWhorl: 5, bare: 0.08, droop: 0.82, trunk: 0.22 }), leaves: snowyMat, bark: barkMat, collide: 0.3, size: [0.7, 1.4], tint: [0.9, 1.05] },
-    { weight: 0.05, geo: buildBareTree(6, 12, 0.26, 11), leaves: null, bark: barkMat, collide: 0.33, size: [0.7, 1.2], tint: [0.6, 0.95] },
-    { weight: 0.04, geo: buildBareTree(7, 11, 0.16, 15), leaves: null, bark: birchMat, collide: 0.22, size: [0.8, 1.25], tint: [0.85, 1.05] },
-  ];
-  for (const s of species) s.placements = [];
+function makeInstances(geometry, material, placements, castShadow, tints) {
+  if (!placements.length) return null;
+  const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
+  const m = new THREE.Object3D();
+  placements.forEach((p, n) => {
+    m.position.set(p.x, p.y, p.z);
+    m.rotation.set(p.rx || 0, p.ry || 0, p.rz || 0);
+    m.scale.set(p.sx, p.sy, p.sz);
+    m.updateMatrix();
+    mesh.setMatrixAt(n, m.matrix);
+    if (tints) mesh.setColorAt(n, p.tint);
+  });
+  mesh.computeBoundingSphere();
+  mesh.castShadow = castShadow;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+// Fills one tile with trees, undergrowth, rocks and logs. The same tile always grows the
+// same way, so a tile that is thrown away and built again looks unchanged.
+function plantTile(kit, tx, tz) {
+  const rand = seededRandom(Math.imul(tx, 92837111) ^ Math.imul(tz, 689287499) ^ 1234);
+  const x0 = tx * TILE, z0 = tz * TILE;
+  const inForest = (x, z) => Math.hypot(x, z) < FOREST_RADIUS;
+  // Fractional counts round up or down at random, so the average density holds.
+  const amount = (n) => Math.floor(n + rand());
+  const meshes = [];
+  for (const c of LANDMARK_COLLIDERS) {
+    if (Math.floor(c.x / TILE) === tx && Math.floor(c.z / TILE) === tz) addCollider(c.x, c.z, c.r, c.h);
+  }
+  const add = (mesh) => { if (mesh) meshes.push(mesh); };
 
   // Spacing grid keeps trunks apart; clump noise leaves thick stands and small glades.
   const occupied = new Set();
   const clump = (x, z) => 0.5 + 0.28 * Math.sin(x * 0.083 + 2) * Math.cos(z * 0.071) + 0.22 * Math.sin((x + z) * 0.031);
-  let placed = 0;
-  const target = 2600;
-  for (let attempt = 0; attempt < 30000 && placed < target; attempt++) {
-    const angle = rand() * Math.PI * 2;
-    const r = Math.sqrt(rand()) * FOREST_RADIUS;
-    const x = Math.cos(angle) * r, z = Math.sin(angle) * r;
-    if (inClearing(x, z) || rand() > clump(x, z) + 0.28) continue;
+  for (const s of kit.species) s.placements = [];
+  for (let attempt = 0; attempt < 250; attempt++) {
+    const x = x0 + rand() * TILE, z = z0 + rand() * TILE;
+    if (!inForest(x, z) || inClearing(x, z) || rand() > clump(x, z) + 0.28) continue;
     const key = `${Math.floor(x / 1.9)},${Math.floor(z / 1.9)}`;
     if (occupied.has(key)) continue;
     occupied.add(key);
 
     let pick = rand();
-    let kind = species[0];
-    for (const s of species) { pick -= s.weight; if (pick <= 0) { kind = s; break; } }
+    let kind = kit.species[0];
+    for (const s of kit.species) { pick -= s.weight; if (pick <= 0) { kind = s; break; } }
     const s = lerp(kind.size[0], kind.size[1], rand());
     const shade = lerp(kind.tint[0], kind.tint[1], rand());
     kind.placements.push({
@@ -403,95 +424,136 @@ function buildForest(scene) {
       sx: s, sy: s * (0.88 + rand() * 0.3), sz: s,
       tint: new THREE.Color(shade * (0.94 + rand() * 0.1), shade, shade * (0.94 + rand() * 0.12)),
     });
-    addCollider(x, z, kind.collide * s);
-    placed++;
+    addCollider(x, z, kind.collide * s, kind.height * s);
   }
-  for (const kind of species) {
-    addInstances(scene, kind.geo.bark, kind.bark, kind.placements, true, true);
-    if (kind.leaves) addInstances(scene, kind.geo.boughs, kind.leaves, kind.placements, true, true);
+  for (const kind of kit.species) {
+    add(makeInstances(kind.geo.bark, kind.bark, kind.placements, true, true));
+    if (kind.leaves) add(makeInstances(kind.geo.boughs, kind.leaves, kind.placements, true, true));
   }
 
-  const scatter = (count, build) => {
+  // Scattered props keep `margin` metres from the tile edge.
+  const scatter = (count, build, margin = 0) => {
     const list = [];
-    while (list.length < count) {
-      const angle = rand() * Math.PI * 2;
-      const r = Math.sqrt(rand()) * FOREST_RADIUS;
-      const x = Math.cos(angle) * r, z = Math.sin(angle) * r;
-      if (inClearing(x, z, -1)) continue;
+    for (let i = 0; i < count; i++) {
+      const x = x0 + margin + rand() * (TILE - margin * 2), z = z0 + margin + rand() * (TILE - margin * 2);
+      if (!inForest(x, z) || inClearing(x, z, -1)) continue;
       list.push(build(x, z));
     }
     return list;
   };
 
   // Undergrowth has no collision.
-  const shrubs = [buildShrub(201), buildShrub(202)];
-  shrubs.forEach((geo, i) => {
-    const list = scatter(800, (x, z) => {
+  for (const shrub of kit.shrubs) {
+    const list = scatter(amount(57), (x, z) => {
       const s = 0.6 + rand() * 1;
       return { x, z, y: groundHeight(x, z) - 0.05, ry: rand() * 6.28, sx: s, sy: s, sz: s, tint: new THREE.Color().setScalar(0.85 + rand() * 0.25) };
     });
-    addInstances(scene, geo, i === 0 ? snowyMat : greenMat, list, false, true);
-  });
+    add(makeInstances(shrub.geo, shrub.mat, list, false, true));
+  }
 
-  const stoneMat = new THREE.MeshStandardMaterial({ map: TEX.stone.color, normalMap: TEX.stone.normal, roughness: 0.92, vertexColors: true });
-  const rocks = scatter(150, (x, z) => {
+  const rocks = scatter(amount(11), (x, z) => {
     const s = 0.35 + rand() * rand() * 1.9;
-    addCollider(x, z, s * 0.8);
+    addCollider(x, z, s * 0.8, s * 0.7);
     return { x, z, y: groundHeight(x, z) + s * 0.08, rx: rand() * 0.5, ry: rand() * 6.28, rz: rand() * 0.5, sx: s, sy: s * (0.55 + rand() * 0.3), sz: s * (0.75 + rand() * 0.4) };
   });
-  const outcrops = scatter(46, (x, z) => {
+  const outcrops = scatter(amount(3.3), (x, z) => {
     const s = 2.4 + rand() * 4;
-    addCollider(x, z, s * 0.72);
+    addCollider(x, z, s * 0.72, s * 0.9);
     return { x, z, y: groundHeight(x, z) + s * 0.1, rx: rand() * 0.4, ry: rand() * 6.28, rz: rand() * 0.4, sx: s, sy: s * (0.7 + rand() * 0.55), sz: s * (0.7 + rand() * 0.4) };
   });
-  addInstances(scene, buildRock(), stoneMat, rocks.concat(outcrops), true, false);
+  add(makeInstances(kit.rock, kit.stoneMat, rocks.concat(outcrops), true, false));
 
-  const logs = scatter(55, (x, z) => {
+  // Logs keep clear of the edge so all their colliders land in this tile's cells.
+  const logs = scatter(amount(4), (x, z) => {
     const ry = rand() * 6.28;
     const s = 0.8 + rand() * 0.6;
-    for (const t of [-1.7, 0, 1.7]) addCollider(x + Math.cos(ry) * t * s, z - Math.sin(ry) * t * s, 0.34);
+    for (const t of [-1.7, 0, 1.7]) addCollider(x + Math.cos(ry) * t * s, z - Math.sin(ry) * t * s, 0.34, 0.6);
     return { x, z, y: groundHeight(x, z) + 0.12, ry, rz: (rand() - 0.5) * 0.08, sx: s, sy: 1, sz: 1 };
-  });
-  addInstances(scene, buildLog(), barkMat, logs, true, false);
+  }, 3);
+  add(makeInstances(kit.log, kit.barkMat, logs, true, false));
+  return meshes;
 }
 
 /* ---------- Terrain ---------- */
-function buildTerrain(scene) {
-  const geo = new THREE.PlaneGeometry(330, 330, 270, 270);
+function buildTerrainTile(x0, z0, material) {
+  const geo = new THREE.PlaneGeometry(TILE, TILE, TILE_SEGMENTS, TILE_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position;
+  const pos = geo.attributes.position, nrm = geo.attributes.normal, uv = geo.attributes.uv;
   const colors = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i);
+    const x = pos.getX(i) + x0 + TILE / 2, z = pos.getZ(i) + z0 + TILE / 2;
     const y = groundHeight(x, z);
-    pos.setY(i, y);
+    pos.setXYZ(i, x, y, z);
+    // Normals and texture come from world position, so neighbouring tiles meet seamlessly.
+    const dx = groundHeight(x + 1, z) - y, dz = groundHeight(x, z + 1) - y;
+    const len = Math.hypot(dx, 1, dz);
+    nrm.setXYZ(i, -dx / len, 1 / len, -dz / len);
+    uv.setXY(i, x / 330, -z / 330);
     // Hollows hold bluer shade; steep faces show bare rock through the snow.
     const tone = THREE.MathUtils.clamp(0.92 + y * 0.012, 0.8, 1);
-    const slope = Math.hypot(groundHeight(x + 1, z) - y, groundHeight(x, z + 1) - y);
+    const slope = Math.hypot(dx, dz);
     const patch = 0.5 + 0.5 * valueNoise(x / 5.5, z / 5.5);
     const rock = THREE.MathUtils.smoothstep(slope + patch * 0.16, 0.5, 0.74);
     colors.set([lerp(tone * 0.96, 0.27, rock), lerp(tone * 0.98, 0.29, rock), lerp(1, 0.35, rock)], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+  geo.computeBoundingSphere();
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function createTiles(scene) {
+  const kit = buildForestKit();
+  const terrainMat = new THREE.MeshStandardMaterial({
     map: TEX.snow.color,
     normalMap: TEX.snow.normal,
     normalScale: new THREE.Vector2(0.75, 0.75),
     roughnessMap: TEX.snow.rough,
     vertexColors: true,
-  }));
-  mesh.receiveShadow = true;
-  scene.add(mesh);
+  });
+  const tiles = new Map();
+  const distance = (tx, tz, focus) => Math.hypot((tx + 0.5) * TILE - focus.x, (tz + 0.5) * TILE - focus.z);
+
+  const build = (tx, tz) => {
+    const meshes = [buildTerrainTile(tx * TILE, tz * TILE, terrainMat), ...plantTile(kit, tx, tz)];
+    for (const mesh of meshes) scene.add(mesh);
+    tiles.set(`${tx},${tz}`, { tx, tz, meshes });
+  };
+  const drop = (key, tile) => {
+    for (const mesh of tile.meshes) {
+      scene.remove(mesh);
+      if (mesh.isInstancedMesh) mesh.dispose(); else mesh.geometry.dispose();
+    }
+    clearTileColliders(tile.tx, tile.tz);
+    tiles.delete(key);
+  };
+
+  // Builds the nearest missing tiles, at most `budget` of them, and drops far ones.
+  return (focus, budget) => {
+    const ftx = Math.floor(focus.x / TILE), ftz = Math.floor(focus.z / TILE);
+    const reach = Math.ceil(LOAD_RADIUS / TILE);
+    const wanted = [];
+    for (let i = -reach; i <= reach; i++) {
+      for (let j = -reach; j <= reach; j++) {
+        const tx = ftx + i, tz = ftz + j;
+        const d = distance(tx, tz, focus);
+        if (d < LOAD_RADIUS && !tiles.has(`${tx},${tz}`)) wanted.push({ tx, tz, d });
+      }
+    }
+    wanted.sort((a, b) => a.d - b.d);
+    for (const { tx, tz } of wanted.slice(0, budget)) build(tx, tz);
+    for (const [key, tile] of tiles) if (distance(tile.tx, tile.tz, focus) > UNLOAD_RADIUS) drop(key, tile);
+  };
 }
 
 /* ---------- Mountains ---------- */
-// Rocky peaks past the playable area. They ignore the scene fog and use their own
-// distance haze, so they stay visible above the trees.
+// Rocky peaks past the playable area, scaled with it. They ignore the scene fog and use
+// their own distance haze, so they stay visible above the trees.
 function mountainHeight(r, angle) {
   const x = Math.cos(angle) * r, z = Math.sin(angle) * r;
-  const envelope = THREE.MathUtils.smoothstep(r, 165, 245) * (1 - 0.55 * THREE.MathUtils.smoothstep(r, 390, 560));
-  let height = 0, amp = 1, freq = 1 / 92, weight = 1;
+  const envelope = THREE.MathUtils.smoothstep(r, 1650, 2450) * (1 - 0.55 * THREE.MathUtils.smoothstep(r, 3900, 5600));
+  let height = 0, amp = 1, freq = 1 / 920, weight = 1;
   for (let i = 0; i < 6; i++) {
     const n = 1 - Math.abs(valueNoise(x * freq + i * 17.3, z * freq - i * 9.1));
     const ridge = n * n * weight;
@@ -500,13 +562,13 @@ function mountainHeight(r, angle) {
     amp *= 0.5;
     freq *= 2.05;
   }
-  return envelope * (32 + height * 215) - 8;
+  return envelope * (320 + height * 2150) - 80;
 }
 
 function buildMountains(scene) {
   const segments = 460, rings = 56;
   const positions = [], colors = [];
-  const ringRadius = (j) => 165 * Math.pow(600 / 165, j / rings);
+  const ringRadius = (j) => 1650 * Math.pow(6000 / 1650, j / rings);
   const point = (i, j) => {
     const angle = (i / segments) * Math.PI * 2, r = ringRadius(j);
     return new THREE.Vector3(Math.cos(angle) * r, mountainHeight(r, angle), Math.sin(angle) * r);
@@ -524,8 +586,8 @@ function buildMountains(scene) {
     if (n.y < 0) n.negate();
     const height = (a.y + b.y + c.y) / 3;
     // Snow only holds on gentler faces; steep ones stay bare rock.
-    const grit = 0.5 + 0.5 * valueNoise(a.x / 13, a.z / 13);
-    const snowLine = THREE.MathUtils.smoothstep(height + grit * 26, 18, 56);
+    const grit = 0.5 + 0.5 * valueNoise(a.x / 130, a.z / 130);
+    const snowLine = THREE.MathUtils.smoothstep(height + grit * 260, 180, 560);
     const snow = THREE.MathUtils.smoothstep(n.y + grit * 0.14, 0.36, 0.56) * snowLine;
     const rockTone = 0.1 + grit * 0.07;
     const r = lerp(rockTone, 0.86, snow), g = lerp(rockTone * 1.04, 0.9, snow), bl = lerp(rockTone * 1.2, 1, snow);
@@ -556,8 +618,8 @@ function buildMountains(scene) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', 'uniform vec3 uHaze;\nvarying float vPeakY;\n#include <common>')
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
-        float hazeAmount = 1.0 - exp(-length(vViewPosition) * 0.0015);
-        hazeAmount = max(hazeAmount, 1.0 - smoothstep(0.0, 46.0, vPeakY));
+        float hazeAmount = 1.0 - exp(-length(vViewPosition) * 0.00015);
+        hazeAmount = max(hazeAmount, 1.0 - smoothstep(0.0, 460.0, vPeakY));
         gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, hazeAmount);`);
   };
   const mesh = new THREE.Mesh(geo, material);
@@ -566,75 +628,8 @@ function buildMountains(scene) {
 }
 
 /* ---------- Landmarks ---------- */
-function makeBeam(color) {
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 1.1, 80, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color, map: TEX.beam, transparent: true, opacity: 0.32, fog: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
-  );
-  beam.position.y = 40;
-  return beam;
-}
-
 function stoneMaterial() {
   return new THREE.MeshStandardMaterial({ map: TEX.stone.color, normalMap: TEX.stone.normal, roughness: 0.9 });
-}
-
-function buildFire() {
-  const count = 46;
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const points = new THREE.Points(geo, new THREE.PointsMaterial({
-    size: 0.85, map: TEX.softDot, vertexColors: true, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
-  }));
-  points.frustumCulled = false;
-  const seeds = Array.from({ length: count }, () => ({ t: Math.random(), x: (Math.random() - 0.5) * 0.7, z: (Math.random() - 0.5) * 0.7, s: 0.8 + Math.random() * 0.8 }));
-  points.tick = (dt) => {
-    seeds.forEach((p, i) => {
-      p.t = (p.t + dt * p.s) % 1;
-      const narrow = 1 - p.t * 0.85;
-      positions.set([p.x * narrow + Math.sin(p.t * 9 + i) * 0.05, p.t * 1.9, p.z * narrow], i * 3);
-      const heat = 1 - p.t;
-      colors.set([2.8 * heat, 1.05 * heat * heat, 0.22 * heat * heat * heat], i * 3);
-    });
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.color.needsUpdate = true;
-  };
-  return points;
-}
-
-function buildWard(scene, spot) {
-  const group = new THREE.Group();
-  group.position.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
-  const stone = stoneMaterial();
-  const iron = new THREE.MeshStandardMaterial({ color: 0x24252d, metalness: 0.85, roughness: 0.55, normalMap: TEX.stone.normal });
-  const parts = [
-    [new THREE.CylinderGeometry(1, 1.3, 0.5, 14), stone, 0.22],
-    [new THREE.CylinderGeometry(0.2, 0.3, 1.25, 10), iron, 1.05],
-    [new THREE.CylinderGeometry(0.78, 0.3, 0.42, 16), iron, 1.82],
-    [new THREE.TorusGeometry(0.78, 0.045, 8, 22).rotateX(Math.PI / 2), iron, 2.03],
-  ];
-  for (const [geo, material, y] of parts) {
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.position.y = y;
-    mesh.castShadow = mesh.receiveShadow = true;
-    group.add(mesh);
-  }
-
-  const flame = buildFire();
-  flame.position.y = 2;
-  flame.visible = false;
-  group.add(flame);
-
-  const light = new THREE.PointLight(0xff8a48, 0, 28, 1.7);
-  light.position.y = 3;
-  const beam = makeBeam(0xd5e2ff);
-  group.add(light, beam);
-  scene.add(group);
-  addCollider(spot.x, spot.z, 1.3);
-  return { x: spot.x, z: spot.z, lit: false, progress: 0, flame, light, beam };
 }
 
 function buildAltar(scene) {
@@ -668,12 +663,8 @@ function buildAltar(scene) {
   blade.position.y = 3;
   group.add(blade);
 
-  const beam = makeBeam(0x8fdcff);
-  beam.visible = false;
-  group.add(beam);
   scene.add(group);
-  addCollider(x, z, 2.6);
-  return { x, z, group, ice, blade, beam };
+  return { x, z, group, ice, blade };
 }
 
 /* ---------- Weather ---------- */
@@ -754,19 +745,21 @@ function buildWorld(renderer, scene) {
   const sunOffset = new THREE.Vector3(-0.42, 0.72, 0.55).normalize().multiplyScalar(85);
 
   buildMountains(scene);
-  buildTerrain(scene);
-  buildForest(scene);
+  const streamTiles = createTiles(scene);
+  streamTiles(LANDMARKS.start, Infinity);
   const updateSnow = buildSnow(scene);
   const updateMist = buildMist(scene);
-  const wards = LANDMARKS.wards.map((spot) => buildWard(scene, spot));
   const altar = buildAltar(scene);
 
-  let cullTimer = 0;
   return {
-    wards,
     altar,
     setWeather(visible) {
       for (const material of weatherMaterials) material.visible = visible;
+    },
+    // Builds the tiles around `focus`: one per call while moving, or all at once after a
+    // jump such as a teleport.
+    stream(focus, budget = 1) {
+      streamTiles(focus, budget);
     },
     update(dt, time, cameraPos, focus) {
       worldUniforms.uTime.value = time;
@@ -775,15 +768,7 @@ function buildWorld(renderer, scene) {
       sun.target.position.copy(focus);
       updateSnow(dt, time, cameraPos);
       updateMist(dt, focus);
-      for (const ward of wards) if (ward.lit) ward.flame.tick(dt);
-
-      cullTimer -= dt;
-      if (cullTimer <= 0) {
-        cullTimer = 0.4;
-        for (const chunk of chunks) {
-          chunk.mesh.visible = Math.hypot(chunk.x - cameraPos.x, chunk.z - cameraPos.z) < DRAW_DISTANCE;
-        }
-      }
+      altar.blade.position.y = 3 + Math.sin(time * 1.4) * 0.06;
     },
   };
 }
