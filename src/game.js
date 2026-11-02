@@ -12,6 +12,7 @@ renderer.toneMapping = THREE.NoToneMapping;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 1100);
 const world = buildWorld(renderer, scene);
+const bedroom = buildBedroom(scene);
 const pipeline = createPipeline(renderer, scene, camera);
 addEventListener('resize', pipeline.resize);
 pipeline.resize();
@@ -103,8 +104,36 @@ let gunId = GUNS[saved.gun] ? saved.gun : 'pistol';
 let avatar = null;
 let gunModel = null;
 
+// The forest is the full game; the bedroom is a calm space with no monsters or weapons.
+const MAPS = {
+  forest: { name: 'Snow Forest', note: 'Wardfires, ghouls and the Hollow King' },
+  bedroom: { name: 'Pink Bedroom', note: 'A cozy room. No monsters, no guns' },
+};
+const MAP_ORDER = ['forest', 'bedroom'];
+let mapId = MAPS[saved.map] ? saved.map : 'forest';
+const indoors = () => mapId === 'bedroom';
+// Weapons stay put away indoors, except in the character room where the gun can be inspected.
+const unarmed = () => indoors() && game.state !== 'room';
+
 function saveLoadout() {
-  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, gun: gunId, muted: Sfx.muted })); } catch { /* storage is optional */ }
+  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, gun: gunId, map: mapId, muted: Sfx.muted })); } catch { /* storage is optional */ }
+}
+
+function setMap(id) {
+  mapId = id;
+  const inside = indoors();
+  bedroom.setActive(inside);
+  world.setWeather(!inside);
+  setFloorOverride(inside ? bedroom.floorY : null);
+  if (inside) player.pos.copy(bedroom.spawn);
+  else player.pos.set(LANDMARKS.start.x, groundHeight(LANDMARKS.start.x, LANDMARKS.start.z), LANDMARKS.start.z);
+  $('hud').classList.toggle('unarmed', inside);
+  $('tag').textContent = inside ? 'Home. Warm, quiet, and nothing out there can get in.' : 'The forest froze the night the king stopped dying.';
+  $('start').textContent = inside ? 'Enter the bedroom' : 'Enter the forest';
+  player.reload = null;
+  if (avatar) avatar.reset();
+  saveLoadout();
+  renderLoadout();
 }
 
 function renderMute() {
@@ -146,9 +175,15 @@ function setSkin(id) {
 
 function renderLoadout() {
   const option = (kind, id, entry, selected) => `<button class="option" data-${kind}="${id}" aria-pressed="${selected}">${entry.name}<span>${entry.note}</span></button>`;
+  const weapons = indoors()
+    ? '<p class="loadout-note">Weapons are put away in the bedroom.</p>'
+    : GUN_ORDER.map((id) => option('gun', id, GUNS[id], id === gunId)).join('');
   const html = `<div><h3>Skin</h3>${SKIN_ORDER.map((id) => option('skin', id, SKINS[id], id === skinId)).join('')}</div>`
-    + `<div><h3>Weapon</h3>${GUN_ORDER.map((id) => option('gun', id, GUNS[id], id === gunId)).join('')}</div>`;
+    + `<div><h3>Weapon</h3>${weapons}</div>`;
   document.querySelectorAll('.loadout').forEach((el) => { el.innerHTML = html; });
+  document.querySelectorAll('.map-select').forEach((el) => {
+    el.innerHTML = `<h3>Map</h3><div class="maps">${MAP_ORDER.map((id) => option('map', id, MAPS[id], id === mapId)).join('')}</div>`;
+  });
 }
 
 document.addEventListener('click', (e) => {
@@ -157,6 +192,7 @@ document.addEventListener('click', (e) => {
   if (!button) return;
   if (button.dataset.skin && button.dataset.skin !== skinId) { setSkin(button.dataset.skin); saveLoadout(); renderLoadout(); }
   if (button.dataset.gun && button.dataset.gun !== gunId) { equipGun(button.dataset.gun); Sfx.swap(); poseAvatar(1 / 60, new THREE.Vector3(), false); }
+  if (button.dataset.map && button.dataset.map !== mapId) setMap(button.dataset.map);
 });
 
 /* ---------- Input ---------- */
@@ -172,9 +208,10 @@ addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
   if (game.state !== 'playing') return;
-  if (e.code === 'KeyR') startReload();
   if (e.code === 'Space') startDodge();
   if (e.code === 'KeyP') setPaused(true);
+  if (unarmed()) return;
+  if (e.code === 'KeyR') startReload();
   const slot = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
   if (slot >= 0 && GUN_ORDER[slot] !== gunId) { equipGun(GUN_ORDER[slot]); Sfx.swap(); }
 });
@@ -184,6 +221,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousedown', (e) => {
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
+  if (unarmed()) return;
   if (e.button === 0) { firing = true; triggerBuffered = true; tryFire(); }
   if (e.button === 2) aiming = true;
 });
@@ -222,6 +260,10 @@ $('start').addEventListener('click', () => {
   game.state = 'playing';
   player.yaw = player.bodyYaw = Math.PI;
   lockPointer();
+  if (indoors()) {
+    say('Home. The snow can stay outside tonight.', 3.6);
+    return;
+  }
   say('No birds. No wind in the branches. Only the snow.', 3.6);
   say('Three wardfires still stand. Light them, and the seal will break.', 4.2);
 });
@@ -546,11 +588,14 @@ function updatePlayer(dt) {
     player.cycle.t += dt;
     if (player.cycle.t >= player.cycle.dur) player.cycle = null;
   }
+  if (unarmed()) { firing = aiming = triggerBuffered = false; }
   if ((firing && def.auto) || triggerBuffered) tryFire();
 
   const move = moveInput();
   const moving = move.lengthSq() > 0;
   const ads = aiming && !player.reload && !player.dodge;
+  // A small room needs a gentler pace than open snow.
+  const pace = indoors() ? 0.6 : 1;
   const sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && player.stamina > 1 && !player.reload && !ads && !player.dodge;
   player.sprinting = sprinting;
   // Sprinting lowers the gun; it has to come back up before she can fire again.
@@ -566,40 +611,48 @@ function updatePlayer(dt) {
     d.t += dt;
     const u = clamp(d.t / d.dur, 0, 1);
     // Bursts away, then eases into the landing.
-    const speed = lerp(13.5, 2.2, smooth(u));
+    const speed = lerp(13.5, 2.2, smooth(u)) * pace;
     player.pos.addScaledVector(d.dir, speed * dt);
     step = speed * dt * 0.4;
     if (!d.landed && u > 0.72) {
       d.landed = true;
-      burst(new THREE.Vector3(player.pos.x, player.pos.y + 0.05, player.pos.z), 0xf2f5ff, 8, 1.6);
+      if (!indoors()) burst(new THREE.Vector3(player.pos.x, player.pos.y + 0.05, player.pos.z), 0xf2f5ff, 8, 1.6);
       Sfx.thud();
     }
     if (u >= 1) player.dodge = null;
   } else if (moving) {
-    const speed = ads ? 2.6 : sprinting ? 6.9 : 4.3;
+    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * pace;
     move.normalize();
     player.pos.addScaledVector(move, speed * dt);
     step = speed * dt;
   }
-  pushOutOfColliders(player.pos, 0.34);
-
-  const r = Math.hypot(player.pos.x, player.pos.z);
-  if (r > WORLD_RADIUS) {
-    player.pos.x *= WORLD_RADIUS / r;
-    player.pos.z *= WORLD_RADIUS / r;
+  if (indoors()) {
+    bedroom.pushOut(player.pos, 0.22);
+  } else {
+    pushOutOfColliders(player.pos, 0.34);
+    const r = Math.hypot(player.pos.x, player.pos.z);
+    if (r > WORLD_RADIUS) {
+      player.pos.x *= WORLD_RADIUS / r;
+      player.pos.z *= WORLD_RADIUS / r;
+    }
   }
   player.pos.y = groundHeight(player.pos.x, player.pos.z);
 
   if (!player.dodge) {
-    player.stepDist += step;
-    if (player.stepDist > 1.1) { player.stepDist = 0; Sfx.step(); leaveFootprint(); }
+    player.stepDist += step / Math.sqrt(pace);
+    if (player.stepDist > 1.1) {
+      player.stepDist = 0;
+      Sfx.step();
+      if (!indoors()) leaveFootprint();
+    }
   }
   if (moving || player.aimT > 0 || aiming) player.bodyYaw = angleLerp(player.bodyYaw, player.yaw, 1 - Math.exp(-12 * dt));
 
   // Blend between standing and walking so the gait eases in and out.
   const stride = moving && !player.dodge ? (sprinting ? 1 : ads ? 0.42 : 0.68) : 0;
   player.stride += (stride - player.stride) * (1 - Math.exp(-9 * dt));
-  player.walkPhase += step * (sprinting ? 1.95 : 2.55) * player.gaitDir;
+  // Indoors the steps come a little quicker for the slower pace, so the gait doesn't drag.
+  player.walkPhase += (step / Math.sqrt(pace)) * (sprinting ? 1.95 : 2.55) * player.gaitDir;
   poseAvatar(dt, move, moving);
   avatar.simulate(dt);
 }
@@ -753,7 +806,24 @@ function keyedPath(t, keys, out) {
   return out.copy(keys[keys.length - 1][1]);
 }
 
+// With no gun, the arms hang loose and swing against the legs.
+function poseEmptyHands(ease) {
+  const { holder, armL, armR } = avatar;
+  holder.visible = false;
+  player.aimBlend += -player.aimBlend * ease(14);
+  const walk = Math.max(0, player.stride - player.runBlend), run = player.runBlend;
+  for (const arm of [armL, armR]) {
+    // Each arm swings back as the leg on its own side steps forward.
+    const swing = Math.sin(player.walkPhase + (arm === armL ? 0 : Math.PI));
+    arm.upper.rotation.set(swing * (0.32 * walk + 0.55 * run) - 0.04 - 0.2 * run, 0, arm.side * (0.09 + 0.06 * run));
+    arm.fore.rotation.set(-(0.22 + 0.15 * walk + 1.05 * run) - Math.max(0, -swing) * 0.25 * (walk + run), 0, 0);
+    arm.hand.quaternion.identity();
+  }
+}
+
 function poseGun(dt, ease) {
+  if (unarmed()) { poseEmptyHands(ease); return; }
+  avatar.holder.visible = game.state !== 'room' || $('room-gun').checked;
   const m = gunModel, def = GUNS[gunId];
   const { holder, chest, armL, armR } = avatar;
   const wantAim = (player.aimT > 0 || aiming) && !player.reload && !player.dodge;
@@ -899,7 +969,7 @@ function updateCamera(dt) {
   player.adsCam = (player.adsCam || 0) + (ads - (player.adsCam || 0)) * (1 - Math.exp(-13 * dt));
   const a = player.adsCam;
   const scopedView = def.scoped && a > 0.82;
-  const distance = lerp(2.55, def.scoped ? 0.9 : 1.55, a);
+  const distance = lerp(2.55, def.scoped ? 0.9 : 1.55, a) * (indoors() ? 0.78 : 1);
   const shoulder = lerp(0.56, 0.4, a);
   camera.position.set(
     player.pos.x - s * cp * distance - c * shoulder,
@@ -907,6 +977,7 @@ function updateCamera(dt) {
     player.pos.z - c * cp * distance + s * shoulder,
   );
   camera.position.y = Math.max(camera.position.y, groundHeight(camera.position.x, camera.position.z) + 0.3);
+  if (indoors()) bedroom.clampCamera(camera.position);
   if (player.shake > 0) {
     camera.position.x += (Math.random() - 0.5) * player.shake * 0.7;
     camera.position.y += (Math.random() - 0.5) * player.shake * 0.7;
@@ -1297,6 +1368,9 @@ function update(dt) {
   game.time += dt;
   updatePlayer(dt);
   updateCamera(dt);
+  updateHud();
+  // Nothing hunts her in the bedroom.
+  if (indoors()) return;
   for (const enemy of [...game.enemies]) {
     if (enemy.isBoss) updateBoss(enemy, dt);
     else updateGhoul(enemy, dt);
@@ -1305,7 +1379,6 @@ function update(dt) {
   updateDroppedMags(dt);
   updateSpawns(dt);
   updateObjectives(dt);
-  updateHud();
 }
 
 // Slow drift in front of her on the title screen, so skin and gun choices show.
@@ -1319,6 +1392,7 @@ function updateTitle(dt) {
   poseAvatar(dt, titleMove, false);
   avatar.simulate(dt);
   camera.position.set(player.pos.x - 0.72 + Math.sin(a) * 0.14, player.pos.y + 1.12, player.pos.z - 2.45);
+  if (indoors()) bedroom.clampCamera(camera.position);
   camera.lookAt(player.pos.x - 0.58, player.pos.y + 0.92, player.pos.z);
 }
 
@@ -1499,7 +1573,7 @@ function closeRoom() {
   $('room').classList.add('hidden');
   $('title').classList.remove('hidden');
   roomSet.visible = false;
-  world.setWeather(true);
+  world.setWeather(!indoors());
   Sfx.setRoomMusic(false);
   avatar.holder.visible = true;
   player.pos.copy(roomReturn);
@@ -1588,7 +1662,7 @@ function updateRoom(dt) {
 }
 
 setSkin(skinId);
-renderLoadout();
+setMap(mapId);
 
 let last = performance.now();
 function frame(now) {

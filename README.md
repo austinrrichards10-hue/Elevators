@@ -21,3 +21,5 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 ## Credits
 
 Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is embedded in `assets/characters.js`.
+
+Bedroom map: ["Pink Bedroom (MiSide)"](https://sketchfab.com/3d-models/pink-bedroom-miside-a912fef978f34d15bb2ff6f832444390) by [zHairezt](https://sketchfab.com/zHairezt), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled to metres, merged by material and with its textures resized. The file is embedded in `assets/bedroom.js`.
