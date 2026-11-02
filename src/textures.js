@@ -122,18 +122,6 @@ function stoneTextures() {
   };
 }
 
-function clothNormal() {
-  const size = 256;
-  const wrinkle = fbm(size, size, 4, 4, 3, 41);
-  const height = new Float32Array(size * size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      height[y * size + x] = wrinkle[y * size + x] * 0.8 + (Math.sin(x * 1.57) * Math.sin(y * 1.57) + 1) * 0.04;
-    }
-  }
-  return normalTexture(height, size, size, 3);
-}
-
 function canvasTexture(w, h, draw, srgb = true) {
   const canvas = document.createElement('canvas');
   canvas.width = w;
@@ -258,102 +246,6 @@ function mistTexture() {
   });
 }
 
-// A wide anime eye on a card: a large iris, dark at the top and glowing at the bottom,
-// under a heavy arched lash with a wing at the outer corner (the right of the card).
-function eyeTexture(irisTop, irisMid, irisBottom, pupil, wing) {
-  return canvasTexture(160, 128, (c, w, h) => {
-    c.save();
-    c.beginPath();
-    c.moveTo(10, 72);
-    c.bezierCurveTo(28, 22, 104, 2, 150, 58);
-    c.bezierCurveTo(138, 96, 108, 122, 72, 122);
-    c.bezierCurveTo(44, 122, 22, 102, 10, 72);
-    c.closePath();
-    c.clip();
-    c.fillStyle = '#fbfafa';
-    c.fillRect(0, 0, w, h);
-    const iris = c.createLinearGradient(0, 8, 0, 122);
-    iris.addColorStop(0, irisTop);
-    iris.addColorStop(0.48, irisMid);
-    iris.addColorStop(1, irisBottom);
-    c.fillStyle = iris;
-    c.beginPath();
-    c.ellipse(80, 66, 41, 56, 0, 0, 6.3);
-    c.fill();
-    c.strokeStyle = irisTop;
-    c.lineWidth = 3;
-    c.stroke();
-    c.fillStyle = pupil;
-    c.beginPath();
-    c.ellipse(80, 58, 19, 26, 0, 0, 6.3);
-    c.fill();
-    // Shadow cast by the lid across the top of the eye.
-    const lid = c.createLinearGradient(0, 8, 0, 52);
-    lid.addColorStop(0, 'rgba(10,18,40,0.6)');
-    lid.addColorStop(1, 'rgba(10,18,40,0)');
-    c.fillStyle = lid;
-    c.fillRect(0, 0, w, 54);
-    c.fillStyle = 'rgba(255,255,255,0.3)';
-    c.beginPath();
-    c.ellipse(80, 102, 26, 13, 0, 0, 6.3);
-    c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.98)';
-    c.beginPath();
-    c.ellipse(62, 40, 12, 14, 0.2, 0, 6.3);
-    c.fill();
-    c.beginPath();
-    c.arc(99, 88, 5, 0, 6.3);
-    c.fill();
-    c.restore();
-
-    c.lineCap = 'round';
-    c.strokeStyle = '#120e16';
-    c.lineWidth = 8;
-    c.beginPath();
-    c.moveTo(9, 74);
-    c.bezierCurveTo(28, 22, 104, 2, 150, 58);
-    c.stroke();
-    c.strokeStyle = wing;
-    c.lineWidth = 5;
-    c.beginPath();
-    c.moveTo(138, 42);
-    c.quadraticCurveTo(150, 54, 157, 72);
-    c.stroke();
-    c.strokeStyle = '#120e16';
-    c.lineWidth = 4;
-    c.beginPath();
-    c.moveTo(144, 50);
-    c.lineTo(156, 62);
-    c.stroke();
-    c.strokeStyle = 'rgba(60,40,50,0.7)';
-    c.lineWidth = 2;
-    c.beginPath();
-    c.moveTo(142, 72);
-    c.quadraticCurveTo(122, 112, 80, 123);
-    c.stroke();
-  });
-}
-
-function blushTexture() {
-  return canvasTexture(96, 64, (c, w, h) => {
-    const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
-    g.addColorStop(0, 'rgba(240,140,150,0.5)');
-    g.addColorStop(1, 'rgba(240,140,150,0)');
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
-  });
-}
-
-// Fine streaks running along the hair, tiled over the solid hair shapes.
-function hairTexture(dark, light) {
-  const w = 128, h = 128;
-  const streaks = fbm(w, h, 24, 2, 3, 81);
-  return colorTexture(w, h, (i) => {
-    const t = THREE.MathUtils.smoothstep(streaks[i], 0.28, 0.72);
-    return [lerp(dark[0], light[0], t), lerp(dark[1], light[1], t), lerp(dark[2], light[2], t)];
-  });
-}
-
 function verticalFadeTexture() {
   return canvasTexture(4, 128, (c, w, h) => {
     const g = c.createLinearGradient(0, 0, 0, h);
@@ -370,17 +262,11 @@ const TEX = {
   bark: barkTextures(false),
   birch: barkTextures(true),
   stone: stoneTextures(),
-  cloth: clothNormal(),
   boughGreen: boughTexture(61, 26, ['#10251d', '#16302a', '#1c3a2c', '#0c1d18']),
   boughSnowy: boughTexture(62, 110, ['#16302a', '#1c3a2c', '#24463a']),
   fur: furTexture(71),
   softDot: softDotTexture(),
   mist: mistTexture(),
-  eyeTeal: eyeTexture('#123a6b', '#1680a6', '#6fe6e4', '#07203a', '#7a2a35'),
-  eyeRed: eyeTexture('#4a0614', '#a31230', '#f26a72', '#22020a', '#5a1020'),
-  blush: blushTexture(),
-  hairTeal: hairTexture([92, 188, 192], [132, 224, 218]),
-  hairCrimson: hairTexture([186, 44, 84], [238, 88, 130]),
   beam: verticalFadeTexture(),
 };
 for (const t of [TEX.snow.normal, TEX.snow.rough, TEX.snow.color]) t.repeat.set(70, 70);

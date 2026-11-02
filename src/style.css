@@ -44,6 +44,7 @@ html, body { height: 100%; overflow: hidden; background: #2b3552; color: #eef1ff
 .loadout .option:hover, .loadout .option:focus-visible { background: #6e1a33; }
 .loadout .option[aria-pressed="true"]:hover { background: #a02140; }
 @media (max-width: 640px) { .loadout { grid-template-columns: 1fr; } }
+.credit { font-size: 12px; opacity: .7; }
 .title-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 button.secondary { background: rgba(16, 21, 44, .78); border-color: rgba(238, 241, 255, .45); }
 button.secondary:hover, button.secondary:focus-visible { background: #2d3760; }

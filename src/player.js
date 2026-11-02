@@ -1,43 +1,23 @@
-// Player avatar: a shared rig, two skins, solid sculpted hair and cloth physics.
-const ARM = { upper: 0.25, fore: 0.24, x: 0.135, y: 0.215 };
+// Player avatar: the imported character models, driven by the game's own rig.
+// "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
 const SKINS = {
-  teal: { name: 'Twin Tails', note: 'Long teal hair, tie and black sleeves' },
-  crimson: { name: 'Crimson Curls', note: 'The original red-haired gunslinger' },
+  teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071 }, scalpTrim: 0.14 },
+  crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 } },
 };
 const SKIN_ORDER = ['teal', 'crimson'];
-const HAIR_LINE_TEAL = 0x1c6f7c;
 
-const outlineCache = new Map();
-function outlineMaterial(thickness, color) {
-  const key = `${thickness}/${color}`;
-  if (outlineCache.has(key)) return outlineCache.get(key);
-  const material = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
-  material.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normal * ${thickness.toFixed(4)};`);
-  };
-  material.customProgramCacheKey = () => `outline${thickness}`;
-  outlineCache.set(key, material);
-  return material;
-}
+// The model's bind pose to game space: feet on the ground, centred, facing +Z.
+const MODEL_SCALE = 0.9375;
+const MODEL_CENTER = new THREE.Vector3(0.0235, 0, -1.07);
+const modelToGame = new THREE.Matrix4().makeScale(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
+  .multiply(new THREE.Matrix4().makeTranslation(-MODEL_CENTER.x, -MODEL_CENTER.y, -MODEL_CENTER.z));
 
-function addOutline(mesh, thickness = 0.0028, color = 0x0c1022) {
-  const hull = new THREE.Mesh(mesh.geometry, outlineMaterial(thickness, color));
-  hull.frustumCulled = false;
-  mesh.add(hull);
-}
-
-function piece(parent, geo, material, x = 0, y = 0, z = 0, outline = 0.0028, outlineColor = 0x0c1022) {
-  const mesh = new THREE.Mesh(geo, material);
-  mesh.position.set(x, y, z);
-  mesh.castShadow = true;
-  if (outline) addOutline(mesh, outline, outlineColor);
-  parent.add(mesh);
-  return mesh;
-}
+let characterFile = null;
+const skinCache = new Map();
 
 /* ---------- Physics ---------- */
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
-const q1 = new THREE.Quaternion();
+const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
 
 function collide(p, colliders, pad) {
   for (const c of colliders) {
@@ -47,7 +27,7 @@ function collide(p, colliders, pad) {
     if (d2 < min * min && d2 > 1e-8) p.copy(c.p).addScaledVector(v1, min / Math.sqrt(d2));
   }
   const ground = groundHeight(p.x, p.z) + 0.02;
-  if (p.y < ground) p.y = ground;
+  if (p.y < ground && p.y > ground - 3) p.y = ground;
 }
 
 // A verlet chain pinned to a point on the body, with a springy pull towards a rest shape.
@@ -111,840 +91,367 @@ class Chain {
   }
 }
 
-function catmull(out, p0, p1, p2, p3, t) {
-  const t2 = t * t, t3 = t2 * t;
-  out.x = 0.5 * (2 * p1.x + (p2.x - p0.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (3 * p1.x - p0.x - 3 * p2.x + p3.x) * t3);
-  out.y = 0.5 * (2 * p1.y + (p2.y - p0.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (3 * p1.y - p0.y - 3 * p2.y + p3.y) * t3);
-  out.z = 0.5 * (2 * p1.z + (p2.z - p0.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (3 * p1.z - p0.z - 3 * p2.z + p3.z) * t3);
-  return out;
+/* ---------- Loading the model ---------- */
+// Hair was exported at another scale, so it's fitted back onto the head.
+function meshTransform(file, nodeIndex, hairFit, isHair) {
+  const { nodes } = file.json;
+  let own = null;
+  for (let i = nodeIndex - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (n.matrix && n.mesh === undefined && !n.children) { own = new THREE.Matrix4().fromArray(n.matrix); break; }
+  }
+  if (!own) return null;
+  if (isHair) {
+    return new THREE.Matrix4().makeTranslation(hairFit.x, hairFit.y, hairFit.z)
+      .multiply(new THREE.Matrix4().makeScale(hairFit.k, hairFit.k, hairFit.k))
+      .multiply(own);
+  }
+  const rig = new THREE.Matrix4().fromArray(nodes[19].matrix);
+  return rig.invert().multiply(own);
 }
 
-// One continuous sheet of hair or cloth with an elliptical cross-section, rebuilt
-// along its chain each frame in world space.
-class Ribbon {
-  constructor(scene, chain, { width, thick, material, sideAxis = new THREE.Vector3(1, 0, 0), color = null, sides = 10, sub = 3, repeat = 3, outline = 0.0035, outlineColor = 0x0c1022 }) {
-    Object.assign(this, { chain, width, thick, sideAxis, sides, sub });
-    this.rows = (chain.count - 1) * sub + 1;
-    const verts = this.rows * (sides + 1);
-    this.position = new THREE.BufferAttribute(new Float32Array(verts * 3), 3);
-    this.normal = new THREE.BufferAttribute(new Float32Array(verts * 3), 3);
-    const uv = new Float32Array(verts * 2), colors = new Float32Array(verts * 3), index = [];
-    for (let r = 0; r < this.rows; r++) {
-      const t = r / (this.rows - 1);
-      const c = color ? color(t) : [1, 1, 1];
-      for (let s = 0; s <= sides; s++) {
-        const i = r * (sides + 1) + s;
-        uv.set([(s / sides) * 2, t * repeat], i * 2);
-        colors.set(c, i * 3);
-        if (r < this.rows - 1 && s < sides) {
-          const a = i, b = i + 1, d = i + sides + 1, e = d + 1;
-          index.push(a, b, d, b, e, d);
-        }
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', this.position);
-    geo.setAttribute('normal', this.normal);
-    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setIndex(index);
-    this.mesh = new THREE.Mesh(geo, material);
-    this.mesh.castShadow = true;
-    this.mesh.frustumCulled = false;
-    if (outline) addOutline(this.mesh, outline, outlineColor);
-    scene.add(this.mesh);
-    this.path = Array.from({ length: this.rows }, () => new THREE.Vector3());
-  }
-
-  sync() {
-    const { chain, rows, sub, sides, path } = this;
-    const pts = chain.pos, n = chain.count;
-    for (let i = 0; i < n - 1; i++) {
-      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n - 1, i + 2)];
-      for (let s = 0; s < sub; s++) catmull(path[i * sub + s], p0, p1, p2, p3, s / sub);
-    }
-    path[rows - 1].copy(pts[n - 1]);
-
-    chain.anchor.getWorldQuaternion(q1);
-    const refSide = v3.copy(this.sideAxis).applyQuaternion(q1).clone();
-    const tangent = new THREE.Vector3(), side = new THREE.Vector3(), face = new THREE.Vector3();
-    const pa = this.position.array, na = this.normal.array;
-    let k = 0;
-    for (let r = 0; r < rows; r++) {
-      const t = r / (rows - 1);
-      tangent.subVectors(path[Math.min(rows - 1, r + 1)], path[Math.max(0, r - 1)]).normalize();
-      side.copy(refSide).addScaledVector(tangent, -refSide.dot(tangent)).normalize();
-      face.crossVectors(tangent, side);
-      const w = Math.max(this.width(t), 0.0004), th = Math.max(this.thick(t), 0.0004);
-      const c = path[r];
-      for (let s = 0; s <= sides; s++) {
-        const a = (s / sides) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-        pa[k] = c.x + side.x * ca * w + face.x * sa * th;
-        pa[k + 1] = c.y + side.y * ca * w + face.y * sa * th;
-        pa[k + 2] = c.z + side.z * ca * w + face.z * sa * th;
-        const nx = (side.x * ca) / w + (face.x * sa) / th;
-        const ny = (side.y * ca) / w + (face.y * sa) / th;
-        const nz = (side.z * ca) / w + (face.z * sa) / th;
-        const len = Math.hypot(nx, ny, nz) || 1;
-        na[k] = nx / len;
-        na[k + 1] = ny / len;
-        na[k + 2] = nz / len;
-        k += 3;
-      }
-    }
-    this.position.needsUpdate = true;
-    this.normal.needsUpdate = true;
-  }
-
-  dispose(scene) {
-    scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
+// Pulls in the top of the skull, which is hidden under the hair, so it can't poke through.
+function trimScalp(geometry, amount) {
+  const pos = geometry.attributes.position;
+  const center = new THREE.Vector3(MODEL_CENTER.x, 1.46, MODEL_CENTER.z);
+  const p = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i);
+    const blend = THREE.MathUtils.smoothstep(p.y, 1.47, 1.53);
+    if (blend <= 0) continue;
+    p.sub(center).multiplyScalar(1 - amount * blend).add(center);
+    pos.setXYZ(i, p.x, p.y, p.z);
   }
 }
 
-// A pleated skirt: each column is a short chain from the waist to the hem.
-class Skirt {
-  constructor(scene, hips, { columns = 18, y, waist, hem, length, material, body, trim, depth = 0.8 }) {
-    Object.assign(this, { hips, columns, y, length });
-    const mk = (radius, py) => Array.from({ length: columns }, (_, c) => {
-      const a = (c / columns) * Math.PI * 2;
-      return new THREE.Vector3(Math.sin(a) * radius, py, Math.cos(a) * radius * depth);
-    });
-    this.restWaist = mk(waist, y);
-    this.restMid = mk(lerp(waist, hem, 0.56), y - length * 0.5);
-    this.restHem = mk(hem, y - length);
-    this.mid = this.restMid.map(() => new THREE.Vector3());
-    this.hem = this.restHem.map(() => new THREE.Vector3());
-    this.midPrev = this.restMid.map(() => new THREE.Vector3());
-    this.hemPrev = this.restHem.map(() => new THREE.Vector3());
-    this.waist = this.restWaist.map(() => new THREE.Vector3());
-    this.seg = length * 0.52;
-    this.neighbour = 2 * hem * Math.sin(Math.PI / columns) * 1.25;
-
-    this.rowsV = [0, 0.5, 0.84, 0.842, 1];
-    this.cols = columns * 2;
-    const verts = this.cols * this.rowsV.length;
-    this.position = new THREE.BufferAttribute(new Float32Array(verts * 3), 3);
-    const colors = new Float32Array(verts * 3), index = [];
-    this.rowsV.forEach((v, r) => {
-      for (let c = 0; c < this.cols; c++) {
-        const i = r * this.cols + c;
-        colors.set(r >= 3 ? trim : body, i * 3);
-        if (r < this.rowsV.length - 1) {
-          const nc = (c + 1) % this.cols;
-          index.push(i, (r + 1) * this.cols + c, r * this.cols + nc, r * this.cols + nc, (r + 1) * this.cols + c, (r + 1) * this.cols + nc);
-        }
-      }
-    });
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', this.position);
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setIndex(index);
-    this.mesh = new THREE.Mesh(geo, material);
-    this.mesh.castShadow = true;
-    this.mesh.frustumCulled = false;
-    scene.add(this.mesh);
-  }
-
-  reset() {
-    this.hips.updateWorldMatrix(true, false);
-    const m = this.hips.matrixWorld;
-    for (let c = 0; c < this.columns; c++) {
-      this.waist[c].copy(this.restWaist[c]).applyMatrix4(m);
-      this.mid[c].copy(this.restMid[c]).applyMatrix4(m);
-      this.hem[c].copy(this.restHem[c]).applyMatrix4(m);
-      this.midPrev[c].copy(this.mid[c]);
-      this.hemPrev[c].copy(this.hem[c]);
-    }
-  }
-
-  step(h, colliders) {
-    const m = this.hips.matrixWorld;
-    const legs = colliders.legs;
-    v3.setFromMatrixPosition(m);
-    if (v3.distanceToSquared(this.waist[0]) > 4) { this.reset(); return; }
-    const verlet = (p, o, damping) => {
-      const vx = (p.x - o.x) * damping, vy = (p.y - o.y) * damping, vz = (p.z - o.z) * damping;
-      o.copy(p);
-      p.x += vx;
-      p.y += vy - 4 * h * h;
-      p.z += vz;
-    };
-    for (let c = 0; c < this.columns; c++) {
-      this.waist[c].copy(this.restWaist[c]).applyMatrix4(m);
-      verlet(this.mid[c], this.midPrev[c], 0.88);
-      verlet(this.hem[c], this.hemPrev[c], 0.9);
-      this.mid[c].lerp(v2.copy(this.restMid[c]).applyMatrix4(m), 0.3);
-      this.hem[c].lerp(v2.copy(this.restHem[c]).applyMatrix4(m), 0.2);
-    }
-    for (let pass = 0; pass < 2; pass++) {
-      for (let c = 0; c < this.columns; c++) {
-        const w = this.waist[c], a = this.mid[c], b = this.hem[c];
-        v2.subVectors(a, w);
-        a.copy(w).addScaledVector(v2, this.seg / (v2.length() || 1e-5));
-        v2.subVectors(b, a);
-        b.copy(a).addScaledVector(v2, this.seg / (v2.length() || 1e-5));
-        const next = this.hem[(c + 1) % this.columns];
-        v2.subVectors(next, b);
-        const gap = v2.length();
-        if (gap > this.neighbour) {
-          const fix = (gap - this.neighbour) * 0.5 / gap;
-          b.addScaledVector(v2, fix);
-          next.addScaledVector(v2, -fix);
-        }
-        for (const leg of legs) {
-          v2.subVectors(a, leg.p);
-          const min = leg.r + 0.01;
-          if (v2.lengthSq() < min * min) a.copy(leg.p).addScaledVector(v2, min / (v2.length() || 1));
-          v2.subVectors(b, leg.p);
-          if (v2.lengthSq() < min * min) b.copy(leg.p).addScaledVector(v2, min / (v2.length() || 1));
-        }
-      }
-    }
-  }
-
-  sync() {
-    const center = new THREE.Vector3().setFromMatrixPosition(this.hips.matrixWorld);
-    const pa = this.position.array;
-    const pW = new THREE.Vector3(), pM = new THREE.Vector3(), pH = new THREE.Vector3(), out = new THREE.Vector3();
-    let k = 0;
-    for (let r = 0; r < this.rowsV.length; r++) {
-      const v = this.rowsV[r];
-      const a = (1 - v) * (1 - v), b = 2 * v * (1 - v), d = v * v;
-      for (let j = 0; j < this.cols; j++) {
-        const f = j / 2;
-        const c0 = Math.floor(f) % this.columns, c1 = (c0 + 1) % this.columns, t = f - Math.floor(f);
-        pW.lerpVectors(this.waist[c0], this.waist[c1], t);
-        pM.lerpVectors(this.mid[c0], this.mid[c1], t);
-        pH.lerpVectors(this.hem[c0], this.hem[c1], t);
-        out.set(0, 0, 0).addScaledVector(pW, a).addScaledVector(pM, b).addScaledVector(pH, d);
-        // Alternating columns push in and out to form the pleats.
-        v2.set(out.x - center.x, 0, out.z - center.z).normalize();
-        out.addScaledVector(v2, (j % 2 ? 0.014 : -0.008) * (0.25 + v));
-        pa[k++] = out.x;
-        pa[k++] = out.y;
-        pa[k++] = out.z;
-      }
-    }
-    this.position.needsUpdate = true;
-    this.mesh.geometry.computeVertexNormals();
-  }
-
-  dispose(scene) {
-    scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-  }
+function makeMaterial(file, index) {
+  const def = file.json.materials[index];
+  const pbr = def.pbrMetallicRoughness || {};
+  const params = { side: THREE.DoubleSide };
+  if (pbr.baseColorTexture) params.map = file.texture(pbr.baseColorTexture.index);
+  return new THREE.MeshBasicMaterial(params);
 }
 
-// Swings a rigid hanging shape from a short chain.
-class Pendulum {
-  constructor(group, chain) {
-    Object.assign(this, { group, chain });
-  }
+function loadSkinData(skinId) {
+  if (skinCache.has(skinId)) return skinCache.get(skinId);
+  if (!characterFile) characterFile = readGlb(window.CHARACTER_GLB);
+  const file = characterFile;
+  const { json } = file;
+  const def = SKINS[skinId];
+  const skin = json.skins[def.skin];
+  const inverses = file.accessor(skin.inverseBindMatrices).array;
+  const names = skin.joints.map((n) => json.nodes[n].name.replace(/_\d+$/, ''));
+  const materials = new Map();
+  const parts = [];
 
-  reset() { this.chain.reset(); }
-
-  step(h, colliders) { this.chain.step(h, colliders); }
-
-  sync() {
-    const { pos, count, anchor } = this.chain;
-    anchor.getWorldQuaternion(q1).invert();
-    v2.subVectors(pos[count - 1], pos[0]).normalize().applyQuaternion(q1);
-    this.group.quaternion.setFromUnitVectors(v3.set(0, -1, 0), v2);
-  }
-
-  dispose() {}
-}
-
-/* ---------- Solid hair shapes ---------- */
-function addLock(builder, points, width, thick, sideRef = new THREE.Vector3(1, 0, 0), rings = 14, sides = 10, rootShade = 0.82) {
-  const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
-  const row = [];
-  const tangent = new THREE.Vector3(), side = new THREE.Vector3(), face = new THREE.Vector3();
-  for (let r = 0; r <= rings; r++) {
-    const t = r / rings;
-    const c = curve.getPoint(t);
-    curve.getTangent(t, tangent);
-    side.copy(sideRef).addScaledVector(tangent, -sideRef.dot(tangent)).normalize();
-    face.crossVectors(tangent, side);
-    const w = Math.max(width(t), 0.0004), th = Math.max(thick(t), 0.0004);
-    const ring = [];
-    for (let s = 0; s <= sides; s++) {
-      const a = (s / sides) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-      ring.push({
-        p: c.clone().addScaledVector(side, ca * w).addScaledVector(face, sa * th),
-        n: side.clone().multiplyScalar(ca / w).addScaledVector(face, sa / th).normalize(),
-        u: s / sides,
-        v: t * 1.2,
-      });
+  json.nodes.forEach((node, nodeIndex) => {
+    if (node.skin !== def.skin || node.mesh === undefined) return;
+    const mesh = json.meshes[node.mesh];
+    const isHair = /^Hair/.test(mesh.name);
+    for (const primitive of mesh.primitives) {
+      const geometry = file.geometry(primitive);
+      const transform = meshTransform(file, nodeIndex, def.hair, isHair);
+      if (transform) geometry.applyMatrix4(transform);
+      if (def.scalpTrim && !isHair) trimScalp(geometry, def.scalpTrim);
+      if (!materials.has(primitive.material)) materials.set(primitive.material, makeMaterial(file, primitive.material));
+      parts.push({ geometry, material: materials.get(primitive.material), isHair });
     }
-    row.push(ring);
-  }
-  for (let r = 0; r < rings; r++) {
-    const shadeA = lerp(rootShade, 1.05, r / rings), shadeB = lerp(rootShade, 1.05, (r + 1) / rings);
-    for (let s = 0; s < sides; s++) {
-      const a = row[r][s], b = row[r][s + 1], c = row[r + 1][s], d = row[r + 1][s + 1];
-      for (const [q, shade] of [[a, shadeA], [b, shadeA], [c, shadeB], [b, shadeA], [d, shadeB], [c, shadeB]]) {
-        builder.addVertex(q.p, q.n, q.u, q.v, shade);
-      }
-    }
-  }
-}
+  });
 
-// Closes at both ends so no open tube can show the dark outline inside it.
-const pointed = (peak, at = 0.32) => (t) => {
-  if (t < 0.06) return peak * lerp(0.08, 0.62, t / 0.06);
-  return t < at ? peak * lerp(0.62, 1, (t - 0.06) / (at - 0.06)) : peak * Math.pow(1 - (t - at) / (1 - at), 0.72);
-};
-
-function addHairCap(head, hair, faceCenterY) {
-  // A smooth skull cap: crown, and the back of the head down to the nape. It's an open
-  // shell, so it shows hair on both sides and takes no outline that could peek out.
-  const builder = new GeometryBuilder();
-  const shape = (geo, sx, sy, sz, y, z) => {
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(0, y, z), new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
-    return [geo, m];
+  // Which bones actually move vertices, so only those are updated each frame.
+  const usedBones = new Set();
+  for (const { geometry } of parts) {
+    const joints = geometry.attributes.skinIndex.array, weights = geometry.attributes.skinWeight;
+    for (let i = 0; i < joints.length; i++) if (weights.array[i] > 0) usedBones.add(joints[i]);
+  }
+  const data = { parts, names, inverses, usedBones: [...usedBones], jointCount: skin.joints.length };
+  data.joint = (name) => {
+    const m = new THREE.Matrix4().fromArray(inverses, names.indexOf(name) * 16).invert();
+    return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(modelToGame);
   };
-  const parts = [
-    shape(new THREE.SphereGeometry(0.124, 36, 16, 0, Math.PI * 2, 0, 1.25), 0.93, 1.1, 1, faceCenterY + 0.012, 0),
-    shape(new THREE.SphereGeometry(0.123, 30, 12, 2.72, 3.98, 1.15, 1.2), 0.94, 1.1, 1, faceCenterY + 0.012, 0),
-  ];
-  for (const [geo, m] of parts) {
-    // A long, rounded skull: much deeper behind than in front.
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) pos.setZ(i, pos.getZ(i) * (pos.getZ(i) < 0 ? 1.34 : 1.02));
-    geo.computeVertexNormals();
-    builder.addMesh(geo, m, 1);
+  if (skinId === 'teal') data.tails = buildTailBones(data);
+  skinCache.set(skinId, data);
+  return data;
+}
+
+// The hair has no bones of its own. Long tails get generated ones: vertices below the
+// shoulders are weighted along a chain per side, blending into the head higher up.
+function buildTailBones(data) {
+  const hair = data.parts.filter((p) => p.isHair);
+  const point = new THREE.Vector3();
+  const count = 10;
+  const top = 1.13;
+  const toGame = (attr, i) => point.fromBufferAttribute(attr, i).applyMatrix4(modelToGame);
+  let low = top;
+  for (const { geometry } of hair) {
+    const pos = geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) low = Math.min(low, toGame(pos, i).y);
   }
-  const material = hair.clone();
-  material.side = THREE.DoubleSide;
-  piece(head, builder.build(), material, 0, 0, 0, 0);
-}
+  const span = (top - low) / (count - 1);
 
-// The head is a sphere gently narrowed into a soft, rounded jaw.
-const FACE_R = 0.112;
-const jawAmount = (y) => (y < 0 ? Math.pow(Math.min(1, -y / FACE_R), 1.7) : 0);
-// Sideways scale by height: slimmer up by the ears, fuller through the lower cheeks,
-// then curving gently into a rounded chin.
-const faceWidth = (y) => {
-  const t = y < 0 ? Math.min(1, -y / FACE_R) : 0;
-  return 0.89 * (1 + 0.17 * Math.exp(-((t - 0.72) ** 2) / 0.08)) * (1 - 0.08 * t * t * t);
-};
-
-const bell = (v, s) => Math.exp(-(v * v) / (s * s));
-
-// Sculpted relief on the front of the face: sockets, nose, lips and chin.
-function faceRelief(x, y) {
-  let z = 0;
-  for (const side of [-1, 1]) {
-    z -= 0.0055 * bell(x - side * 0.045, 0.03) * bell(y + 0.018, 0.026);
-    z += 0.0034 * bell(x - side * 0.056, 0.026) * bell(y + 0.062, 0.022);
-  }
-  // Nose: a narrow bridge rising to a small tip, then cutting back in underneath.
-  const along = THREE.MathUtils.smoothstep(-y, 0.024, 0.058);
-  const under = y < -0.058 ? bell(y + 0.058, 0.0068) : 1;
-  z += 0.027 * along * along * under * bell(x, 0.0062 + 0.0058 * along);
-  // Lips, with a groove where they meet.
-  z += 0.0056 * bell(y + 0.0765, 0.0052) * bell(x, 0.0185);
-  z += 0.0068 * bell(y + 0.0905, 0.0062) * bell(x, 0.0155);
-  z -= 0.0022 * bell(y + 0.0835, 0.0019) * bell(x, 0.0175);
-  // A small rounding at the point of the chin.
-  z += 0.005 * bell(y + 0.112, 0.012) * bell(x, 0.032);
-  return z;
-}
-
-// A sphere falls away towards the neck; this carries the centre of the lower face
-// forward instead, so the profile runs down from the lips to a defined chin.
-function chinFill(x, y) {
-  if (y >= -0.02) return 0;
-  let y0 = y;
-  for (let i = 0; i < 4; i++) y0 = y / (1 + 0.08 * jawAmount(y0));
-  const sphere = Math.sqrt(Math.max(0, FACE_R * FACE_R - y0 * y0)) * (1 - 0.14 * jawAmount(y0));
-  const target = 0.098 - 0.012 * THREE.MathUtils.smoothstep(-y, 0.04, 0.118);
-  const blend = THREE.MathUtils.smoothstep(-y, 0.02, 0.05);
-  const width = lerp(0.07, 0.046, THREE.MathUtils.smoothstep(-y, 0.05, 0.115));
-  return Math.max(0, target - sphere) * blend * bell(x, width);
-}
-
-function faceGeometry() {
-  // Fine enough to hold the small sculpted shapes.
-  const geo = new THREE.SphereGeometry(FACE_R, 132, 100);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
-    const k = jawAmount(y0);
-    const x = x0 * faceWidth(y0), y = y0 * (1 + 0.08 * k);
-    // The front stays full down to the chin; only the back narrows towards the neck.
-    const z = z0 > 0 ? z0 * (1 - 0.14 * k) + chinFill(x, y) + faceRelief(x, y) : z0 * (1 - 0.5 * k) * 1.2;
-    pos.setXYZ(i, x, y, z);
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
-
-// Depth of the front of the face at a point, so features can lie right on the skin.
-function faceDepth(x, y) {
-  let y0 = y;
-  for (let i = 0; i < 4 && y < 0; i++) y0 = y / (1 + 0.08 * jawAmount(y0));
-  const k = jawAmount(y0);
-  const x0 = x / faceWidth(y0);
-  return Math.sqrt(Math.max(0, FACE_R * FACE_R - x0 * x0 - y0 * y0)) * (1 - 0.14 * k) + chinFill(x, y) + faceRelief(x, y);
-}
-
-// A small sheet draped over the face at (cx, cy), with optional tilt and bend.
-function facePatch(width, height, cx, cy, { flip = false, tilt = 0, bend = 0, segments = 10, dome = 0, lift = 0.0013 } = {}) {
-  const geo = new THREE.PlaneGeometry(width, height, segments, segments);
-  const pos = geo.attributes.position;
-  const uv = geo.attributes.uv;
-  const c = Math.cos(tilt), s = Math.sin(tilt);
-  for (let i = 0; i < pos.count; i++) {
-    const px = pos.getX(i), py = pos.getY(i);
-    const x = cx + px * c - py * s;
-    const y = cy + px * s + py * c + bend * px * px;
-    const round = 1 - Math.min(1, (px * px) / (width * width / 4) * 0.55 + (py * py) / (height * height / 4) * 0.55);
-    pos.setXYZ(i, x, y, faceDepth(x, y) + lift + dome * round);
-    if (flip) uv.setX(i, 1 - uv.getX(i));
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
-
-function buildFace(head, skin, eyeMap, centerY, { browColor, mouthColor, mouthBend }) {
-  piece(head, faceGeometry(), skin, 0, centerY, 0, 0.0022);
-
-  const features = new THREE.Group();
-  features.position.y = centerY;
-  head.add(features);
-  const eyeMat = new THREE.MeshBasicMaterial({ map: eyeMap, alphaTest: 0.5, side: THREE.DoubleSide });
-  const blushMat = new THREE.MeshBasicMaterial({ map: TEX.blush, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const browMat = new THREE.MeshBasicMaterial({ color: browColor, side: THREE.DoubleSide });
-  // Soft shading painted onto the skin to deepen the sculpted forms.
-  const shade = (color, opacity) => new THREE.MeshBasicMaterial({ map: TEX.softDot, color, opacity, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const socketShade = shade(0xb59aa4, 0.26);
-  const cornea = new THREE.MeshStandardMaterial({ map: TEX.softDot, color: 0xffffff, roughness: 0.05, transparent: true, opacity: 0.18, depthWrite: false, envMapIntensity: 1.5, side: THREE.DoubleSide });
-  const lidMat = new THREE.MeshBasicMaterial({ color: 0x12101a });
-  const eyeW = 0.073, eyeH = 0.0584, eyeY = -0.018;
-
-  for (const side of [-1, 1]) {
-    const eyeX = side * 0.045;
-    features.add(new THREE.Mesh(facePatch(0.062, 0.024, eyeX, eyeY + 0.031, { segments: 8, lift: 0.0007 }), socketShade));
-    features.add(new THREE.Mesh(facePatch(eyeW, eyeH, eyeX, eyeY, { flip: side < 0, dome: 0.0035 }), eyeMat));
-    // A glossy cornea catches the sky over the eye.
-    features.add(new THREE.Mesh(facePatch(eyeW * 0.82, eyeH * 0.88, eyeX, eyeY - 0.002, { dome: 0.0052, lift: 0.0016 }), cornea));
-    // The upper lid stands proud of the eye and overhangs it, flicking past the outer corner.
-    const lid = [[9, 74], [34, 34], [76, 18], [118, 28], [150, 58], [158, 72]].map(([u, v]) => {
-      const x = eyeX + side * (u / 160 - 0.5) * eyeW, y = eyeY + (0.5 - v / 128) * eyeH;
-      return new THREE.Vector3(x, y, faceDepth(x, y) + 0.0042);
+  // The rest path of each tail follows the centre of its vertices, band by band.
+  const paths = [-1, 1].map((side) => {
+    const sums = Array.from({ length: count }, () => ({ x: 0, z: 0, n: 0 }));
+    for (const { geometry } of hair) {
+      const pos = geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const p = toGame(pos, i);
+        if (Math.sign(p.x) !== side || p.y > top) continue;
+        const band = sums[Math.min(count - 1, Math.round((top - p.y) / span))];
+        band.x += p.x; band.z += p.z; band.n++;
+      }
+    }
+    let last = { x: side * 0.16, z: -0.1 };
+    return sums.map((s, i) => {
+      if (s.n) last = { x: s.x / s.n, z: s.z / s.n };
+      return new THREE.Vector3(last.x, top - i * span, last.z);
     });
-    features.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lid), 20, 0.00165, 6), lidMat));
-    features.add(new THREE.Mesh(facePatch(0.04, 0.022, side * 0.062, -0.054, { flip: side < 0, segments: 6 }), blushMat));
-    // Thin arched brows, set high above the eyes.
-    features.add(new THREE.Mesh(facePatch(0.042, 0.0024, eyeX, 0.036, { tilt: side * -0.09, bend: -2.4, segments: 8 }), browMat));
+  });
 
-    // Ears, sitting behind the side hair.
-    const ear = piece(head, new THREE.SphereGeometry(0.026, 12, 10), skin, side * 0.1, centerY - 0.012, -0.018, 0.0018);
-    ear.scale.set(0.3, 1.1, 0.68);
-    ear.rotation.y = side * 0.32;
-    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd7a9a2, roughness: 0.7 }));
-    inner.position.set(side * 0.016, 0, 0.003);
-    inner.scale.set(0.5, 1, 0.75);
-    ear.add(inner);
+  const firstBone = data.jointCount;
+  for (const part of hair) {
+    const { geometry } = part;
+    const pos = geometry.attributes.position;
+    const indices = new Uint16Array(pos.count * 4), weights = new Float32Array(pos.count * 4);
+    const headBone = data.names.indexOf('head.x');
+    for (let i = 0; i < pos.count; i++) {
+      const p = toGame(pos, i);
+      const fade = THREE.MathUtils.smoothstep(top + 0.12 - p.y, 0, 0.18);
+      indices[i * 4] = headBone;
+      weights[i * 4] = 1 - fade;
+      if (fade > 0) {
+        const side = p.x < 0 ? 0 : 1;
+        const f = THREE.MathUtils.clamp((top - p.y) / span, 0, count - 1);
+        const a = Math.floor(f), b = Math.min(count - 1, a + 1), t = f - a;
+        indices[i * 4 + 1] = firstBone + side * count + a;
+        indices[i * 4 + 2] = firstBone + side * count + b;
+        weights[i * 4 + 1] = fade * (1 - t);
+        weights[i * 4 + 2] = fade * t;
+      }
+    }
+    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(indices, 4));
+    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(weights, 4));
   }
-  // The nose and lips are sculpted into the head; these add the shadows that define them.
-  features.add(new THREE.Mesh(facePatch(0.03, 0.05, 0, -0.038, { segments: 10, lift: 0.0006 }), shade(0xcdb0ab, 0.5)));
-  features.add(new THREE.Mesh(facePatch(0.016, 0.008, 0, -0.0625, { segments: 6, lift: 0.0009 }), shade(0xb88682, 0.42)));
-  features.add(new THREE.Mesh(facePatch(0.024, 0.011, 0, -0.0915, { segments: 6, lift: 0.0006 }), shade(0xe9a0a6, 0.42)));
-  features.add(new THREE.Mesh(facePatch(0.026, 0.0021, 0, -0.0835, { bend: mouthBend, segments: 8, lift: 0.0007 }), new THREE.MeshBasicMaterial({ color: mouthColor, side: THREE.DoubleSide })));
-}
-
-// Back of the head falls in broad locks to the nape, following the long skull.
-function addBackHair(builder, tipY, outerTip) {
-  for (let i = 0; i < 11; i++) {
-    const a = Math.PI + (i - 5) * 0.31;
-    const sx = Math.sin(a), cz = Math.cos(a);
-    addLock(builder, [
-      [sx * 0.07, 0.19, cz * 0.11],
-      [sx * 0.113, 0.115, cz * 0.168],
-      [sx * 0.106, 0.015, cz * 0.158],
-      [sx * 0.09, tipY - (i % 2) * outerTip, cz * 0.115],
-    ], pointed(0.052, 0.4), pointed(0.018, 0.4), new THREE.Vector3(cz, 0, -sx), 12, 8, 0.86);
-  }
-}
-
-// Long curtains of hair sweeping from a centre parting out across the forehead.
-function addSweep(builder, locks) {
-  const surface = (x, y) => faceDepth(x, y - 0.075) + 0.02;
-  for (const [root, x1, x2, tipX, tipY, width] of locks) {
-    const midY = lerp(0.16, tipY, 0.55);
-    addLock(builder, [
-      [root, 0.218, 0.03],
-      [x1, 0.19, Math.max(0.085, surface(x1, 0.17))],
-      [x2, midY, surface(x2, midY)],
-      [tipX, tipY, surface(tipX, tipY) - 0.004],
-    ], pointed(width, 0.42), pointed(0.0095, 0.42), new THREE.Vector3(1, 0, 0.06), 18, 10, 0.94);
-  }
-}
-
-// A full fringe: overlapping locks falling from the crown to just above the eyes.
-function addFringe(builder, locks) {
-  for (const [rootX, tipX, tipY, width] of locks) {
-    const midX = lerp(rootX, tipX, 0.75);
-    const surface = (x, y) => faceDepth(x, y - 0.075) + 0.019;
-    addLock(builder, [
-      [rootX * 0.4, 0.2, 0.035],
-      [midX, 0.172, surface(midX, 0.15) + 0.004],
-      [lerp(midX, tipX, 0.5), lerp(0.172, tipY, 0.6), surface(lerp(midX, tipX, 0.5), lerp(0.172, tipY, 0.6))],
-      [tipX, tipY, surface(tipX, tipY) - 0.004],
-    ], pointed(width, 0.3), pointed(0.012, 0.3), new THREE.Vector3(1, 0, 0.08), 14, 10, 0.9);
-  }
+  return { paths, count, firstBone };
 }
 
 /* ---------- Rig ---------- */
-function buildRig() {
+const FINGERS = ['index', 'middle', 'ring', 'pinky'];
+
+function buildRig(data) {
+  const j = data.joint;
   const root = new THREE.Group();
+  const hipsPos = j('root.x');
+  const chestPos = j('spine_02.x');
+  const headPos = j('head.x');
   const hips = new THREE.Group();
-  hips.position.y = 0.79;
+  hips.position.set(0, hipsPos.y, 0);
   root.add(hips);
   const chest = new THREE.Group();
-  chest.position.y = 0.17;
+  chest.position.set(0, chestPos.y - hipsPos.y, 0);
   hips.add(chest);
   const head = new THREE.Group();
-  head.position.y = 0.325;
+  head.position.subVectors(headPos, chestPos);
   chest.add(head);
   const holder = new THREE.Group();
   holder.matrixAutoUpdate = false;
   chest.add(holder);
 
-  const leg = (x) => {
-    const thigh = new THREE.Group();
-    thigh.position.set(x, 0, 0);
+  // Each group remembers its rest placement, so bones can follow it from the bind pose.
+  const rests = new Map();
+  const rest = (group, pivot, rotation = new THREE.Quaternion()) => {
+    const align = new THREE.Matrix4().makeRotationFromQuaternion(rotation)
+      .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z))
+      .multiply(modelToGame);
+    rests.set(group, align);
+    return group;
+  };
+  rest(root, new THREE.Vector3());
+  rest(hips, hipsPos);
+  rest(chest, chestPos);
+  rest(head, headPos);
+
+  const segments = new Map();
+  const assign = (group, ...boneNames) => { for (const name of boneNames) segments.set(name, group); };
+  assign(hips, 'root.x', 'spine_01.x');
+  assign(chest, 'spine_02.x', 'spine_03.x', 'neck.x', 'shoulder.l', 'shoulder.r');
+  assign(head, 'head.x');
+
+  const leg = (s) => {
+    const hip = j(`thigh_twist.${s}`), knee = j(`leg_stretch.${s}`);
+    const thigh = rest(new THREE.Group(), hip);
+    thigh.position.subVectors(hip, hipsPos);
     hips.add(thigh);
-    const shin = new THREE.Group();
-    shin.position.y = -0.39;
+    const shin = rest(new THREE.Group(), knee);
+    shin.position.subVectors(knee, hip);
     thigh.add(shin);
+    assign(thigh, `thigh_twist.${s}`, `thigh_stretch.${s}`);
+    assign(shin, `leg_stretch.${s}`, `leg_twist.${s}`, `foot.${s}`, `toes_01.${s}`);
     return { thigh, shin };
   };
-  const arm = (side) => {
-    const upper = new THREE.Group();
-    upper.position.set(side * ARM.x, ARM.y, 0);
-    chest.add(upper);
-    const fore = new THREE.Group();
-    fore.position.y = -ARM.upper;
-    upper.add(fore);
-    return { upper, fore, side };
-  };
-  const rig = { root, hips, chest, head, holder, legL: leg(0.076), legR: leg(-0.076), armL: arm(1), armR: arm(-1) };
 
-  // Physics collision proxies.
-  const proxy = (parent, x, y, z, r) => {
+  // Arms are T-posed in the model, so their rest rotation hangs them down from the shoulder.
+  const down = new THREE.Vector3(0, -1, 0);
+  const toDown = (from, to) => new THREE.Quaternion().setFromUnitVectors(to.clone().sub(from).normalize(), down);
+  const arm = (s) => {
+    const side = s === 'l' ? 1 : -1;
+    const shoulder = j(`c_arm_twist_offset.${s}`), elbow = j(`forearm_stretch.${s}`), wrist = j(`hand.${s}`), fingerTip = j(`c_middle3.${s}`);
+    const upper = rest(new THREE.Group(), shoulder, toDown(shoulder, elbow));
+    upper.position.subVectors(shoulder, chestPos);
+    chest.add(upper);
+    const a = shoulder.distanceTo(elbow), foreLength = elbow.distanceTo(wrist);
+    const foreRotation = toDown(elbow, wrist);
+    const fore = rest(new THREE.Group(), elbow, foreRotation);
+    fore.position.y = -a;
+    upper.add(fore);
+    const handRotation = toDown(wrist, fingerTip);
+    const hand = rest(new THREE.Group(), wrist, handRotation);
+    hand.position.y = -foreLength;
+    fore.add(hand);
+    assign(upper, `c_arm_twist_offset.${s}`, `arm_stretch.${s}`);
+    assign(fore, `forearm_stretch.${s}`, `forearm_twist.${s}`);
+    assign(hand, `hand.${s}`, `thumb1.${s}`, `c_thumb2.${s}`, `c_thumb3.${s}`);
+
+    // Fingers curl towards the palm so hands wrap around whatever they hold.
+    for (const finger of FINGERS) {
+      assign(hand, `c_${finger}1_base.${s}`);
+      let parent = hand, parentPivot = wrist, parentRotation = handRotation;
+      [`${finger}1`, `c_${finger}2`, `c_${finger}3`].forEach((boneName) => {
+        const pivot = j(`${boneName}.${s}`);
+        const joint = rest(new THREE.Group(), pivot, handRotation);
+        joint.position.copy(pivot).sub(parentPivot).applyQuaternion(parentRotation);
+        joint.rotation.z = side * -0.85;
+        parent.add(joint);
+        assign(joint, `${boneName}.${s}`);
+        parent = joint;
+        parentPivot = pivot;
+        parentRotation = handRotation;
+      });
+    }
+    // The IK aims the palm, a little past the wrist, at its target.
+    return { upper, fore, side, a, b: foreLength + 0.06 };
+  };
+
+  const proxy = (parent, offset, r) => {
     const o = new THREE.Object3D();
-    o.position.set(x, y, z);
+    o.position.copy(offset);
     parent.add(o);
     return { o, r, p: new THREE.Vector3() };
   };
-  rig.proxies = [
-    proxy(head, 0, 0.075, -0.012, 0.128),
-    proxy(chest, 0, 0.13, 0, 0.12),
-    proxy(chest, 0.135, 0.21, 0, 0.06),
-    proxy(chest, -0.135, 0.21, 0, 0.06),
-    proxy(hips, 0, 0.02, 0, 0.135),
-  ];
-  rig.legProxies = [
-    proxy(rig.legL.thigh, 0, -0.1, 0.01, 0.088),
-    proxy(rig.legL.thigh, 0, -0.27, 0.01, 0.07),
-    proxy(rig.legR.thigh, 0, -0.1, 0.01, 0.088),
-    proxy(rig.legR.thigh, 0, -0.27, 0.01, 0.07),
-  ];
-  return rig;
-}
-
-function addHand(fore, skin, nail) {
-  const hand = piece(fore, new THREE.SphereGeometry(0.03, 12, 10), skin, 0, -ARM.fore - 0.012, 0, 0.002);
-  hand.scale.set(0.72, 1.15, 1);
-  for (let i = 0; i < 4; i++) {
-    const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.0062, 0.032, 3, 6), skin);
-    finger.position.set((i - 1.5) * 0.0135, -0.042, 0.012);
-    finger.rotation.x = 0.55;
-    hand.add(finger);
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 6, 5), nail);
-    tip.position.y = -0.021;
-    finger.add(tip);
-  }
-}
-
-function standardLeg(leg, upperMat, lowerMat, shoeMat, band) {
-  const split = -0.15;
-  piece(leg.thigh, lathe([[0.064, 0.02], [0.067, split]], 14), upperMat);
-  piece(leg.thigh, lathe([[0.067, split], [0.062, -0.28], [0.05, -0.39]], 14), lowerMat);
-  if (band) piece(leg.thigh, new THREE.CylinderGeometry(0.0685, 0.0675, 0.024, 16), band, 0, split, 0, 0.002);
-  piece(leg.shin, lathe([[0.05, 0], [0.054, -0.1], [0.042, -0.26], [0.034, -0.36]], 14), lowerMat);
-  const shoe = piece(leg.shin, new THREE.SphereGeometry(0.052, 14, 10), shoeMat, 0, -0.375, 0.035);
-  shoe.scale.set(0.78, 0.55, 1.72);
-}
-
-/* ---------- Skins ---------- */
-function dressTeal(rig, scene) {
-  const skin = new THREE.MeshStandardMaterial({ color: 0xffefe8, roughness: 0.7, emissive: 0x8a6c62, emissiveIntensity: 0.95, envMapIntensity: 0.55 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0xc5cbd6, roughness: 0.72, normalMap: TEX.cloth, normalScale: new THREE.Vector2(0.3, 0.3) });
-  const black = new THREE.MeshStandardMaterial({ color: 0x14151e, roughness: 0.68, normalMap: TEX.cloth, normalScale: new THREE.Vector2(0.3, 0.3) });
-  const teal = new THREE.MeshStandardMaterial({ color: 0x28a7c0, roughness: 0.5 });
-  const gold = new THREE.MeshStandardMaterial({ color: 0xc2a255, metalness: 0.9, roughness: 0.4 });
-  const hair = new THREE.MeshStandardMaterial({ map: TEX.hairTeal, roughness: 0.42, vertexColors: true, emissive: 0x1d5a5e, emissiveIntensity: 0.45 });
-  const sims = [];
-  const { chest, head, hips, armL, armR, legL, legR } = rig;
-
-  standardLeg(legL, skin, black, black, teal);
-  standardLeg(legR, skin, black, black, teal);
-  // The hips stay inside the skirt so they can't poke through its pleats.
-  piece(hips, lathe([[0.084, 0.17], [0.09, 0.05], [0.085, -0.04]], 16), black, 0, 0, 0, 0).scale.z = 0.72;
-
-  // Fitted sleeveless blouse, with shoulders that run smoothly out to the arms.
-  const torso = piece(chest, lathe([[0.083, -0.015], [0.08, 0.045], [0.104, 0.145], [0.112, 0.2], [0.08, 0.245], [0.042, 0.268]], 18), shirt);
-  torso.scale.z = 0.72;
-  piece(chest, lathe([[0.085, 0.018], [0.086, -0.012]], 18), teal, 0, 0, 0, 0.002).scale.z = 0.74;
-  const yoke = piece(chest, new THREE.SphereGeometry(0.1, 18, 12), skin, 0, ARM.y - 0.004, -0.002, 0.0022);
-  yoke.scale.set(1.5, 0.34, 0.54);
-  for (const side of [-1, 1]) {
-    const bust = piece(chest, new THREE.SphereGeometry(0.043, 12, 10), shirt, side * 0.04, 0.148, 0.05, 0);
-    bust.scale.set(1, 0.92, 0.72);
-    const collar = piece(chest, new THREE.BoxGeometry(0.056, 0.05, 0.006), shirt, side * 0.03, 0.255, 0.052);
-    collar.rotation.set(-0.5, side * 0.45, side * -0.5);
-  }
-  piece(chest, lathe([[0.042, 0.23], [0.032, 0.34]], 12), skin, 0, 0, 0, 0.0016);
-
-  // The tie is its own small piece of cloth.
-  const tieChain = new Chain(chest, new THREE.Vector3(0, 0.25, 0.068), {
-    count: 6, segment: 0.05, rest: () => new THREE.Vector3(0, -0.98, 0.12), stiffness: (i) => (i < 3 ? 0.5 : 0.3), pad: 0.012, damping: 0.9, wind: 0.15, gravity: -5,
-  });
-  const tieMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.52, vertexColors: true });
-  sims.push({ chain: tieChain, ribbon: new Ribbon(scene, tieChain, {
-    material: tieMat, sides: 6, sub: 2, outline: 0.0022,
-    width: (t) => (t < 0.06 ? 0.014 : lerp(0.016, 0.033, Math.min(1, t * 1.3))) * (t > 0.86 ? (1 - t) / 0.14 + 0.02 : 1),
-    thick: () => 0.0028,
-    color: (t) => (t > 0.5 && t < 0.57 ? [0.02, 0.02, 0.03] : [0.05, 0.42, 0.53]),
-  }) });
-
-  // Bare upper arm, long detached sleeves flaring to the wrist.
-  for (const arm of [armL, armR]) {
-    piece(arm.upper, lathe([[0.04, 0.012], [0.041, -0.08], [0.03, -ARM.upper]], 12), skin);
-    piece(arm.upper, new THREE.SphereGeometry(0.036, 12, 10), skin, 0, -0.002, 0, 0.0022);
-    piece(arm.upper, lathe([[0.043, -0.075], [0.046, -0.14], [0.05, -ARM.upper]], 14), black);
-    piece(arm.upper, new THREE.CylinderGeometry(0.046, 0.046, 0.012, 14), teal, 0, -0.078, 0, 0.002);
-    piece(arm.fore, lathe([[0.03, 0], [0.024, -0.12], [0.022, -ARM.fore]], 12), skin);
-    piece(arm.fore, lathe([[0.05, 0.012], [0.052, -0.08], [0.066, -0.17], [0.082, -ARM.fore + 0.03]], 16), new THREE.MeshStandardMaterial({ color: 0x14151e, roughness: 0.68, side: THREE.DoubleSide }));
-    piece(arm.fore, new THREE.CylinderGeometry(0.084, 0.084, 0.016, 18, 1, true), new THREE.MeshStandardMaterial({ color: 0x28a7c0, roughness: 0.5, side: THREE.DoubleSide }), 0, -ARM.fore + 0.028, 0, 0);
-    for (const s of [-1, 1]) piece(arm.fore, new THREE.BoxGeometry(0.0035, 0.19, 0.0035), gold, s * 0.05, -0.12, s * 0.028, 0).rotation.z = s * 0.15;
-    addHand(arm.fore, skin, teal);
-  }
-
-  const skirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.74, vertexColors: true, side: THREE.DoubleSide });
-  sims.push({ cloth: new Skirt(scene, hips, { y: 0.145, waist: 0.102, hem: 0.2, length: 0.255, material: skirtMat, body: [0.018, 0.019, 0.028], trim: [0.05, 0.4, 0.5] }) });
-
-  // Face and sculpted hair.
-  const centerY = 0.075;
-  buildFace(head, skin, TEX.eyeTeal, centerY, { browColor: 0x4a97a2, mouthColor: 0x9c5a60, mouthBend: 2.6 });
-
-  const static_ = new GeometryBuilder();
-  addHairCap(head, hair, centerY);
-  // Curtains from a centre parting, with finer locks over the forehead and one wisp between the eyes.
-  addSweep(static_, [
-    [-0.004, -0.052, -0.088, -0.094, 0.018, 0.03], [0.004, 0.052, 0.088, 0.094, 0.018, 0.03],
-    [-0.006, -0.038, -0.064, -0.066, 0.082, 0.025], [0.006, 0.04, 0.066, 0.068, 0.08, 0.025],
-    [-0.004, -0.018, -0.034, -0.032, 0.092, 0.02], [0.004, 0.02, 0.036, 0.034, 0.09, 0.02],
-    [-0.003, -0.01, -0.016, -0.014, 0.098, 0.013], [0.003, 0.011, 0.018, 0.016, 0.1, 0.013],
-    [0.0, 0.004, 0.007, 0.004, 0.066, 0.009],
-  ]);
-  // Softer side hair towards the back of the temple, so the cheek stays clear in profile.
-  for (const side of [-1, 1]) {
-    const sideLocks = [
-      [[0.056, 0.205, 0.0], [0.1, 0.16, -0.004], [0.116, 0.075, -0.012], [0.11, -0.03, -0.02], 0.02],
-      [[0.07, 0.19, -0.05], [0.108, 0.13, -0.058], [0.122, 0.05, -0.068], [0.106, -0.04, -0.078], 0.024],
-    ];
-    for (const [a, b, c, d, w] of sideLocks) {
-      const flip = (p) => [p[0] * side, p[1], p[2]];
-      addLock(static_, [flip(a), flip(b), flip(c), flip(d)], pointed(w, 0.36), pointed(0.012, 0.36), new THREE.Vector3(0, 0, 1), 14, 10, 0.92);
-    }
-  }
-  addBackHair(static_, -0.075, 0.03);
-  const hairMesh = piece(head, static_.build(), hair, 0, 0, 0, 0.0017, HAIR_LINE_TEAL);
-  hairMesh.frustumCulled = false;
-
-  // Hair ties: long pointed plates, dark with pink edges, rising beside the crown.
-  const tieBlack = new THREE.MeshStandardMaterial({ color: 0x2a2730, roughness: 0.42, metalness: 0.2 });
-  const tiePink = new THREE.MeshStandardMaterial({ color: 0xc23a63, roughness: 0.4, emissive: 0x6a1636, emissiveIntensity: 0.55 });
-  for (const side of [-1, 1]) {
-    const tie = new THREE.Group();
-    tie.position.set(side * 0.121, 0.166, -0.082);
-    tie.rotation.set(-0.3, 0, side * -0.12);
-    const edge = piece(tie, new THREE.OctahedronGeometry(1, 0), tiePink, 0, 0, 0, 0);
-    edge.scale.set(0.008, 0.052, 0.026);
-    const plate = piece(tie, new THREE.OctahedronGeometry(1, 0), tieBlack, side * 0.003, 0, 0, 0);
-    plate.scale.set(0.008, 0.041, 0.018);
-    head.add(tie);
-  }
-
-  // A slim headset mic curving from the right ear towards the mouth.
-  const headsetMat = new THREE.MeshStandardMaterial({ color: 0x24252c, metalness: 0.5, roughness: 0.42 });
-  const micPath = new THREE.CatmullRomCurve3([[-0.098, 0.035, 0.022], [-0.094, 0.006, 0.058], [-0.078, -0.012, 0.084], [-0.056, -0.018, 0.095]].map((p) => new THREE.Vector3(...p)));
-  piece(head, new THREE.TubeGeometry(micPath, 16, 0.0012, 6), headsetMat, 0, 0, 0, 0);
-  piece(head, new THREE.CapsuleGeometry(0.0036, 0.009, 3, 8).rotateZ(Math.PI / 2), headsetMat, -0.052, -0.019, 0.096, 0);
-
-  // Twin tails: thick, rounded sheets that leave the back of the head and fall straight down.
-  for (const side of [-1, 1]) {
-    const restTail = (i) => {
-      if (i === 1) return new THREE.Vector3(side * 0.42, -0.4, -0.81).normalize();
-      if (i === 2) return new THREE.Vector3(side * 0.34, -0.86, -0.38).normalize();
-      if (i === 3) return new THREE.Vector3(side * 0.16, -0.97, -0.12).normalize();
-      return new THREE.Vector3(side * 0.035, -1, -0.015).normalize();
-    };
-    const chain = new Chain(head, new THREE.Vector3(side * 0.102, 0.17, -0.097), {
-      count: 13, segment: 0.102, rest: restTail, stiffness: (i) => [0, 0.75, 0.6, 0.45, 0.3, 0.2, 0.15][i] || 0.11, pad: 0.035, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
-    });
-    const flat = new THREE.Vector3(1, 0, 0);
-    sims.push({ chain, ribbon: new Ribbon(scene, chain, {
-      material: hair, sideAxis: flat, sides: 14, sub: 3, repeat: 2.6, outline: 0.0017, outlineColor: HAIR_LINE_TEAL,
-      width: (t) => (t < 0.05 ? lerp(0.012, 0.034, t / 0.05) : t < 0.2 ? lerp(0.034, 0.066, (t - 0.05) / 0.15) : t < 0.8 ? lerp(0.066, 0.058, (t - 0.2) / 0.6) : 0.058 * Math.pow((1 - t) / 0.2, 0.7)),
-      thick: (t) => (t < 0.05 ? lerp(0.01, 0.028, t / 0.05) : t < 0.8 ? lerp(0.038, 0.03, t) : 0.03 * Math.pow((1 - t) / 0.2, 0.7) + 0.0005),
-      color: (t) => { const s = lerp(0.86, 1.04, Math.min(1, t * 3)); return [s, s, s]; },
-    }) });
-
-    // Long side locks framing the face.
-    const restLock = () => new THREE.Vector3(side * 0.02, -0.99, 0.02).normalize();
-    const lock = new Chain(head, new THREE.Vector3(side * 0.101, 0.08, 0.01), {
-      count: 7, segment: 0.058, rest: restLock, stiffness: (i) => (i < 3 ? 0.55 : 0.35), pad: 0.012, damping: 0.9, wind: 0.12, gravity: -5,
-    });
-    sims.push({ chain: lock, ribbon: new Ribbon(scene, lock, {
-      material: hair, sideAxis: new THREE.Vector3(0, 0, 1), sides: 8, sub: 2, repeat: 1.2, outline: 0.0015, outlineColor: HAIR_LINE_TEAL,
-      width: pointed(0.02, 0.25), thick: pointed(0.008, 0.25),
-    }) });
-  }
-  return { sims, skin };
-}
-
-function dressCrimson(rig, scene) {
-  const skin = new THREE.MeshStandardMaterial({ color: 0xffefe8, roughness: 0.7, emissive: 0x8a6c62, emissiveIntensity: 0.95, envMapIntensity: 0.55 });
-  const cloth = new THREE.MeshStandardMaterial({ color: 0xd2d5e6, roughness: 0.75, normalMap: TEX.cloth, normalScale: new THREE.Vector2(0.3, 0.3) });
-  const crimson = new THREE.MeshStandardMaterial({ color: 0xb3264d, roughness: 0.6 });
-  const black = new THREE.MeshStandardMaterial({ color: 0x14141c, roughness: 0.6 });
-  const brass = new THREE.MeshStandardMaterial({ color: 0xbd9f5e, metalness: 1, roughness: 0.35 });
-  const hair = new THREE.MeshStandardMaterial({ map: TEX.hairCrimson, roughness: 0.42, vertexColors: true });
-  const sims = [];
-  const { chest, head, hips, armL, armR, legL, legR } = rig;
-
-  standardLeg(legL, skin, skin, black);
-  standardLeg(legR, skin, skin, black);
-  piece(hips, lathe([[0.084, 0.17], [0.09, 0.05], [0.085, -0.04]], 16), black, 0, 0, 0, 0).scale.z = 0.72;
-
-  const torso = piece(chest, lathe([[0.084, -0.015], [0.082, 0.045], [0.106, 0.145], [0.112, 0.2], [0.08, 0.245], [0.042, 0.268]], 18), cloth);
-  torso.scale.z = 0.72;
-  piece(chest, lathe([[0.042, 0.23], [0.032, 0.34]], 12), skin, 0, 0, 0, 0.0016);
-  const yoke = piece(chest, new THREE.SphereGeometry(0.1, 18, 12), cloth, 0, ARM.y - 0.004, -0.002, 0.0022);
-  yoke.scale.set(1.5, 0.34, 0.54);
-  // A soft stand collar around the neck.
-  const collar = piece(chest, new THREE.TorusGeometry(0.041, 0.012, 8, 20).rotateX(Math.PI / 2), crimson, 0, 0.268, 0, 0.002);
-  collar.scale.z = 0.92;
-  const strap = piece(chest, new THREE.BoxGeometry(0.014, 0.3, 0.006), black, 0, 0.13, 0.082, 0);
-  strap.rotation.z = 0.62;
-  for (const y of [0.05, 0.09, 0.13, 0.17]) {
-    for (const x of [-0.026, 0.026]) piece(chest, new THREE.SphereGeometry(0.0058, 7, 5), brass, x, y, 0.078, 0);
-  }
-
-  for (const arm of [armL, armR]) {
-    piece(arm.upper, lathe([[0.04, 0.012], [0.041, -0.08], [0.03, -ARM.upper]], 12), skin);
-    piece(arm.upper, lathe([[0.048, 0.016], [0.05, -0.1]], 14), cloth);
-    piece(arm.upper, new THREE.CylinderGeometry(0.052, 0.052, 0.02, 14), crimson, 0, -0.105, 0, 0.002);
-    piece(arm.fore, lathe([[0.03, 0], [0.025, -0.12], [0.022, -ARM.fore]], 12), skin);
-    piece(arm.fore, lathe([[0.03, -0.16], [0.03, -ARM.fore]], 12), black);
-    addHand(arm.fore, skin, crimson);
-  }
-
-  const skirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.74, vertexColors: true, side: THREE.DoubleSide });
-  sims.push({ cloth: new Skirt(scene, hips, { y: 0.145, waist: 0.102, hem: 0.22, length: 0.3, material: skirtMat, body: [0.62, 0.65, 0.78], trim: [0.42, 0.03, 0.09] }) });
-
-  const centerY = 0.075;
-  buildFace(head, skin, TEX.eyeRed, centerY, { browColor: 0x9c2a4e, mouthColor: 0x96555c, mouthBend: 2.5 });
-
-  const static_ = new GeometryBuilder();
-  addHairCap(head, hair, centerY);
-  addFringe(static_, [
-    [0.001, 0.001, 0.09, 0.028],
-    [0.014, 0.038, 0.092, 0.032], [-0.014, -0.038, 0.09, 0.032],
-    [0.03, 0.068, 0.074, 0.028], [-0.03, -0.068, 0.076, 0.028],
-  ]);
-  addBackHair(static_, -0.035, 0);
-  const hairMesh = piece(head, static_.build(), hair, 0, 0, 0, 0.0017, 0x6d1836);
-  hairMesh.frustumCulled = false;
-
-  // Twin ringlets: solid spirals that swing as a piece from each side of the head.
-  for (const side of [-1, 1]) {
-    const group = new THREE.Group();
-    group.position.set(side * 0.11, 0.125, -0.03);
-    const helix = [];
-    const turns = 3.2, length = 0.28;
-    for (let i = 0; i <= 44; i++) {
-      const t = i / 44;
-      const radius = lerp(0.05, 0.012, t);
-      const a = t * turns * Math.PI * 2 * side;
-      helix.push([Math.cos(a) * radius, -t * length, Math.sin(a) * radius]);
-    }
-    const spiral = new GeometryBuilder();
-    // Both ends taper shut; the start also tucks into the side of the head.
-    const coil = (t) => lerp(0.034, 0.012, t) * Math.min(1, 0.1 + t * 22) * (t > 0.97 ? (1 - t) / 0.03 + 0.03 : 1);
-    addLock(spiral, helix, coil, coil, new THREE.Vector3(0.2, 1, 0.1).normalize(), 90, 10, 0.92);
-    piece(group, spiral.build(), hair, 0, 0, 0, 0.0017, 0x6d1836);
-    head.add(group);
-    const chain = new Chain(head, group.position, {
-      count: 3, segment: 0.1, rest: () => new THREE.Vector3(side * 0.08, -0.99, -0.02), stiffness: () => 0.3, pad: 0.03, damping: 0.9, gravity: -5, wind: 0.15,
-    });
-    sims.push({ cloth: new Pendulum(group, chain) });
-  }
-  return { sims, skin };
+  const armL = arm('l'), armR = arm('r');
+  const dims = { hips: hipsPos.y, chest: chestPos.y - hipsPos.y, shoulderY: armL.upper.position.y };
+  return {
+    root, hips, chest, head, holder, armL, armR, legL: leg('l'), legR: leg('r'), rests, segments, dims,
+    proxies: [
+      proxy(head, new THREE.Vector3(0, 0.1, -0.012), 0.125),
+      proxy(chest, new THREE.Vector3(0, 0.03, -0.012), 0.095),
+      proxy(chest, new THREE.Vector3(armL.upper.position.x, armL.upper.position.y, 0), 0.05),
+      proxy(chest, new THREE.Vector3(armR.upper.position.x, armR.upper.position.y, 0), 0.05),
+      proxy(hips, new THREE.Vector3(0, -0.02, 0), 0.115),
+    ],
+  };
 }
 
 /* ---------- Avatar ---------- */
 function createAvatar(scene, skinId) {
-  const rig = buildRig();
+  const data = loadSkinData(skinId);
+  const rig = buildRig(data);
   scene.add(rig.root);
-  const dressed = (skinId === 'crimson' ? dressCrimson : dressTeal)(rig, scene);
+
+  // Bones sit in world space; their matrices are written directly each frame.
+  const total = data.jointCount + (data.tails ? data.tails.count * 2 : 0);
+  const bones = Array.from({ length: total }, () => new THREE.Bone());
+  const inverses = bones.map((_, i) => (i < data.jointCount ? new THREE.Matrix4().fromArray(data.inverses, i * 16) : new THREE.Matrix4()));
+  const skeleton = new THREE.Skeleton(bones, inverses);
+
+  // For each used bone: the group that carries it, and its placement within that group.
+  const driven = data.usedBones.filter((i) => i < data.jointCount).map((index) => {
+    const name = data.names[index];
+    const group = rig.segments.get(name) || rig.hips;
+    return { bone: bones[index], group, offset: new THREE.Matrix4().multiplyMatrices(rig.rests.get(group), inverses[index].clone().invert()) };
+  });
+  // Bones the skin weights never reach still need a valid matrix.
+  bones.forEach((bone) => bone.matrixWorld.identity());
+
+  const meshes = data.parts.map(({ geometry, material }) => {
+    const mesh = new THREE.SkinnedMesh(geometry, material);
+    mesh.bindMode = 'detached';
+    mesh.bind(skeleton, new THREE.Matrix4());
+    mesh.castShadow = true;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    return mesh;
+  });
+
+  // Physics for the long twin tails.
   const colliders = rig.proxies;
-  colliders.legs = rig.legProxies;
+  const tails = [];
+  if (data.tails) {
+    const headWorldRest = rig.head.position.clone().add(rig.chest.position).add(rig.hips.position);
+    data.tails.paths.forEach((path, sideIndex) => {
+      const side = sideIndex === 0 ? -1 : 1;
+      let length = 0;
+      for (let i = 1; i < path.length; i++) length += path[i].distanceTo(path[i - 1]);
+      const segment = length / (path.length - 1);
+      const directions = path.map((p, i) => (i ? p.clone().sub(path[i - 1]).normalize() : new THREE.Vector3(0, -1, 0)));
+      const chain = new Chain(rig.head, path[0].clone().sub(headWorldRest), {
+        count: path.length, segment, rest: (i) => directions[i], stiffness: (i) => [0, 0.7, 0.55, 0.42, 0.3, 0.22][i] || 0.15, pad: 0.03, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
+      });
+      path.forEach((p, i) => inverses[data.tails.firstBone + sideIndex * data.tails.count + i].copy(
+        new THREE.Matrix4().makeTranslation(-p.x, -p.y, -p.z).multiply(modelToGame),
+      ));
+      tails.push({ chain, directions, firstBone: data.tails.firstBone + sideIndex * data.tails.count });
+    });
+    skeleton.boneInverses = inverses;
+  }
 
-  const avatar = { ...rig, skinId, sims: dressed.sims };
+  const avatar = { ...rig, skinId, dims: rig.dims };
+  const updateProxies = () => { for (const c of rig.proxies) c.o.getWorldPosition(c.p); };
 
-  avatar.updateProxies = () => {
-    for (const c of rig.proxies) c.o.getWorldPosition(c.p);
-    for (const c of rig.legProxies) c.o.getWorldPosition(c.p);
+  const updateBones = () => {
+    for (const { bone, group, offset } of driven) bone.matrixWorld.multiplyMatrices(group.matrixWorld, offset);
+    rig.head.getWorldQuaternion(q2);
+    for (const { chain, directions, firstBone } of tails) {
+      for (let i = 0; i < chain.count; i++) {
+        const next = chain.pos[Math.min(chain.count - 1, i + 1)], here = chain.pos[i];
+        if (i < chain.count - 1) v1.subVectors(next, here).normalize();
+        else v1.subVectors(here, chain.pos[i - 1]).normalize();
+        v2.copy(directions[Math.min(chain.count - 1, i + 1)]).applyQuaternion(q2);
+        q1.setFromUnitVectors(v2, v1).multiply(q2);
+        bones[firstBone + i].matrixWorld.compose(here, q1, v3.set(1, 1, 1));
+      }
+    }
   };
 
   avatar.reset = () => {
     rig.root.updateMatrixWorld(true);
-    avatar.updateProxies();
-    for (const sim of dressed.sims) {
-      if (sim.chain) { sim.chain.reset(); sim.ribbon.sync(); } else { sim.cloth.reset(); sim.cloth.sync(); }
-    }
+    updateProxies();
+    for (const { chain } of tails) chain.reset();
+    updateBones();
   };
 
   avatar.simulate = (dt) => {
     rig.root.updateMatrixWorld(true);
-    avatar.updateProxies();
-    // A fixed step keeps the cloth stable at any frame rate; long hitches are simply skipped.
+    updateProxies();
+    // A fixed step keeps the hair stable at any frame rate; long hitches are simply skipped.
     const h = 1 / 120;
     avatar.accumulator = Math.min((avatar.accumulator || 0) + dt, h * 6);
     while (avatar.accumulator >= h) {
       avatar.accumulator -= h;
-      for (const sim of dressed.sims) (sim.chain || sim.cloth).step(h, colliders);
+      for (const { chain } of tails) chain.step(h, colliders);
     }
-    for (const sim of dressed.sims) (sim.ribbon || sim.cloth).sync();
+    updateBones();
   };
 
   avatar.setVisible = (visible) => {
     rig.root.visible = visible;
-    for (const sim of dressed.sims) (sim.ribbon || sim.cloth).mesh && ((sim.ribbon || sim.cloth).mesh.visible = visible);
+    for (const mesh of meshes) mesh.visible = visible;
   };
 
   avatar.dispose = () => {
     scene.remove(rig.root);
-    for (const sim of dressed.sims) (sim.ribbon || sim.cloth).dispose(scene);
+    for (const mesh of meshes) scene.remove(mesh);
+    skeleton.dispose();
   };
 
   return avatar;
@@ -954,7 +461,7 @@ function createAvatar(scene, skinId) {
 const ikDir = new THREE.Vector3(), ikPole = new THREE.Vector3(), ikElbow = new THREE.Vector3(), ikFore = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
 function solveArm(arm, target, pole) {
-  const a = ARM.upper, b = ARM.fore + 0.012;
+  const { a, b } = arm;
   ikDir.subVectors(target, arm.upper.position);
   const len = THREE.MathUtils.clamp(ikDir.length(), Math.abs(a - b) + 0.002, a + b - 0.002);
   ikDir.normalize();

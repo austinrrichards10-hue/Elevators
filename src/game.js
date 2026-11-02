@@ -624,8 +624,9 @@ function poseAvatar(dt, move, moving) {
     qRoll.setFromAxisAngle(d.axis, spin);
     root.quaternion.copy(qRoll).multiply(qYaw);
     // Turn around the hips, which drop towards the snow as she curls into a ball.
-    const hipHeight = lerp(0.79, 0.5, tuck);
-    pivotOffset.set(0, 0.79, 0).applyQuaternion(qRoll);
+    const hipRest = avatar.dims.hips;
+    const hipHeight = lerp(hipRest, 0.5, tuck);
+    pivotOffset.set(0, hipRest, 0).applyQuaternion(qRoll);
     root.position.x -= pivotOffset.x;
     root.position.y += hipHeight - pivotOffset.y;
     root.position.z -= pivotOffset.z;
@@ -634,7 +635,7 @@ function poseAvatar(dt, move, moving) {
   }
   player.tuck = tuck;
 
-  hips.position.y = 0.79 - 0.03 * amount;
+  hips.position.y = avatar.dims.hips - 0.03 * amount;
   hips.rotation.z = player.strafeLean;
   hips.rotation.y = Math.sin(ph) * 0.05 * amount;
 
@@ -653,7 +654,7 @@ function poseAvatar(dt, move, moving) {
   chest.rotation.x = lerp(0.07 * amount + breathe * 0.008 - player.pitch * 0.1, 0.72, tuck);
   chest.rotation.y = lerp(Math.sin(ph) * 0.09 * amount - player.aimBlend * 0.14, 0, tuck);
   chest.rotation.z = -player.strafeLean * 0.6;
-  chest.position.y = 0.17 + breathe * 0.002;
+  chest.position.y = avatar.dims.chest + breathe * 0.002;
   head.rotation.x = lerp(-player.pitch * 0.5 - 0.05 * amount, 0.45, tuck);
   head.rotation.y = -chest.rotation.y;
 
@@ -752,6 +753,8 @@ function poseGun(dt, ease) {
     rx = lerp(rx, 0.75, tuck);
     rz = lerp(rz, 0.9, tuck);
   }
+  // Gun poses are authored relative to shoulder height.
+  holderPos.y += avatar.dims.shoulderY - 0.215;
   holderEuler.set(rx, ry, rz);
   holderQuat.setFromEuler(holderEuler);
   holder.matrix.compose(holderPos, holderQuat, holderScale);
@@ -1254,13 +1257,13 @@ function updateTitle(dt) {
 const ROOM_Y = 400;
 const ROOM_VIEWS = {
   Full: { y: 0.8, dist: 2.7, yaw: 0.3, pitch: 0.05 },
-  Head: { y: 1.38, dist: 0.85, yaw: 0.35, pitch: 0.04 },
+  Head: { y: 1.36, dist: 0.85, yaw: 0.35, pitch: 0.04 },
   Face: { y: 1.34, dist: 0.5, yaw: 0, pitch: 0 },
   Side: { y: 1.34, dist: 0.8, yaw: Math.PI / 2, pitch: 0 },
-  Back: { y: 1.1, dist: 1.5, yaw: Math.PI, pitch: 0.08 },
-  Torso: { y: 1.08, dist: 1.05, yaw: 0.2, pitch: 0.02 },
+  Back: { y: 1.05, dist: 1.5, yaw: Math.PI, pitch: 0.08 },
+  Torso: { y: 1.02, dist: 1.05, yaw: 0.2, pitch: 0.02 },
   Legs: { y: 0.42, dist: 1.25, yaw: 0.3, pitch: 0.05 },
-  Hands: { y: 0.98, dist: 0.8, yaw: 0.2, pitch: 0.22 },
+  Hands: { y: 0.95, dist: 0.8, yaw: 0.2, pitch: 0.22 },
 };
 const ROOM_POSES = ['Idle', 'Aim', 'Walk', 'Reload'];
 
