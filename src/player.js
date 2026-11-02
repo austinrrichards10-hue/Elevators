@@ -1,8 +1,8 @@
 // Player avatar: the imported character models, driven by the game's own rig.
 // "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
 const SKINS = {
-  teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071 }, scalpTrim: 0.14 },
-  crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 } },
+  teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
+  crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
 };
 const SKIN_ORDER = ['teal', 'crimson'];
 
@@ -102,9 +102,11 @@ function meshTransform(file, nodeIndex, hairFit, isHair) {
   }
   if (!own) return null;
   if (isHair) {
+    // Pieces of one hairstyle must share a transform, or they drift apart on the head.
+    const base = hairFit.sharedNode ? new THREE.Matrix4().fromArray(nodes[hairFit.sharedNode].matrix) : own;
     return new THREE.Matrix4().makeTranslation(hairFit.x, hairFit.y, hairFit.z)
       .multiply(new THREE.Matrix4().makeScale(hairFit.k, hairFit.k, hairFit.k))
-      .multiply(own);
+      .multiply(base);
   }
   const rig = new THREE.Matrix4().fromArray(nodes[19].matrix);
   return rig.invert().multiply(own);
@@ -117,7 +119,7 @@ function trimScalp(geometry, amount) {
   const p = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     p.fromBufferAttribute(pos, i);
-    const blend = THREE.MathUtils.smoothstep(p.y, 1.47, 1.53);
+    const blend = THREE.MathUtils.smoothstep(p.y, 1.44, 1.52);
     if (blend <= 0) continue;
     p.sub(center).multiplyScalar(1 - amount * blend).add(center);
     pos.setXYZ(i, p.x, p.y, p.z);
@@ -152,6 +154,12 @@ function loadSkinData(skinId) {
       const geometry = file.geometry(primitive);
       const transform = meshTransform(file, nodeIndex, def.hair, isHair);
       if (transform) geometry.applyMatrix4(transform);
+      // Some pieces were exported out of place; these line them up with their anchors.
+      const piece = isHair && def.hair.pieces && def.hair.pieces[mesh.name];
+      if (piece) {
+        geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(...piece.offset)
+          .multiply(new THREE.Matrix4().makeScale(piece.scale, piece.scale, piece.scale)));
+      }
       if (def.scalpTrim && !isHair) trimScalp(geometry, def.scalpTrim);
       if (!materials.has(primitive.material)) materials.set(primitive.material, makeMaterial(file, primitive.material));
       parts.push({ geometry, material: materials.get(primitive.material), isHair });
