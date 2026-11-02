@@ -126,6 +126,39 @@ function trimScalp(geometry, amount) {
   }
 }
 
+// Below the hips, clothing rides with the thighs, so legs can't swing out through it.
+function fitClothToLegs(parts, names) {
+  const hips = names.indexOf('root.x');
+  const thighL = names.indexOf('thigh_twist.l'), thighR = names.indexOf('thigh_twist.r');
+  for (const part of parts) {
+    if (part.isHair || !part.isCloth) continue;
+    const { geometry } = part;
+    const pos = geometry.attributes.position;
+    const oldIndex = geometry.attributes.skinIndex, oldWeight = geometry.attributes.skinWeight;
+    const scale = oldWeight.normalized ? (oldWeight.array instanceof Uint8Array ? 255 : 65535) : 1;
+    const indices = new Uint16Array(pos.count * 4), weights = new Float32Array(pos.count * 4);
+    for (let i = 0; i < pos.count; i++) {
+      const legShare = 1 - THREE.MathUtils.smoothstep(pos.getY(i), 0.84, 0.99);
+      for (let k = 0; k < 4; k++) {
+        indices[i * 4 + k] = oldIndex.array[i * 4 + k];
+        weights[i * 4 + k] = oldWeight.array[i * 4 + k] / scale;
+      }
+      if (legShare <= 0) continue;
+      const left = THREE.MathUtils.clamp((pos.getX(i) - MODEL_CENTER.x + 0.035) / 0.07, 0, 1);
+      indices[i * 4] = hips;
+      indices[i * 4 + 1] = thighL;
+      indices[i * 4 + 2] = thighR;
+      indices[i * 4 + 3] = 0;
+      weights[i * 4] = 1 - legShare;
+      weights[i * 4 + 1] = legShare * left;
+      weights[i * 4 + 2] = legShare * (1 - left);
+      weights[i * 4 + 3] = 0;
+    }
+    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(indices, 4));
+    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(weights, 4));
+  }
+}
+
 function makeMaterial(file, index) {
   const def = file.json.materials[index];
   const pbr = def.pbrMetallicRoughness || {};
@@ -162,9 +195,13 @@ function loadSkinData(skinId) {
       }
       if (def.scalpTrim && !isHair) trimScalp(geometry, def.scalpTrim);
       if (!materials.has(primitive.material)) materials.set(primitive.material, makeMaterial(file, primitive.material));
-      parts.push({ geometry, material: materials.get(primitive.material), isHair });
+      // Shirts, shorts and skirts, by their material names in the file.
+      const isCloth = !isHair && /Shirt|Cloth|Gradient/.test(json.materials[primitive.material].name);
+      parts.push({ geometry, material: materials.get(primitive.material), isHair, isCloth });
     }
   });
+
+  fitClothToLegs(parts, names);
 
   // Which bones actually move vertices, so only those are updated each frame.
   const usedBones = new Set();
@@ -336,8 +373,7 @@ function buildRig(data) {
         parentRotation = handRotation;
       });
     }
-    // The IK aims the palm, a little past the wrist, at its target.
-    return { upper, fore, side, a, b: foreLength + 0.06 };
+    return { upper, fore, hand, side, a, b: foreLength };
   };
 
   const proxy = (parent, offset, r) => {
@@ -481,4 +517,19 @@ function solveArm(arm, target, pole) {
   const hand = ikFore.copy(ikDir).multiplyScalar(len).addScaledVector(upperDir, -a).normalize();
   q1.copy(arm.upper.quaternion).invert();
   arm.fore.quaternion.setFromUnitVectors(DOWN, hand.applyQuaternion(q1));
+}
+
+// Turns the hand to an orientation given in the chest's coordinates. The roll is shared
+// with the forearm, as a real wrist does, so the skin doesn't twist at the joint.
+const handLocal = new THREE.Quaternion(), foreWorld = new THREE.Quaternion(), wristRoll = new THREE.Quaternion(), rollInverse = new THREE.Quaternion();
+function poseHand(arm, chestSpace, amount) {
+  foreWorld.copy(arm.upper.quaternion).multiply(arm.fore.quaternion);
+  handLocal.copy(foreWorld).invert().multiply(chestSpace);
+  // Pull the rotation around the forearm's own axis out of the hand.
+  wristRoll.set(0, handLocal.y, 0, handLocal.w);
+  if (wristRoll.lengthSq() < 1e-6) wristRoll.identity(); else wristRoll.normalize();
+  arm.fore.quaternion.multiply(wristRoll);
+  rollInverse.copy(wristRoll).invert();
+  handLocal.premultiply(rollInverse);
+  arm.hand.quaternion.identity().slerp(handLocal, amount);
 }

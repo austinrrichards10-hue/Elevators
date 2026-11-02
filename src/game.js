@@ -732,8 +732,16 @@ const holderQuat = new THREE.Quaternion();
 const holderScale = new THREE.Vector3(1, 1, 1);
 const holderInverse = new THREE.Matrix4();
 const leftTarget = new THREE.Vector3(), rightTarget = new THREE.Vector3(), pumpTarget = new THREE.Vector3();
-// Elbows point down and back, staying close to the body instead of flaring out.
-const POLE_R = new THREE.Vector3(-0.12, -0.8, -0.6), POLE_L = new THREE.Vector3(0.12, -0.8, -0.6);
+// Elbows point down, back and a little outward, so the arms clear the body.
+const POLE_R = new THREE.Vector3(-0.42, -0.78, -0.42), POLE_L = new THREE.Vector3(0.42, -0.78, -0.42);
+// How each hand sits on a gun, in the gun's coordinates (+Z forward, +Y up). Hands rest with
+// fingers along -Y. The right hand reaches forward around the grip, its palm against the
+// side; the left cups under the gun with its fingers wrapping across.
+const RIGHT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+const LEFT_GRIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+const RIGHT_WRIST = new THREE.Vector3(-0.024, -0.012, -0.072);
+const LEFT_WRIST = new THREE.Vector3(0.06, -0.026, -0.01);
+const handOffset = new THREE.Vector3(), handGoal = new THREE.Quaternion();
 
 function keyedPath(t, keys, out) {
   if (t <= keys[0][0]) return out.copy(keys[0][1]);
@@ -856,11 +864,15 @@ function poseGun(dt, ease) {
   // With a one-handed carry, the free arm pumps opposite the gun.
   if (m.runOneHand && run > 0.001 && !r) {
     const pump = -Math.sin(player.walkPhase);
-    leftTarget.lerp(pumpTarget.set(0.075, avatar.dims.shoulderY - 0.25 + pump * 0.04, 0.09 + pump * 0.1), run);
+    leftTarget.lerp(pumpTarget.set(0.12, avatar.dims.shoulderY - 0.27 + pump * 0.04, 0.12 + pump * 0.11), run);
   }
 
-  solveArm(armR, rightTarget, POLE_R);
-  solveArm(armL, leftTarget, POLE_L);
+  // Targets are where the palms go; each wrist sits back from its palm along the hand.
+  const wrist = (target, offset) => target.add(handOffset.copy(offset).applyQuaternion(holderQuat));
+  solveArm(armR, wrist(rightTarget, RIGHT_WRIST), POLE_R);
+  solveArm(armL, wrist(leftTarget, LEFT_WRIST), POLE_L);
+  poseHand(armR, handGoal.copy(holderQuat).multiply(RIGHT_GRIP), 1);
+  poseHand(armL, handGoal.copy(holderQuat).multiply(LEFT_GRIP), m.runOneHand && !r ? 1 - run : 1);
 }
 
 function updateCamera(dt) {
