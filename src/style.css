@@ -44,17 +44,6 @@ html, body { height: 100%; overflow: hidden; background: #2b3552; color: #eef1ff
 .loadout .option[aria-pressed="true"] { background: #8e1b35; border-color: #ffb3bf; }
 .loadout .option:hover, .loadout .option:focus-visible { background: #6e1a33; }
 .loadout .option[aria-pressed="true"]:hover { background: #a02140; }
-.loadout-note { max-width: 210px; font-size: 14px; font-style: italic; opacity: .78; }
-.map-select { width: min(456px, 100%); text-align: left; }
-.map-select h3 { margin-bottom: 6px; font-size: 15px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; color: #ffc2cc; }
-.map-select .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.map-select .option { display: block; width: 100%; padding: 8px 12px; font-size: 16px; text-align: left; background: rgba(16, 21, 44, .72); border-color: rgba(238, 241, 255, .28); }
-.map-select .option span { display: block; font-size: 12px; opacity: .74; }
-.map-select .option[aria-pressed="true"] { background: #8e1b35; border-color: #ffb3bf; }
-.map-select .option:hover, .map-select .option:focus-visible { background: #6e1a33; }
-.map-select .option[aria-pressed="true"]:hover { background: #a02140; }
-/* The bedroom has no weapons or objectives, so their HUD pieces go away. */
-#hud.unarmed #ammo, #hud.unarmed #crosshair, #hud.unarmed #compass, #hud.unarmed #objective, #hud.unarmed #boss { display: none; }
 @media (max-width: 640px) { .loadout { grid-template-columns: 1fr; } }
 .credit { font-size: 12px; opacity: .7; }
 .title-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
@@ -62,9 +51,9 @@ button.secondary { background: rgba(16, 21, 44, .78); border-color: rgba(238, 24
 button.secondary:hover, button.secondary:focus-visible { background: #2d3760; }
 
 #room { position: fixed; top: 12px; bottom: 12px; left: 12px; width: min(320px, calc(100vw - 24px)); padding: 18px 18px 16px; overflow-y: auto; background: linear-gradient(180deg, rgba(30, 22, 52, .82), rgba(12, 14, 32, .82)); border: 1px solid rgba(255, 179, 191, .22); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .06); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-#room .room-head { padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid rgba(255, 179, 191, .2); }
-#room .room-kicker { margin: 0; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; opacity: .6; }
-#room .room-head h2 { margin: 2px 0 0; font-size: 30px; text-shadow: 0 0 4px #d21f3f, 0 0 18px rgba(210, 31, 63, .7); }
+.room-head { padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid rgba(255, 179, 191, .2); }
+.room-kicker { margin: 0; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; opacity: .6; }
+.room-head h2 { margin: 2px 0 0; font-size: 30px; text-shadow: 0 0 4px #d21f3f, 0 0 18px rgba(210, 31, 63, .7); }
 #room h3 { margin: 16px 0 6px; font-size: 13px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; color: #ffc2cc; }
 #room .room-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 12px; }
 #room .room-actions button { font-size: 15px; padding: 8px 12px; }
@@ -90,3 +79,16 @@ button { padding: 12px 30px; font: inherit; font-size: 19px; color: #fff0f0; bac
 button:hover, button:focus-visible { background: #b52445; }
 .keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; max-width: 680px; padding: 0; list-style: none; font-size: 15px; opacity: .88; }
 .keys b { font-weight: 700; color: #ffc2cc; }
+/* Moderator menu: a side panel like the character room, on the left. */
+#mod { position: fixed; top: 12px; bottom: 12px; left: 12px; z-index: 6; width: min(340px, calc(100vw - 24px)); padding: 18px 18px 16px; overflow-y: auto; background: linear-gradient(180deg, rgba(30, 22, 52, .9), rgba(12, 14, 32, .9)); border: 1px solid rgba(255, 179, 191, .22); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+#mod h3 { margin: 16px 0 6px; font-size: 13px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; color: #ffc2cc; }
+#mod .room-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 12px; }
+#mod .room-actions button { font-size: 15px; padding: 8px 12px; }
+.mod-switch { display: flex; align-items: flex-start; gap: 10px; padding: 6px 2px; cursor: pointer; font-size: 15px; }
+.mod-switch input { margin-top: 3px; accent-color: #d21f3f; width: 16px; height: 16px; flex: none; }
+.mod-switch b { display: block; font-weight: 400; }
+.mod-switch small { display: block; font-size: 12px; opacity: .7; }
+.mod-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mod-buttons button { padding: 6px 11px; font-size: 14px; }
+#mod-info { position: fixed; left: 50%; bottom: 10px; z-index: 5; transform: translateX(-50%); padding: 4px 12px; border-radius: 6px; background: rgba(10, 14, 34, .7); font: 13px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .02em; pointer-events: none; }
+body.mod-hide-hud #hud, body.mod-hide-hud #subtitle { display: none; }

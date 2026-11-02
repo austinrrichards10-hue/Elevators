@@ -29,11 +29,11 @@
 <section id="title" class="screen">
   <h1>Hollow Snow</h1>
   <p class="tag" id="tag">The forest froze the night the king stopped dying.</p>
-  <div class="map-select"></div>
   <div class="loadout"></div>
   <div class="title-actions">
     <button class="secondary mute-toggle"></button>
     <button id="open-room" class="secondary">Character room</button>
+    <button id="open-mod" class="secondary">Moderator</button>
     <button id="start">Enter the forest</button>
   </div>
   <ul class="keys">
@@ -46,8 +46,9 @@
     <li><b>Space</b> dodge</li>
     <li><b>E</b> hold to interact</li>
     <li><b>M</b> mute</li>
+    <li><b>`</b> moderator</li>
   </ul>
-  <p class="credit">"Doomer Miku and Teto" by 0x00001337 and "Pink Bedroom (MiSide)" by zHairezt, used under CC BY 4.0</p>
+  <p class="credit">"Doomer Miku and Teto" by 0x00001337, used under CC BY 4.0</p>
 </section>
 
 <aside id="room" class="hidden">
@@ -68,11 +69,15 @@
   <p class="hint"><b>Left drag</b> rotate<br><b>Scroll</b> zoom<br><b>Right drag</b> pan</p>
 </aside>
 
+<aside id="mod" class="hidden"></aside>
+<div id="mod-info" class="hidden"></div>
+
 <section id="pause" class="screen hidden">
   <h2>Paused</h2>
   <div class="loadout"></div>
   <div class="title-actions">
     <button class="secondary mute-toggle"></button>
+    <button id="pause-mod" class="secondary">Moderator</button>
     <button id="resume">Resume</button>
   </div>
 </section>
@@ -86,7 +91,6 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 <!-- 3D models, embedded as scripts so the game runs straight from the folder. -->
 <script src="models/characters/doomer-miku-and-teto.js"></script>
-<script src="models/maps/pink-bedroom.js"></script>
 <!-- Game code. -->
 <script src="src/glb.js"></script>
 <script src="src/textures.js"></script>
@@ -94,9 +98,9 @@
 <script src="src/audio.js"></script>
 <script src="src/world.js"></script>
 <script src="src/enemies.js"></script>
-<script src="src/bedroom.js"></script>
 <script src="src/guns.js"></script>
 <script src="src/player.js"></script>
 <script src="src/game.js"></script>
+<script src="src/moderator.js"></script>
 </body>
 </html>

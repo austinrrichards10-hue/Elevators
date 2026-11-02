@@ -45,12 +45,7 @@ function valueNoise(x, z) {
 
 const FLAT_SPOTS = [[LANDMARKS.start, 9, 24], ...LANDMARKS.wards.map((w) => [w, 8, 22]), [LANDMARKS.altar, 26, 42]];
 
-// Indoor maps stand on a flat floor instead of the terrain.
-let floorOverride = null;
-function setFloorOverride(y) { floorOverride = y; }
-
 function groundHeight(x, z) {
-  if (floorOverride !== null) return floorOverride;
   const ridge = 1 - Math.abs(valueNoise(x / 46 + 3.1, z / 46 + 9.2));
   let h = 6.2 * valueNoise(x / 72, z / 72)
     + 2.6 * valueNoise(x / 31 + 11.4, z / 31 - 7.3)

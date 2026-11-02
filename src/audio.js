@@ -70,7 +70,7 @@ const Sfx = {
   tracks: {
     // Character room: a slow, wintry music box. Am  Fmaj7  C  G/B, two bars each.
     room: {
-      bpm: 72, level: 0.55, ambient: 0.15, style: 'musicbox',
+      bpm: 72, level: 0.55, ambient: 0.15,
       chords: [[57, 60, 64, 69], [53, 57, 60, 64], [48, 55, 60, 64], [47, 55, 59, 62]],
       // Melody per two-bar chord: [beat, midi note, beats long]; beats count 0-7.
       melody: [
@@ -78,18 +78,6 @@ const Sfx = {
         [[0, 72, 2], [2, 69, 2], [4, 72, 1], [5, 74, 2.5]],
         [[0, 76, 1.5], [1.5, 79, 0.5], [2, 76, 2], [4, 72, 3]],
         [[0, 71, 2], [2, 74, 1], [3, 72, 1], [4, 71, 1], [5, 67, 2.5]],
-      ],
-    },
-    // Bedroom: cozy lo-fi. Fmaj7  Em7  Dm7  Cmaj7, with soft keys, bass, kick and crackle.
-    // No wind indoors.
-    bedroom: {
-      bpm: 76, level: 0.6, ambient: 0, style: 'lofi',
-      chords: [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]],
-      melody: [
-        [[0.5, 72, 1], [2, 76, 1.5], [4, 74, 0.5], [4.5, 72, 2.5]],
-        [[1, 71, 1], [2, 74, 1], [3, 76, 2], [6, 74, 1.5]],
-        [[0.5, 72, 1.5], [2.5, 69, 1], [4, 72, 1], [5, 77, 2.5]],
-        [[1, 76, 1], [2, 74, 0.5], [2.5, 72, 1.5], [4.5, 71, 0.5], [5, 67, 2.5]],
       ],
     },
   },
@@ -142,8 +130,7 @@ const Sfx = {
       const bar2 = beat % 8;
       const chordIndex = Math.floor(beat / 8) % track.chords.length;
       const chord = track.chords[chordIndex];
-      if (track.style === 'lofi') this.lofiBeat(track, chord, chordIndex, bar2, t, beatLen);
-      else this.musicBoxBeat(track, chord, chordIndex, bar2, t, beatLen);
+      this.musicBoxBeat(track, chord, chordIndex, bar2, t, beatLen);
       this.musicBeat++;
     }
   },
@@ -163,62 +150,6 @@ const Sfx = {
       this.pluck(note, t + half * beatLen / 2, beatLen * 1.4, 0.05 + (half ? 0 : 0.015), 'sine', true);
     }
   },
-
-  lofiBeat(track, chord, chordIndex, bar2, t, beatLen) {
-    // Lazy swing: off-beat eighths land late.
-    const swing = beatLen * 0.58;
-    if (bar2 === 0) {
-      this.pad(chord, t, beatLen * 8, 0.022);
-      for (const [at, note, len] of track.melody[chordIndex]) this.bell(note, t + at * beatLen + (at % 1 ? swing - beatLen / 2 : 0), len * beatLen, 0.5);
-    }
-    // Electric-piano chord stabs, pushed a little ahead of the bar and on the "and" of two.
-    if (bar2 === 0 || bar2 === 4) this.keys(chord, t, beatLen * 1.6);
-    if (bar2 === 1 || bar2 === 5) this.keys(chord.map((n) => n + 12).slice(1), t + swing, beatLen * 0.9, 0.6);
-    // Round bass on the root, with a passing note before each change.
-    if (bar2 === 0 || bar2 === 4) this.pluck(chord[0] - 12, t, beatLen * 1.8, 0.2, 'triangle');
-    if (bar2 === 7) this.pluck(chord[0] - 10, t + swing, beatLen * 0.6, 0.12, 'triangle');
-    // Soft kick on one and three, brushed hats on the off-beats.
-    if (bar2 % 4 === 0) this.kick(t);
-    if (bar2 % 4 === 2) this.kick(t + swing, 0.5);
-    this.hat(t + swing, 0.035);
-    if (bar2 % 2 === 1) this.hat(t, 0.02);
-    // Record crackle.
-    for (let i = 0; i < 3; i++) if (Math.random() < 0.5) this.burst(0.012, 3000 + Math.random() * 3000, 1.2, 0.025 + Math.random() * 0.03, 'bandpass', this.music, t + Math.random() * beatLen);
-  },
-
-  keys(chord, t, len, volume = 1) {
-    // A sine with a quick bright attack and a gentle tremolo reads as a mellow electric piano.
-    for (const note of chord) {
-      for (const [ratio, level] of [[1, 0.032], [2, 0.01]]) {
-        const osc = this.ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = this.midi(note) * ratio;
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(level * volume, t + 0.012);
-        gain.gain.exponentialRampToValueAtTime(level * volume * 0.4, t + 0.25);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
-        osc.connect(gain).connect(this.music);
-        osc.start(t);
-        osc.stop(t + len + 0.05);
-      }
-    }
-  },
-
-  kick(t, volume = 1) {
-    const osc = this.ctx.createOscillator();
-    osc.frequency.setValueAtTime(110, t);
-    osc.frequency.exponentialRampToValueAtTime(42, t + 0.18);
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.32 * volume, t + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
-    osc.connect(gain).connect(this.music);
-    osc.start(t);
-    osc.stop(t + 0.35);
-  },
-
-  hat(t, volume) { this.burst(0.06, 7500, 1.5, volume, 'highpass', this.music, t); },
 
   midi(n) { return 440 * Math.pow(2, (n - 69) / 12); },
 
@@ -278,9 +209,9 @@ const Sfx = {
     }
   },
 
-  burst(duration, freq, q, volume, type = 'lowpass', destination = this.master, at = 0) {
+  burst(duration, freq, q, volume, type = 'lowpass') {
     if (!this.ctx) return;
-    const t = Math.max(at, this.ctx.currentTime);
+    const t = this.ctx.currentTime;
     const src = this.ctx.createBufferSource();
     src.buffer = this.noise;
     src.loop = true;
@@ -291,7 +222,7 @@ const Sfx = {
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(volume, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-    src.connect(filter).connect(gain).connect(destination);
+    src.connect(filter).connect(gain).connect(this.master);
     src.start(t, Math.random());
     src.stop(t + duration);
   },
