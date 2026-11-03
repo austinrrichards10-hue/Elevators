@@ -1,5 +1,6 @@
 // Wolves that roam the forest around the player. They wander in small packs, rest, sit and
-// howl, watch her warily when she comes close and bolt if she gets too near.
+// howl, watch her warily when she comes close and bolt if she gets too near. Rarely, one
+// charges and bites; an arrow or an axe blow sends it running.
 // "Wolf with Animations" by 3DHaupt (CC BY-NC-SA 4.0); see the README.
 
 /* ---------- Loading an animated model ---------- */
@@ -16,14 +17,14 @@ function animatedModel(file, materialFor) {
         if (!geometries.has(key)) geometries.set(key, file.geometry(json.meshes[meshIndex].primitives[p]));
         return geometries.get(key);
       },
-      clips: Object.fromEntries(json.animations.map((anim) => [anim.name, new THREE.AnimationClip(anim.name, -1, anim.channels.map((channel) => {
+      clips: Object.fromEntries((json.animations || []).map((anim) => [anim.name, new THREE.AnimationClip(anim.name, -1, anim.channels.map((channel) => {
         const sampler = anim.samplers[channel.sampler];
         const times = file.accessor(sampler.input).array, values = file.accessor(sampler.output).array;
         const name = `n${channel.target.node}`;
         if (channel.target.path === 'rotation') return new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, times, values);
         return new THREE.VectorKeyframeTrack(`${name}.${channel.target.path === 'translation' ? 'position' : 'scale'}`, times, values);
       }))])),
-      joints: new Set(json.skins.flatMap((skin) => skin.joints)),
+      joints: new Set((json.skins || []).flatMap((skin) => skin.joints)),
     };
   }
   const { shared } = file;
@@ -75,6 +76,10 @@ const WOLF = {
   watch: 22, // closer than this, they stop and watch her
   flee: 9, // closer than this, they run
   length: 1.5, // nose to tail, in metres
+  charge: 9.5, // running speed when it attacks
+  bite: 18, // health lost to a bite
+  attackChance: 0.12, // how often a wolf that starts watching her charges instead
+  attackCooldown: [70, 150], // seconds before any wolf may attack again
 };
 
 let wolfFile = null;
@@ -162,13 +167,18 @@ class Wolf {
     this.timer -= dt;
 
     // Too close: bolt away from her. Close: stop and watch, creeping round at a distance.
-    if (dist < WOLF.flee && this.state !== 'flee') {
+    // Once in a long while a watching wolf charges instead; see wolfAttack.
+    if (this.state === 'attack') {
+      if (dist < 1.5) this.bite();
+      else if (this.timer <= 0) this.setState('flee', 4 + Math.random() * 2);
+    } else if (dist < WOLF.flee && this.state !== 'flee') {
       this.setState('flee', 4 + Math.random() * 3);
       if (dist < 60) Sfx.wolfYelp(1 - dist / 60);
     } else if (dist < WOLF.watch && (this.state === 'wander' || this.state === 'idle' || this.state === 'sit')) {
-      this.setState('watch', 3 + Math.random() * 4);
+      if (wolfAttack.cooldown <= 0 && !wolves.some((w) => w.state === 'attack') && Math.random() < WOLF.attackChance) this.charge();
+      else this.setState('watch', 3 + Math.random() * 4);
     }
-    if (this.timer <= 0) {
+    if (this.timer <= 0 && this.state !== 'attack') {
       if (this.state === 'flee' || this.state === 'watch') this.setState('wander', 8 + Math.random() * 6);
       else if (this.state === 'wander') this.setState(Math.random() < 0.35 ? 'sit' : 'idle', 3 + Math.random() * 7);
       else this.setState('wander', 8 + Math.random() * 8);
@@ -178,6 +188,10 @@ class Wolf {
     if (this.state === 'flee') {
       want = toPlayer + Math.PI;
       speed = WOLF.run;
+      anim = 'run';
+    } else if (this.state === 'attack') {
+      want = toPlayer;
+      speed = WOLF.charge;
       anim = 'run';
     } else if (this.state === 'watch') {
       want = toPlayer;
@@ -192,7 +206,7 @@ class Wolf {
       anim = 'sit';
     }
     const turn = Math.atan2(Math.sin(want - this.heading), Math.cos(want - this.heading));
-    this.heading += turn * (1 - Math.exp(-(this.state === 'flee' ? 6 : 3) * dt));
+    this.heading += turn * (1 - Math.exp(-(this.state === 'flee' || this.state === 'attack' ? 6 : 3) * dt));
     this.speed += (speed - this.speed) * (1 - Math.exp(-5 * dt));
     this.pos.x += Math.sin(this.heading) * this.speed * dt;
     this.pos.z += Math.cos(this.heading) * this.speed * dt;
@@ -210,6 +224,26 @@ class Wolf {
     this.holder.rotation.y = this.heading;
   }
 
+  // Charges at her with a growl, which gives her a moment to dodge or strike first.
+  charge() {
+    this.setState('attack', 9);
+    wolfAttack.cooldown = WOLF.attackCooldown[0] + Math.random() * (WOLF.attackCooldown[1] - WOLF.attackCooldown[0]);
+    Sfx.growl();
+  }
+
+  // One bite, unless she's mid-dodge, then it breaks off and runs.
+  bite() {
+    const dodging = player.dodge && player.dodge.t < 0.44;
+    if (!dodging) hurtPlayer(WOLF.bite, 'wolf');
+    this.setState('flee', 5 + Math.random() * 3);
+  }
+
+  // Struck by an arrow or the axe: a yelp, and it bolts.
+  scare() {
+    Sfx.wolfYelp(1);
+    this.setState('flee', 6 + Math.random() * 3);
+  }
+
   dispose() {
     scene.remove(this.holder);
     this.mixer.stopAllAction();
@@ -219,6 +253,8 @@ class Wolf {
 /* ---------- The packs ---------- */
 const wolves = [];
 let howlTimer = 20;
+// Attacks are rare: after one, no wolf charges again for a minute or two.
+const wolfAttack = { cooldown: 40 };
 
 function spawnPack() {
   const a = Math.random() * Math.PI * 2, d = WOLF.spawnMin + Math.random() * (WOLF.spawnMax - WOLF.spawnMin);
@@ -231,6 +267,7 @@ function spawnPack() {
 }
 
 function updateWolves(dt) {
+  wolfAttack.cooldown -= dt;
   for (const wolf of [...wolves]) {
     if (Math.hypot(wolf.pos.x - player.pos.x, wolf.pos.z - player.pos.z) > WOLF.despawn) {
       wolf.dispose();
@@ -254,4 +291,5 @@ function clearWolves() {
   for (const wolf of wolves) wolf.dispose();
   wolves.length = 0;
   howlTimer = 20;
+  wolfAttack.cooldown = 40;
 }

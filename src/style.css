@@ -146,3 +146,8 @@ button:hover, button:focus-visible { background: #b52445; }
 .mod-buttons button { padding: 6px 11px; font-size: 14px; }
 #mod-info { position: fixed; left: 50%; bottom: 10px; z-index: 5; transform: translateX(-50%); padding: 4px 12px; border-radius: 6px; background: rgba(10, 14, 34, .7); font: 13px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .02em; pointer-events: none; }
 body.mod-hide-hud #hud, body.mod-hide-hud #subtitle { display: none; }
+/* A red flash at the edges when she's hurt, and a small box for her passing thoughts. */
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(170, 20, 45, .75) 100%); transition: opacity .5s; }
+#hurt.on { opacity: 1; transition: none; }
+#note { position: absolute; left: 50%; bottom: 96px; transform: translate(-50%, 6px); max-width: min(520px, 80vw); padding: 9px 18px; border: 1px solid rgba(238, 241, 255, .22); border-radius: 8px; background: rgba(10, 14, 34, .72); font-size: 16px; font-style: italic; text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
+#note.on { opacity: 1; transform: translate(-50%, 0); }

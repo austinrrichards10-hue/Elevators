@@ -89,7 +89,7 @@ const MOD_DEFAULTS = {
 };
 const mod = { ...MOD_DEFAULTS };
 for (const key in MOD_DEFAULTS) if (saved.mod && key in saved.mod) mod[key] = saved.mod[key];
-let skinId = SKINS[saved.skin] ? saved.skin : 'teal';
+let skinId = SKIN_ORDER.includes(saved.skin) ? saved.skin : 'teal';
 let avatar = null;
 const bowModel = buildBowModel();
 
@@ -280,11 +280,19 @@ $('pause-menu').addEventListener('click', toMainMenu);
 $('dead-menu').addEventListener('click', toMainMenu);
 $('dead-retry').addEventListener('click', () => { resetRun(); setWreckBurning(); beginPlay(); });
 
-function freezeToDeath() {
+const DEATHS = {
+  cold: ['The cold took you', 'Out here, a fire is the difference between morning and never.'],
+  wolf: ['The wolves took you', 'They were hungry, and you were alone.'],
+};
+
+function playerDied(cause) {
   game.state = 'dead';
   pointerWasLocked = false;
   document.exitPointerLock();
   setCrafting(false);
+  const [title, text] = DEATHS[cause];
+  $('dead-title').textContent = title;
+  $('dead-text').textContent = text;
   $('hud').classList.add('hidden');
   $('dead').classList.remove('hidden');
 }
@@ -452,6 +460,15 @@ function updateArrows(dt) {
     for (let i = 0; i < steps; i++) {
       arrow.vel.y -= BOW.gravity * h;
       arrow.tip.addScaledVector(arrow.vel, h);
+      // A wolf that's hit yelps and runs; the arrow drops away.
+      const wolf = wolves.find((w) => Math.hypot(w.pos.x - arrow.tip.x, w.pos.y + 0.5 - arrow.tip.y, w.pos.z - arrow.tip.z) < 0.6);
+      if (wolf) {
+        wolf.scare();
+        burst(arrow.tip, 0x8a7a6a, 6, 1.6);
+        arrow.flying = false;
+        removeArrow(arrow);
+        break;
+      }
       const hit = solidAt(arrow.tip.x, arrow.tip.y, arrow.tip.z);
       if (hit) {
         // Sink the head in a little and leave the shaft standing.

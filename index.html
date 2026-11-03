@@ -9,12 +9,14 @@
 <body>
 <canvas id="view"></canvas>
 <div id="frost"></div>
+<div id="hurt"></div>
 
 <div id="hud" class="hidden">
   <div id="crosshair" class="hidden"></div>
   <div id="draw-ring" class="hidden"></div>
   <div id="prompt" class="hidden"></div>
   <div id="toast"></div>
+  <div id="note"></div>
   <div id="vitals">
     <div class="vital"><label>Health</label><div class="bar hp"><i id="hp-fill"></i></div></div>
     <div class="vital" id="warmth"><label>Warmth</label><div class="bar warmth"><i id="warmth-fill"></i></div></div>
@@ -76,7 +78,7 @@
       <li><b>`</b> moderator</li>
     </ul>
   </div>
-  <p class="credit">"Doomer Miku and Teto" by 0x00001337 (CC BY 4.0) · "Wolf with Animations" by 3DHaupt (CC BY-NC-SA 4.0)</p>
+  <p class="credit">"Doomer Miku and Teto" by 0x00001337 (CC BY 4.0) · "Wolf with Animations" by 3DHaupt (CC BY-NC-SA 4.0) · "RAF Voyager Aeroplane" by Foggy_123 (CC BY 4.0)</p>
 </section>
 
 <aside id="room" class="hidden">
@@ -112,8 +114,8 @@
 </section>
 
 <section id="dead" class="screen hidden">
-  <h2>The cold took you</h2>
-  <p class="tag">Out here, a fire is the difference between morning and never.</p>
+  <h2 id="dead-title">The cold took you</h2>
+  <p class="tag" id="dead-text">Out here, a fire is the difference between morning and never.</p>
   <div class="title-actions">
     <button id="dead-menu" class="secondary">Main menu</button>
     <button id="dead-retry">Try again</button>
@@ -124,6 +126,7 @@
 <!-- 3D models, embedded as scripts so the game runs straight from the folder. -->
 <script src="models/characters/doomer-miku-and-teto.js"></script>
 <script src="models/animals/wolf.js"></script>
+<script src="models/vehicles/plane.js"></script>
 <!-- Game code. -->
 <script src="src/glb.js"></script>
 <script src="src/textures.js"></script>

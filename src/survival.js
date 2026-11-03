@@ -294,6 +294,9 @@ function startSwing() {
 // The moment the blade lands: a log gives planks, a standing tree takes another bite.
 function axeImpact() {
   const reachX = player.pos.x + Math.sin(player.bodyYaw) * 0.7, reachZ = player.pos.z + Math.cos(player.bodyYaw) * 0.7;
+  // A wolf in reach takes the blow and runs.
+  const wolf = wolves.find((w) => Math.hypot(w.pos.x - reachX, w.pos.z - reachZ) < 1.3);
+  if (wolf) { Sfx.chop(); wolf.scare(); return; }
   const log = logInReach(reachX, reachZ);
   if (log) {
     if (log.leaves) { log.group.remove(log.leaves); log.leaves = null; }
@@ -456,15 +459,19 @@ function updateSurvival(dt) {
   }
   if (survival.warmth <= 0 && !mod.noCold) {
     survival.health -= SURVIVAL.freezeDamage * dt;
-    if (survival.health <= 0) { survival.health = 0; freezeToDeath(); }
+    if (survival.health <= 0) { survival.health = 0; playerDied('cold'); }
   } else if (survival.warmth > 30) {
     survival.health = Math.min(100, survival.health + 0.6 * dt);
   }
   // Shivering shakes the view a little when she's very cold.
   if (survival.warmth < 20) player.shake = Math.max(player.shake, 0.012 * (1 - survival.warmth / 20));
 
-  // The axe's glint: a soft twinkle every few seconds until it's taken.
+  // What's close enough to use with E. E only acts once per press.
+  let prompt = '';
+  const pressed = keys.KeyE && !survival.eHeld;
+  survival.eHeld = !!keys.KeyE;
   const stump = survival.stump;
+  // The axe's glint: a soft twinkle every few seconds until it's taken.
   if (stump && !survival.hasAxe) {
     const cycle = (game.time % 3.2) / 3.2;
     const flash = Math.max(0, Math.sin(cycle * Math.PI * 2 - 1.2)) ** 6;
@@ -472,17 +479,42 @@ function updateSurvival(dt) {
     stump.glint.scale.setScalar(0.14 + flash * 0.26);
     const d = Math.hypot(STUMP_SPOT.x - player.pos.x, STUMP_SPOT.z - player.pos.z);
     if (d < 2.4) {
-      setPrompt('Press E to pull the axe from the stump');
-      if (keys.KeyE) takeAxe();
+      prompt = 'Press E to pull the axe from the stump';
+      if (pressed) takeAxe();
     } else {
-      setPrompt('');
       survival.hintT += dt;
       if (survival.hintT > 8 && survival.hintT < 8 + dt && d < 30) say('Something is wedged in that stump.', 3);
     }
-  } else {
-    setPrompt('');
   }
+  // The other survivor, lying by the wreck.
+  if (survivor.avatar && Math.hypot(survivor.x - player.pos.x, survivor.z - player.pos.z) < 2.4) {
+    prompt = 'Press E to check on her';
+    if (pressed) showNote('She\'s breathing, but she won\'t react to my presence.');
+  }
+  setPrompt(prompt);
   updateSurvivalHud();
+}
+
+// A short line of her thoughts in a small box at the bottom of the screen.
+let noteTimer = 0;
+function showNote(text) {
+  const el = $('note');
+  el.textContent = text;
+  el.classList.add('on');
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => el.classList.remove('on'), 4200);
+}
+
+// Damage from anything but the cold, with a red flash and a jolt.
+function hurtPlayer(amount, cause) {
+  if (game.state !== 'playing') return;
+  survival.health = Math.max(0, survival.health - amount);
+  player.shake = Math.max(player.shake, 0.3);
+  Sfx.bite();
+  const flash = $('hurt');
+  flash.classList.add('on');
+  setTimeout(() => flash.classList.remove('on'), 60);
+  if (survival.health <= 0) playerDied(cause);
 }
 
 function takeAxe() {

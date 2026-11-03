@@ -3,53 +3,50 @@
 // with hard cuts, impact frames, speed lines and letterboxing for an anime feel.
 
 /* ---------- Models ---------- */
-let planeMats = null;
-function getPlaneMats() {
-  if (!planeMats) {
-    planeMats = {
-      hull: new THREE.MeshStandardMaterial({ color: 0xe4e8ef, metalness: 0.35, roughness: 0.45 }),
-      stripe: new THREE.MeshStandardMaterial({ color: 0xb4203a, metalness: 0.2, roughness: 0.5 }),
-      dark: new THREE.MeshStandardMaterial({ color: 0x1d2230, metalness: 0.5, roughness: 0.4 }),
-      burnt: new THREE.MeshStandardMaterial({ color: 0x2a2523, roughness: 0.95 }),
-      prop: new THREE.MeshBasicMaterial({ color: 0xc8ced8, transparent: true, opacity: 0.16, depthWrite: false }),
-    };
+// "RAF Voyager Aeroplane (Private Plane)" by Foggy_123 (CC BY 4.0); see the README.
+const PLANE = {
+  length: 26, // nose to tail, in metres
+  fileLength: 122.7, // the same in the file's own units
+  engine: new THREE.Vector3(-5.3, -3, 0.6), // the near engine's exhaust, in metres from the centre
+};
+let planeFile = null;
+const planeMaterials = new Map();
+
+function planeMaterial(meshIndex) {
+  const index = planeFile.json.meshes[meshIndex].primitives[0].material;
+  if (!planeMaterials.has(index)) {
+    const def = planeFile.json.materials[index];
+    const pbr = def.pbrMetallicRoughness || {};
+    planeMaterials.set(index, new THREE.MeshStandardMaterial({
+      map: planeFile.texture(pbr.baseColorTexture.index),
+      metalness: (pbr.metallicFactor ?? 1) * 0.6,
+      roughness: (pbr.roughnessFactor ?? 1) * 0.8,
+      side: def.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+    }));
   }
-  return planeMats;
+  return planeMaterials.get(index);
 }
 
-// A twin-prop cargo plane, nose along +Z. With `wreck` set, only the broken sections.
+let burntMaterial = null;
+function getBurntMaterial() {
+  if (!burntMaterial) burntMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2523, roughness: 0.95 });
+  return burntMaterial;
+}
+
+// The plane, nose along +Z and scaled to PLANE.length. Its parts are listed by name in
+// userData.parts (Propellers, Tail, Tail_Wings, Wings and so on).
 function buildPlane() {
-  const m = getPlaneMats();
+  if (!planeFile) planeFile = readGlb(PLANE_GLB);
+  const model = animatedModel(planeFile, planeMaterial);
+  model.root.scale.setScalar(PLANE.length / PLANE.fileLength);
   const plane = new THREE.Group();
-  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y, z);
-    mesh.rotation.set(rx, ry, rz);
-    mesh.castShadow = true;
-    plane.add(mesh);
-    return mesh;
-  };
-  add(new THREE.CylinderGeometry(1.35, 1.35, 12, 16).rotateX(Math.PI / 2), m.hull, 0, 0, 0);
-  add(new THREE.SphereGeometry(1.35, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), m.hull, 0, 0, 6);
-  add(new THREE.CylinderGeometry(1.35, 0.35, 5, 16).rotateX(-Math.PI / 2), m.hull, 0, 0.35, -8.4);
-  add(new THREE.BoxGeometry(2.74, 0.35, 12), m.stripe, 0, -0.15, 0);
-  add(new THREE.BoxGeometry(2.0, 0.5, 0.9), m.dark, 0, 0.75, 6.4, 0.35);
-  add(new THREE.BoxGeometry(19, 0.22, 2.6), m.hull, 0, 0.45, 1.2);
-  add(new THREE.BoxGeometry(6.5, 0.16, 1.6), m.hull, 0, 0.6, -10.2);
-  add(new THREE.BoxGeometry(0.2, 3, 2.2), m.hull, 0, 2, -10.4, -0.3);
-  add(new THREE.BoxGeometry(0.22, 1.1, 1.4), m.stripe, 0, 3.0, -10.9, -0.3);
-  // A strip of windows down each side.
-  for (const side of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.35, 8.5), m.dark, side * 1.33, 0.45, 0.5);
-  const props = [];
-  for (const side of [-1, 1]) {
-    add(new THREE.CylinderGeometry(0.55, 0.5, 3, 12).rotateX(Math.PI / 2), m.hull, side * 4.3, 0.2, 2.3);
-    const prop = add(new THREE.CylinderGeometry(1.6, 1.6, 0.04, 20).rotateX(Math.PI / 2), m.prop, side * 4.3, 0.2, 3.85);
-    props.push(prop);
-  }
-  plane.userData.props = props;
-  // The cargo door on the left side, which blows open.
-  const door = add(new THREE.BoxGeometry(0.08, 1.8, 1.5), m.dark, 1.36, 0.2, -2.5);
-  plane.userData.door = door;
+  plane.add(model.root);
+  plane.userData.parts = {};
+  planeFile.json.nodes.forEach((node, i) => {
+    if (node.mesh === undefined) return;
+    const name = planeFile.json.meshes[node.mesh].name.replace('SM_Aeroplane_Smooth_M_', '').replace(/_0$/, '');
+    plane.userData.parts[name] = model.root.getObjectByName(`n${i}`);
+  });
   return plane;
 }
 
@@ -107,34 +104,42 @@ function placeWreck() {
   }
   wreck.x = x;
   wreck.z = z;
-  wreck.clearing = [{ x, z }, 16];
+  wreck.clearing = [{ x, z }, 24];
   CLEARINGS.push(wreck.clearing);
-  wreck.colliders = [{ x, z, r: 2.2, h: 4 }, { x: x - 7, z: z + 3, r: 2, h: 3 }];
+  // The fuselage lies along `heading`; colliders run down its length, plus the broken tail.
+  const heading = Math.random() * Math.PI * 2;
+  const along = (d) => ({ x: x + Math.sin(heading) * d, z: z + Math.cos(heading) * d });
+  wreck.colliders = [-10, -5, 0, 5, 10].map((d) => ({ ...along(d), r: 1.7, h: 4 }));
+  const tailAt = { x: x + Math.sin(heading + 0.5) * -17, z: z + Math.cos(heading + 0.5) * -17 };
+  wreck.colliders.push({ ...tailAt, r: 2, h: 4 });
   LANDMARK_COLLIDERS.push(...wreck.colliders);
 
-  const m = getPlaneMats();
   const group = new THREE.Group();
   group.position.set(x, groundHeight(x, z), z);
-  const front = buildPlane();
-  // The nose section, ploughed in and tipped over; the tail section further back.
-  front.position.set(0, 0.25, 0);
-  front.rotation.set(0.22, 0.4, 0.22);
-  group.add(front);
-  front.children.forEach((child) => { if (child.position.z < -3) child.visible = false; });
+  // The body ploughed in nose-first and rolled onto one wing, its tail fin torn away.
+  const body = buildPlane();
+  body.position.set(0, 1.5, 0);
+  body.rotation.set(0.12, heading, 0.28, 'YXZ');
+  for (const part of ['Tail', 'Tail_Wings', 'Exhaust']) body.userData.parts[part].visible = false;
+  group.add(body);
   const tail = buildPlane();
-  tail.position.set(-7, 0.4, 3);
-  tail.rotation.set(-0.15, 0.9, -0.35);
-  tail.children.forEach((child) => { if (child.position.z > -3) child.visible = false; });
+  for (const [name, part] of Object.entries(tail.userData.parts)) part.visible = name === 'Tail' || name === 'Tail_Wings';
+  tail.position.set(tailAt.x - x, groundHeight(tailAt.x, tailAt.z) - group.position.y - 1.2, tailAt.z - z);
+  tail.rotation.set(-0.2, heading + 0.9, -0.55, 'YXZ');
+  // The torn section sits forward so its base, not its centre, lies on the ground.
+  tail.children[0].position.z = 9.5;
   group.add(tail);
+  wreck.body = body;
+  wreck.heading = heading;
   // A burnt patch draped over the ground's shape.
-  const scorchGeo = new THREE.RingGeometry(0.01, 9, 24, 6).rotateX(-Math.PI / 2);
+  const scorchGeo = new THREE.RingGeometry(0.01, 15, 28, 8).rotateX(-Math.PI / 2);
   const sp = scorchGeo.attributes.position;
   for (let i = 0; i < sp.count; i++) sp.setY(i, groundHeight(x + sp.getX(i), z + sp.getZ(i)) - group.position.y + 0.06);
-  const scorch = new THREE.Mesh(scorchGeo, new THREE.MeshBasicMaterial({ color: 0x1b1714, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  const scorch = new THREE.Mesh(scorchGeo, new THREE.MeshBasicMaterial({ color: 0x1b1714, transparent: true, opacity: 0.7, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   group.add(scorch);
-  for (let i = 0; i < 9; i++) {
-    const piece = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random(), 0.12, 0.4 + Math.random()), Math.random() < 0.5 ? m.hull : m.burnt);
-    const a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 9;
+  for (let i = 0; i < 14; i++) {
+    const piece = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random(), 0.12, 0.4 + Math.random()), Math.random() < 0.5 ? planeMaterial(8) : getBurntMaterial());
+    const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 12;
     piece.position.set(Math.cos(a) * d, groundHeight(x + Math.cos(a) * d, z + Math.sin(a) * d) - group.position.y + 0.08, Math.sin(a) * d);
     piece.rotation.set(Math.random(), Math.random() * 3, Math.random());
     group.add(piece);
@@ -149,6 +154,7 @@ function placeWreck() {
   scene.add(group);
   wreck.group = group;
   wreck.burning = false;
+  placeSurvivor();
   wreck.emitT = 0;
 }
 
@@ -164,6 +170,7 @@ function updateWreck(dt) {
     wreck.fire.emit(puffAt, puffVel.set(0, 1.5 + Math.random() * 2, 0), { life: 0.8, size: 0.9, grow: -0.5, alpha: 0.9 });
   }
   wreck.smoke.update(dt);
+  updateSurvivor(dt);
   wreck.fire.update(dt);
 }
 
@@ -173,6 +180,42 @@ function setWreckBurning() {
     // Start with a column already standing, as if it has been burning a while.
     for (let i = 0; i < 160; i++) updateWreck(0.12);
   }
+}
+
+/* ---------- The other survivor ---------- */
+// Crimson Curls, thrown from the plane like the player, lying unconscious on her back in
+// the snow a little way from the wreck.
+const survivor = { avatar: null, x: 0, z: 0 };
+const survivorTilt = new THREE.Quaternion(), survivorYaw = new THREE.Quaternion(), survivorPivot = new THREE.Vector3();
+
+function placeSurvivor() {
+  if (!survivor.avatar) survivor.avatar = createAvatar(scene, 'crimson');
+  const a = survivor.avatar;
+  // Off the nose of the plane, clear of the wings.
+  const ahead = 18, across = 4;
+  survivor.x = wreck.x + Math.sin(wreck.heading) * ahead + Math.cos(wreck.heading) * across;
+  survivor.z = wreck.z + Math.cos(wreck.heading) * ahead - Math.sin(wreck.heading) * across;
+  const y = groundHeight(survivor.x, survivor.z);
+  survivorYaw.setFromAxisAngle(UP_AXIS, wreck.heading + 2.2);
+  survivorTilt.setFromAxisAngle(SIDE_AXIS, -Math.PI / 2 + 0.06);
+  a.root.quaternion.copy(survivorYaw).multiply(survivorTilt);
+  survivorPivot.set(0, a.dims.hips, 0).applyQuaternion(a.root.quaternion);
+  a.root.position.set(survivor.x, y + 0.13, survivor.z).sub(survivorPivot);
+  // Arms flung out a little, one knee bent, her head lolling to one side.
+  a.armL.upper.rotation.set(0, 0, 0.55);
+  a.armR.upper.rotation.set(0.2, 0, -0.4);
+  a.armL.fore.rotation.set(0, 0, 0.3);
+  a.legL.thigh.rotation.set(-0.35, 0, 0.08);
+  a.legL.shin.rotation.set(0.6, 0, 0);
+  a.legR.thigh.rotation.set(0, 0, -0.05);
+  a.head.rotation.set(0, 0.5, 0.15);
+  a.reset();
+}
+
+function updateSurvivor(dt) {
+  if (!survivor.avatar) return;
+  // Her hair only needs to settle when someone's near enough to see it.
+  if (Math.hypot(survivor.x - player.pos.x, survivor.z - player.pos.z) < 80) survivor.avatar.simulate(dt);
 }
 
 /* ---------- Overlays ---------- */
@@ -234,7 +277,8 @@ function poseFalling(dt, t, at, tumble) {
     const s = arm.upper.position;
     fallTarget.set(s.x + side * 0.24, s.y + 0.16 + Math.sin(t * 8 + side) * 0.07, 0.06 + Math.cos(t * 6 + side) * 0.08);
     solveArm(arm, fallTarget, side > 0 ? POLE_L : POLE_R);
-    poseHand(arm, HAND_DOWN, 1);
+    // Hands carry straight on from the forearms, rather than bending back at the wrist.
+    arm.hand.quaternion.identity();
   }
   avatar.simulate(dt);
 }
@@ -292,7 +336,8 @@ function fallPosition(t, out) {
   const L = landingSpot();
   const s = clamp((t - CUT.eject) / (CUT.landW - CUT.eject), 0, 1);
   planePosition(CUT.eject, planeAt);
-  const start = planeAt.clone().addScaledVector(cutscene.side, 2.5);
+  // She goes out of the side door, behind the wing.
+  const start = planeAt.clone().addScaledVector(cutscene.side, 2).addScaledVector(cutscene.dir, -6).add(new THREE.Vector3(0, 0.5, 0));
   out.lerpVectors(start, L, s);
   out.y = lerp(start.y, L.y, 1 - (1 - s) ** 1.6);
   out.addScaledVector(cutscene.dir, Math.sin(s * Math.PI) * 14);
@@ -311,7 +356,8 @@ function startCutscene() {
     scene.add(cutscene.plane, cutscene.trail.group, cutscene.debris.group, cutscene.dust.group);
   }
   cutscene.plane.visible = true;
-  cutscene.plane.userData.door.visible = true;
+  // The propellers spin too fast to see in flight.
+  cutscene.plane.userData.parts.Propellers.visible = false;
   cutscene.trail.clear();
   cutscene.debris.clear();
   if (cutscene.dust) cutscene.dust.clear();
@@ -385,11 +431,10 @@ function updateCutscene(dt) {
   const lurch = t > 2.6 && t < 3.6 ? Math.sin((t - 2.6) * 30) * 0.06 * (3.6 - t) : 0;
   plane.rotation.set(w > CUT.eject ? 0.08 + (w - CUT.eject) * 0.03 : 0, Math.atan2(dir.x, dir.z), 0.15 + Math.sin(t * 1.3) * 0.08 + lurch, 'YXZ');
   plane.updateMatrixWorld();
-  for (const prop of plane.userData.props) prop.rotation.z += dt * 40;
   cutscene.emitT -= dt;
   while (cutscene.emitT <= 0) {
     cutscene.emitT += 0.03;
-    const engine = new THREE.Vector3(-4.3, 0.2, 1).applyMatrix4(plane.matrixWorld);
+    const engine = PLANE.engine.clone().applyMatrix4(plane.matrixWorld);
     cutscene.trail.emit(engine, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { life: 3.5, size: 2.2, grow: 4, alpha: 0.95 });
     if (Math.random() < 0.5) cutscene.debris.emit(engine, new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3), { life: 0.4, size: 0.9, grow: -0.6, alpha: 0.9 });
   }
@@ -413,7 +458,7 @@ function updateCutscene(dt) {
 
   // Sound cues.
   once('blast', 2.6, () => { Sfx.boom(0.8); impact('white', 90); });
-  once('door', CUT.eject, () => { plane.userData.door.visible = false; impact('invert', 80); cutscene.engine.set(0.25, 1.5); });
+  once('door', CUT.eject, () => { impact('invert', 80); cutscene.engine.set(0.25, 1.5); });
   once('fall', CUT.eject + 0.2, () => cutscene.wind.set(0.6, 2.5));
   once('snap1', 8.4, () => { Sfx.branchSnap(); impact('invert', 60); });
   once('snap2', 8.75, () => { Sfx.branchSnap(); impact('white', 50); });
@@ -427,7 +472,7 @@ function updateCutscene(dt) {
   if (t < CUT.eject) {
     // A: alongside the plane in trouble, with a canted frame.
     const push = t * 1.2;
-    camAt.copy(planeAt).addScaledVector(dir, 13 - push).addScaledVector(side, -15).add(new THREE.Vector3(0, -3.5, 0));
+    camAt.copy(planeAt).addScaledVector(dir, 20 - push).addScaledVector(side, -27).add(new THREE.Vector3(0, -5, 0));
     camTarget.copy(planeAt).addScaledVector(dir, 2);
     camera.up.set(Math.sin(0.12), Math.cos(0.12), 0);
     setFov(40);
@@ -436,8 +481,8 @@ function updateCutscene(dt) {
     if (t > 2.6) shake(camAt, 0.5 * (3.4 - t));
   } else if (t < 5.0) {
     // B: thrown from the door, in slow, heavy beats.
-    camAt.copy(herAt).addScaledVector(side, 5).addScaledVector(dir, -7).add(new THREE.Vector3(0, 0.5, 0));
-    camTarget.copy(herAt).lerp(planeAt, 0.35);
+    camAt.copy(herAt).addScaledVector(side, 9).addScaledVector(dir, -13).add(new THREE.Vector3(0, 1, 0));
+    camTarget.copy(herAt).lerp(planeAt, 0.22);
     setFov(48);
     speed = 0.4;
   } else if (t < 6.6) {

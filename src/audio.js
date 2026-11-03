@@ -341,6 +341,8 @@ const Sfx = {
   pickup() { this.tone(660, 990, 0.12, 0.12, 'triangle'); setTimeout(() => this.tone(990, 1320, 0.16, 0.1, 'triangle'), 90); },
   craft() { this.burst(0.25, 900, 1, 0.3, 'bandpass'); setTimeout(() => this.tone(520, 780, 0.2, 0.1, 'triangle'), 120); },
   ignite() { this.burst(1.1, 700, 0.5, 0.45); this.tone(110, 330, 0.9, 0.12); },
+  growl() { this.glide([[0, 95], [0.5, 120], [1.1, 80]], 0.2, 'sawtooth', 14); this.burst(1, 300, 1, 0.2, 'bandpass'); },
+  bite() { this.burst(0.15, 1100, 1.2, 0.6, 'bandpass'); this.tone(160, 60, 0.2, 0.4, 'sawtooth'); },
   crackle(level = 1) { this.burst(0.03 + Math.random() * 0.04, 2500 + Math.random() * 2000, 2, 0.12 * level, 'bandpass'); },
 
   /* ---------- Cutscene ---------- */

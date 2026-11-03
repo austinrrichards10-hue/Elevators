@@ -28,8 +28,8 @@ Arrows fly further the longer you draw, drop with gravity and stick in the snow 
 - **The axe** is buried in a tree stump near where you land; it catches the light now and then.
 - **Trees** take a few chops to fell and topple away from you. Chop the fallen log to split it into planks.
 - **A campfire** costs 5 planks. Stand within a few metres of it to warm up.
-- **Wolves** wander in packs. They'll stop and watch you if you come near, and bolt if you get too close.
-- **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops.
+- **Wolves** wander in packs. They'll stop and watch you if you come near, and bolt if you get too close. Once in a long while one charges with a growl; dodge, or hit it with an arrow or the axe to send it running.
+- **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops. Another survivor lies in the snow beside it.
 
 ## Project layout
 
@@ -37,9 +37,11 @@ Arrows fly further the longer you draw, drop with gravity and stick in the snow 
 index.html                 The page that runs the game
 models/
   characters/
-    doomer-miku-and-teto.js  Player skins: Twin Tails (Miku) and Crimson Curls (Teto)
+    doomer-miku-and-teto.js  Twin Tails (Miku), the player, and Crimson Curls (Teto), found at the wreck
   animals/
     wolf.js                  The wolf, with its run, walk, creep, idle and sit animations
+  vehicles/
+    plane.js                 The plane, flying in the intro and wrecked on the map
 src/
   game.js        Main loop, controls, camera, arrows, HUD, menus and the Character room
   cutscene.js    The opening plane crash, and the wreck site it leaves on the map
@@ -64,3 +66,5 @@ Each file in `models/` is a `.glb` 3D model stored as text, because browsers won
 Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is `models/characters/doomer-miku-and-teto.js`.
 
 Wolf: ["Wolf with Animations"](https://sketchfab.com/3d-models/wolf-with-animations-f3769a474a714ebbbaca0d97f9b0a5a0) by [3DHaupt](https://sketchfab.com/dennish2010), licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). Textures scaled down and unused ones removed. The file is `models/animals/wolf.js`. Its licence doesn't allow commercial use, so the game can't be sold while it includes this model.
+
+Plane: ["RAF Voyager Aeroplane (Private Plane)"](https://sketchfab.com/3d-models/raf-voyager-aeroplane-private-plane-750e92f1cf7e4fb5b8e78c91a0253648) by [Foggy_123](https://sketchfab.com/foggy_123), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Only its colour textures are kept, scaled down. The file is `models/vehicles/plane.js`.
