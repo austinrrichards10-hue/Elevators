@@ -109,7 +109,7 @@ Each file in `models/` is a `.glb` 3D model stored as text, because browsers won
 
 ## Credits
 
-Miku: ["Hatsune Miku"](https://sketchfab.com/3d-models/hatsune-miku-34f3e7daa4c64c8a8000ae7f90b01ceb) by [Tigerar1](https://sketchfab.com/allanromanreyes), under the [Sketchfab Standard licence](https://sketchfab.com/licenses). Rigged for the game. The file is `models/characters/miku.js`.
+Miku: ["Hatsune Miku ¡ESCENARIO COLORIDO!"](https://sketchfab.com/3d-models/hatsune-miku-escenario-colorido-435816bc6ee04bbab524db59a06b83d4) by [mega mix](https://sketchfab.com/oscar3dmodel), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Her own skeleton is mapped onto the game's, and her twin tails use the game's hair physics. The file is `models/characters/miku.js`.
 
 Teto: ["PDF Teto"](https://sketchfab.com/3d-models/pdf-teto-e91b13bff72e42fca88179ba7eac5743) by [雨宮レン](https://sketchfab.com/oscar3dmodel), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Her own skeleton is mapped onto the game's. The file is `models/characters/teto.js`.
 

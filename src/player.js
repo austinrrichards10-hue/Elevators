@@ -1,8 +1,8 @@
 // Player avatar: the imported character models, driven by the game's own rig.
-// "Hatsune Miku" by Tigerar1, "PDF Teto" by 雨宮レン and "Doomer Miku and Teto" by
+// "Hatsune Miku ¡Escenario colorido!" by mega mix, "PDF Teto" by 雨宮レン and "Doomer Miku and Teto" by
 // 0x00001337. See the README for the full credits.
 const SKINS = {
-  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tails: { top: 1.13, arms: 0.1, lean: [0.2, 0.38] } },
+  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tailBones: /_BS_hair/, attach: 'head.x', tails: { top: 1.13, arms: 0.1, lean: [0.2, 0.38] } },
   teal: { name: 'Doomer Miku', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, tails: { top: 1.13 } },
   teto: { name: 'Teto', note: 'Her classic look', rig: 'teto', file: 'TETO_GLB', height: 1.5, hair: [4, 8, 9, 10], pieces: { 0: 'White', 1: 'Gray', 2: 'Black' } },
   crimson: { name: 'Doomer Teto', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
@@ -409,24 +409,27 @@ function loadModelSkin(def) {
 
 // The hair has no bones of its own. Long tails get generated ones: vertices below `top`
 // (about the shoulders) are weighted along a chain per side, blending into the head higher up.
+// A part with a `tailMask` keeps its own weights except where the mask is set.
 function buildTailBones(data, top = 1.13) {
   const hair = data.parts.filter((p) => p.isHair);
   const point = new THREE.Vector3();
   const count = 10;
   const toGame = (attr, i) => point.fromBufferAttribute(attr, i).applyMatrix4(modelToGame);
+  const inTail = (part, i) => !part.tailMask || part.tailMask[i];
   let low = top;
-  for (const { geometry } of hair) {
-    const pos = geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) low = Math.min(low, toGame(pos, i).y);
+  for (const part of hair) {
+    const pos = part.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) if (inTail(part, i)) low = Math.min(low, toGame(pos, i).y);
   }
   const span = (top - low) / (count - 1);
 
   // The rest path of each tail follows the centre of its vertices, band by band.
   const paths = [-1, 1].map((side) => {
     const sums = Array.from({ length: count }, () => ({ x: 0, z: 0, n: 0 }));
-    for (const { geometry } of hair) {
-      const pos = geometry.attributes.position;
+    for (const part of hair) {
+      const pos = part.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
+        if (!inTail(part, i)) continue;
         const p = toGame(pos, i);
         if (Math.sign(p.x) !== side || p.y > top) continue;
         const band = sums[Math.min(count - 1, Math.round((top - p.y) / span))];
@@ -446,7 +449,12 @@ function buildTailBones(data, top = 1.13) {
     const pos = geometry.attributes.position;
     const indices = new Uint16Array(pos.count * 4), weights = new Float32Array(pos.count * 4);
     const headBone = data.names.indexOf('head.x');
+    const own = geometry.attributes.skinIndex, ownW = geometry.attributes.skinWeight;
     for (let i = 0; i < pos.count; i++) {
+      if (!inTail(part, i)) {
+        for (let c = 0; c < 4; c++) { indices[i * 4 + c] = own.array[i * 4 + c]; weights[i * 4 + c] = ownW.array[i * 4 + c]; }
+        continue;
+      }
       const p = toGame(pos, i);
       const fade = THREE.MathUtils.smoothstep(top + 0.12 - p.y, 0, 0.18);
       indices[i * 4] = headBone;
