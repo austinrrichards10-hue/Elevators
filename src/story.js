@@ -332,6 +332,9 @@ function renderJournal(el) {
 function storyObjective() {
   const f = story.flags;
   if (f.escaped) return null;
+  // After Teto's ambush the story has goals of its own (showdown.js).
+  const after = showdownObjective();
+  if (after) return after;
   const fromStart = Math.hypot(player.pos.x - LANDMARKS.start.x, player.pos.z - LANDMARKS.start.z);
   if (!f.bag && !hasItem('map') && fromStart < STORY.bagRange) return 'bag';
   const fire = f.fire || survival.fires.length > 0;
@@ -354,6 +357,7 @@ function storyObjectiveText(key) {
   if (key === 'explore') return storyFormat(text, majorSitesFound(), 10);
   if (key === 'caches') return storyFormat(text, story.parts.size, STORY.partTotal);
   if (key === 'breath') return storyFormat(text, survival.planks, STORY.planksNeeded);
+  if (key === 'repair') return text.replace('{wolf}', Math.min(packCount('wolfpelt'), SHOWDOWN.repair.wolfpelt)).replace('{hare}', Math.min(packCount('pelt'), SHOWDOWN.repair.pelt));
   return storyFormat(text);
 }
 
@@ -397,7 +401,7 @@ function objectiveTarget() {
     const site = storyNextSite();
     return site ? { x: site.x, z: site.z, label: storySiteName(site) } : null;
   }
-  if (key === 'breath' || key === 'assemble' || key === 'launch') {
+  if (key === 'breath' || key === 'assemble' || key === 'launch' || key === 'board' || (key === 'repair' && packCount('wolfpelt') >= SHOWDOWN.repair.wolfpelt && packCount('pelt') >= SHOWDOWN.repair.pelt)) {
     const site = siteById('breath');
     const at = site.launch || { x: 0, z: 0 };
     return { x: site.x + at.x, z: site.z + at.z, label: key === 'breath' ? storySiteName(site) : 'Varga’s launch frame' };

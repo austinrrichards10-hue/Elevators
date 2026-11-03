@@ -217,27 +217,29 @@ function buildPuffs(count, color, fog = false) {
 const wreck = { group: null, x: 0, z: 0, smoke: null, fire: null, burning: false, clearing: null, colliders: [] };
 
 // Picks somewhere new for the plane to come down, clears the trees there and builds the
-// broken plane, quiet until the cutscene (or a skip) sets it burning.
-function placeWreck() {
+// broken plane, quiet until the cutscene (or a skip) sets it burning. A saved game passes
+// `at` ({ x, z, heading }) to put it back where it was.
+function placeWreck(at = null) {
   if (wreck.group) scene.remove(wreck.group);
   for (const geo of wreck.ownGeometry || []) geo.dispose();
   if (wreck.scorchMaterial) wreck.scorchMaterial.dispose();
   if (wreck.clearing) CLEARINGS.splice(CLEARINGS.indexOf(wreck.clearing), 1);
   for (const c of wreck.colliders) LANDMARK_COLLIDERS.splice(LANDMARK_COLLIDERS.indexOf(c), 1);
   let x = 0, z = 0;
-  for (let tries = 0; tries < 50; tries++) {
+  for (let tries = 0; tries < 50 && !at; tries++) {
     const a = Math.random() * Math.PI * 2, d = 260 + Math.random() * 340;
     x = LANDMARKS.start.x + Math.cos(a) * d;
     z = LANDMARKS.start.z + Math.sin(a) * d;
     if (Math.hypot(x, z) < WORLD_RADIUS - 90 && SITES.every((s) => Math.hypot(x - s.x, z - s.z) > s.clear + 45)
       && POINTS_OF_INTEREST.every((p) => Math.hypot(x - p.x, z - p.z) > 40) && SITE_SHARDS.every(([sx, sz]) => Math.hypot(x - sx, z - sz) > 30)) break;
   }
+  if (at) ({ x, z } = at);
   wreck.x = x;
   wreck.z = z;
   wreck.clearing = [{ x, z }, 24];
   CLEARINGS.push(wreck.clearing);
   // The fuselage lies along `heading`; colliders run down its length, plus the broken tail.
-  const heading = Math.random() * Math.PI * 2;
+  const heading = at ? at.heading : Math.random() * Math.PI * 2;
   const along = (d) => ({ x: x + Math.sin(heading) * d, z: z + Math.cos(heading) * d });
   wreck.colliders = [-10, -5, 0, 5, 10].map((d) => ({ ...along(d), r: 1.7, h: 4 }));
   const tailAt = { x: x + Math.sin(heading + 0.5) * -17, z: z + Math.cos(heading + 0.5) * -17 };

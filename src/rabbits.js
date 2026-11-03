@@ -6,12 +6,13 @@
 
 /* ---------- The hare ---------- */
 const RABBIT = {
-  count: 18, // alive around her at once
-  extra: 12, // more again near the trapper's cabin and the lake
+  count: 28, // alive around her at once
+  extra: 14, // more again near the trapper's cabin and the lake
   spawnMin: 25, spawnMax: 110, despawn: 150,
   show: 80, // beyond this the fog hides them, so they aren't drawn
   unseen: 72, // a hare that appears closer than this must appear out of her view
-  scale: 1.15, // a touch bigger than life: fat as cats
+  scale: 1.4, // bigger than life, so they're easy to spot: fat as cats
+  limp: 0.3, // how fast a wounded hare can go, against a sound one
   hop: 1.5, // ambling speed, in metres per second
   romp: 5.5, // chasing each other about
   run: 10.5, // bolting: faster than she can sprint
@@ -73,11 +74,11 @@ function getRabbitKit() {
     new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt), new THREE.Vector3(rx, ry, rz)),
     colour,
   ];
-  const white = new THREE.Color(0xf4f1eb), saddle = new THREE.Color(0xc9c0b2), tip = new THREE.Color(0x221c19);
+  const white = new THREE.Color(0xc9ab86), saddle = new THREE.Color(0x6e5038), tip = new THREE.Color(0x221c19);
   const eye = new THREE.Color(0x0d0907), nose = new THREE.Color(0x8a706b), pad = new THREE.Color(0xdcd2c4);
   const shade = new THREE.Color();
-  // Winter white, with a faint grey-fawn saddle along the back and over the crown, so a
-  // hare still reads against the snow.
+  // Still in their brown summer coats, with a darker saddle along the back and over the
+  // crown, so they stand out plainly against the snow.
   const fur = (lo, hi) => (p) => shade.copy(white).lerp(saddle, THREE.MathUtils.smoothstep(p.y, lo, hi) * 0.8);
 
   const body = rabbitMerge([
@@ -205,6 +206,8 @@ function makeRabbit(x, z) {
     partner: null, // a hare it was born near, and romps with
     leads: false,
     dead: null, // { t, roll, vel, vy, y, spin } once it's been killed
+    wounded: false, // hit by a light shot: it can only limp
+    limpStep: 0,
     entry: null,
     gone: false,
   };
@@ -499,8 +502,9 @@ function rabbitMove(hare, dt) {
   hare.lift = 0;
   if (hare.hop >= 0) {
     const g = hare.gait;
-    hare.hop += dt / g.time;
-    const step = g.speed * dt;
+    // A wounded hare limps: slow, short, lopsided hops.
+    hare.hop += dt / (g.time * (hare.wounded ? 1.5 : 1));
+    const step = g.speed * (hare.wounded ? RABBIT.limp : 1) * dt;
     hare.pos.x += Math.sin(hare.heading) * step;
     hare.pos.z += Math.cos(hare.heading) * step;
     pushOutOfColliders(hare.pos, 0.15);
@@ -513,13 +517,14 @@ function rabbitMove(hare, dt) {
     if (hare.hop >= 1) {
       // Landed. A bolting hare springs straight into the next bound.
       if (g === RABBIT_GAITS.amble) hare.hops--;
+      if (hare.wounded) hare.limpStep = (hare.limpStep || 0) + 1;
       if (want === g && g.rest[1] === 0) hare.hop -= 1;
       else { hare.hop = -1; hare.rest = rabbitRand(g.rest[0], g.rest[1]); }
       if (g !== RABBIT_GAITS.amble && Math.hypot(hare.pos.x - player.pos.x, hare.pos.z - player.pos.z) < 35) {
         burst(rabbitTmp.set(hare.pos.x, hare.pos.y + 0.04, hare.pos.z), 0xf2f5ff, 2, 0.9);
       }
     }
-    if (hare.hop >= 0) hare.lift = 4 * hare.hop * (1 - hare.hop) * g.height;
+    if (hare.hop >= 0) hare.lift = 4 * hare.hop * (1 - hare.hop) * g.height * (hare.wounded ? (hare.limpStep % 2 ? 0.25 : 0.55) : 1);
   }
 }
 
@@ -760,6 +765,15 @@ function arrowHitsCreature(arrow) {
     const hit = rabbitStruck(hare, tip) || rabbitStruck(hare, rabbitMid.set(backX, backY, backZ));
     if (hit) {
       lodgeArrow(hare.rig.root, arrow, hare.rig.arrows);
+      // A light shot wounds a sound hare rather than killing it: it limps off, slowly.
+      if (!hare.wounded && arrow.power < 0.8) {
+        hare.wounded = true;
+        Sfx.arrowFlesh();
+        Sfx.hareSqueal(0.5);
+        boltRabbit(hare);
+        markCombat('hare');
+        return true;
+      }
       rabbitDir.copy(arrow.vel).setY(0).normalize().multiplyScalar(1.5 * arrow.power);
       killRabbit(hare, 'arrow', rabbitDir.clone());
       Sfx.arrowFlesh();

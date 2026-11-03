@@ -641,6 +641,9 @@ const LORE = {
     breath: 'Carry the ten parts to the Breath ({planks}/10 planks)',
     assemble: 'Assemble Varga’s balloon at the launch frame',
     launch: 'Climb into the balloon and cut the tether',
+    mendFire: 'Build a campfire and rest by it (C)',
+    repair: 'Patch the balloon: {wolf}/5 wolf pelts · {hare}/10 hare pelts',
+    board: 'Climb into the patched balloon',
   },
 
   /* ---------- The Ember Blade ---------- */
@@ -663,46 +666,4 @@ const LORE = {
     ],
   },
 
-  /* ---------- The final boss ---------- */
-  // Teto, back from the snow, clinging under the balloon's basket. Her
-  // lines are hers; reply, hint, phase hints, teeterBack, retryThought and after are Miku.
-  boss: {
-    name: 'Teto',
-    kicker: 'Final boss',
-    sub: 'Influencer. Saboteur. No pants.',
-    lurch: 'Why are we listing?',
-    peek: 'Knock knock!',
-    // If she woke by Miku's fire and wandered off...
-    gone: [
-      'Miss me? I woke up by your little fire and you’d just LEFT me there.',
-      'I’ve been hanging under your basket since the Breath. My arms are SO toned now.',
-    ],
-    // ...or if nobody ever woke her.
-    asleep: [
-      'Nobody woke me up! I had to follow the smoke MYSELF!',
-      'I’ve been hanging under your basket since the Breath. My arms are SO toned now.',
-    ],
-    confess: [
-      'The engine? That was ME. I pulled the fuel cut-off!',
-      'A whole death crater, all to myself. Do you KNOW what that does for engagement?',
-    ],
-    pants: "I'm insane because I never had any pants!",
-    reply: 'That explains a lot, actually.',
-    fight: 'Now hold STILL. This is my good side.',
-    hint: 'Dodge with Space when her eyes flash. Hit her while she’s seeing stars.',
-    attacks: { lunge: 'Say CHEESE!', claw: 'Fresh NAILS!', shove: 'Mind the GAP!', burner: 'HOT TAKE!' },
-    hurt: ['OW! My SKIN ROUTINE!', 'Not the FACE!', 'That’s going in my notes app!', 'Do you know who I AM?', 'RUDE!'],
-    taunts: ['This is SO going viral.', 'Hold still, I’m filming!', 'You’re not even my main character.', 'Smile for the thumbnail!'],
-    phase2: 'Okay. OKAY. Gloves off! I never had gloves either!',
-    phase2Hint: 'She’s getting faster. If she shoves me onto the rim, mash Space.',
-    phase3: 'FINE! Let’s turn up the HEAT!',
-    phase3Hint: 'She’s going for the burner. Don’t stand where it’s pointing.',
-    teeterSave: 'Not yet! You’re my B-roll!',
-    teeterBack: 'Nope. Staying in the basket, thanks.',
-    retry: ['Again! From the top! The lighting was wrong.', 'Take two! And this time, FEEL it.', 'Cut! Reset! Places, everyone!'],
-    retryThought: 'Okay. Again. Dodge the glint, hit the stars.',
-    defeat: ['No. No no no. My arc isn’t FINISHED!', 'Like and subscriiiiibe!'],
-    fall: 'I’M OKAAAAY!',
-    after: 'She’ll land somewhere photogenic. She always does.',
-  },
 };

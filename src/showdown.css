@@ -1,5 +1,5 @@
-/* ---------- boss ---------- */
-/* Teto, the final fight in the balloon basket (src/boss.js). */
+/* ---------- showdown ---------- */
+/* Teto's ambush, the fight in the clearing and the end of part one (src/showdown.js). */
 
 /* Her health across the top, in the HUD's own bar style. */
 #boss-bar { position: absolute; top: 22px; left: 50%; width: min(520px, 64vw); transform: translateX(-50%); text-align: center; text-shadow: 0 1px 3px #0a0e22; animation: boss-in .6s ease-out both; }
@@ -38,6 +38,22 @@
 /* The fight has its own goal; the tracker, compass and minimap step aside. */
 body.boss-fight #objective, body.boss-fight #compass, body.boss-fight #minimap { display: none; }
 
+/* The heat wave's cooldown, by her hotbar. */
+body.boss-fight #hotbar { display: none; }
+#sword-wave { position: absolute; right: 26px; bottom: 26px; padding: 6px 12px 9px; border-radius: 8px; background: rgba(10, 14, 34, .6); font-size: 13px; letter-spacing: .06em; color: #cfe9ff; opacity: .6; }
+#sword-wave i { position: absolute; left: 10px; right: 10px; bottom: 4px; height: 2px; max-width: calc(100% - 20px); background: #6fc6ff; }
+#sword-wave.ready { opacity: 1; box-shadow: 0 0 14px rgba(90, 180, 255, .45); }
+
+/* The fairies' voices: soft and green. */
+#cine-caption.fairy { color: #e6ffe9; text-shadow: 0 0 6px #33d16a, 0 0 18px #2bbf5c, 0 2px 0 #0d3d1c; font-style: italic; }
+
+/* END PART 1. */
+#end-part { justify-content: center; background: radial-gradient(ellipse at center, rgba(10, 14, 34, .55), rgba(5, 6, 12, .92)); text-align: center; }
+#end-part h2 { font-size: clamp(42px, 7vw, 86px); letter-spacing: .18em; color: #fff0f3; text-shadow: 0 0 24px rgba(255, 90, 140, .55); animation: end-in 1.6s ease-out both; }
+#end-part .tag, #end-part .title-actions { animation: end-in 1.6s 1s ease-out both; }
+@keyframes end-in { from { opacity: 0; transform: translateY(8px); } }
+
 @media (prefers-reduced-motion: reduce) {
+  #end-part h2, #end-part .tag, #end-part .title-actions { animation: none; }
   #boss-taunt.on, #boss-hint, #boss-bar.stage-up .bar.boss-health { animation: none; }
 }

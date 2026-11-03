@@ -181,6 +181,8 @@ canvas.addEventListener('mousedown', (e) => {
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
   if (survival.sitting) { standUp(); return; }
+  // In the fight her hands are full of flame swords (showdown.js).
+  if (arenaActive()) { showdownClick(e.button); return; }
   if (e.button === 0) {
     if (survival.tool === 'axe') startSwing();
     else if (survival.tool === 'katana') startSlash();
@@ -250,7 +252,7 @@ function resetRun() {
   resetKatana();
   resetCrimson();
   resetBalloon();
-  resetBoss();
+  resetShowdown();
   for (const k in keys) keys[k] = false;
   aiming = false;
   cancelDraw();
@@ -336,8 +338,8 @@ const DEATHS = {
 };
 
 function playerDied(cause) {
-  // In the final fight a loss restarts the fight instead (boss.js).
-  if (bossCatchDeath(cause)) return;
+  // Losing to Teto starts the fight over instead (showdown.js).
+  if (showdownCatchDeath(cause)) return;
   game.state = 'dead';
   pointerWasLocked = false;
   document.exitPointerLock();
@@ -491,7 +493,6 @@ function findAimPoint(out) {
   };
   for (const hare of rabbits) if (!hare.dead) nearer(rabbitCentre(hare, aimCreatureAt), RABBIT.hit * RABBIT.scale + 0.08);
   for (const wolf of wolves) if (!wolf.dead) nearer(wolf.bodyCentre(aimCreatureAt), WOLF_BODY.r + 0.1);
-  if (bossFighting()) for (const [part, r] of [['head', 0.28], ['chest', 0.38], ['hips', 0.38]]) nearer(bossKit.avatar[part].getWorldPosition(aimCreatureAt), r);
   return out.copy(origin).addScaledVector(viewDir, hit);
 }
 const aimCreatureAt = new THREE.Vector3(), aimCreatureTmp = new THREE.Vector3();
@@ -571,8 +572,8 @@ function updateArrows(dt) {
     for (let i = 0; i < steps; i++) {
       arrow.vel.y -= BOW.gravity * h;
       arrow.tip.addScaledVector(arrow.vel, h);
-      // A wolf or a hare that's hit takes the arrow with it; so does the final boss (boss.js).
-      if (bossArrowHit(arrow) || arrowHitsCreature(arrow)) {
+      // A wolf or a hare that's hit takes the arrow with it.
+      if (arrowHitsCreature(arrow)) {
         arrow.flying = false;
         removeArrow(arrow);
         break;
@@ -603,6 +604,8 @@ function moveInput() {
 // The roll axis follows the direction of travel, so forward, backward, sideways and
 // diagonal dodges each tumble their own way.
 function startDodge() {
+  // Down in the fight, Space scrambles her clear instead (showdown.js).
+  if (showdownMash()) return;
   if (survival.sitting) { standUp(); return; }
   if (player.dodge || player.stamina < 25) return;
   player.stamina -= 25;
@@ -655,6 +658,8 @@ function updatePlayer(dt) {
     return;
   }
   // Sitting by a fire until she moves off (survival.js).
+  // Knocked down by Teto, she can't move (showdown.js).
+  if (showdownHoldsPlayer(dt)) { avatar.simulate(dt); return; }
   if (survival.sitting) {
     if (moving) standUp();
     else { poseSitting(dt); avatar.simulate(dt); return; }
@@ -677,13 +682,13 @@ function updatePlayer(dt) {
     if (u >= 1) player.dodge = null;
   } else if (moving) {
     // Numb with cold, she slows down; snowshoes carry her faster.
-    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * mod.speed * (survival.warmth < 15 ? 0.8 : 1) * gearSpeed();
+    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * mod.speed * (survival.warmth < 15 ? 0.8 : 1) * gearSpeed() * showdownSpeed();
     move.normalize();
     player.pos.addScaledVector(move, speed * dt);
     step = speed * dt;
   }
-  // Up in the balloon basket the trunks and rocks below don't apply (boss.js).
-  if (!mod.noclip && !bossFighting()) pushOutOfColliders(player.pos, 0.34);
+  // In Teto's clearing the trunks and rocks of the real forest don't apply (showdown.js).
+  if (!mod.noclip && !arenaActive()) pushOutOfColliders(player.pos, 0.34);
 
   const r = Math.hypot(player.pos.x, player.pos.z);
   if (r > WORLD_RADIUS) {
@@ -691,8 +696,8 @@ function updatePlayer(dt) {
     player.pos.z *= WORLD_RADIUS / r;
   }
   player.pos.y = groundHeight(player.pos.x, player.pos.z);
-  // The final fight keeps her on the balloon basket's floor (boss.js).
-  bossHoldPlayer(player.pos, dt);
+  // The fight keeps her inside Teto's clearing (showdown.js).
+  showdownClamp(player.pos);
 
   // Faster movement keeps the same stride length, so the legs speed up with it.
   step /= mod.speed;
@@ -707,8 +712,8 @@ function updatePlayer(dt) {
   player.stride += (stride - player.stride) * (1 - Math.exp(-9 * dt));
   player.walkPhase += step * (sprinting ? 1.95 : 2.55) * player.gaitDir;
   poseAvatar(dt, move, moving);
-  // Shoved onto the basket's rim in the final fight, she teeters (boss.js).
-  bossPosePlayer(dt);
+  // In the fight she holds her flame swords (showdown.js).
+  showdownPosePlayer(dt);
   avatar.simulate(dt);
 }
 
@@ -1004,18 +1009,19 @@ function update(dt) {
   updateCamera(dt);
   updateHud();
   updateArrows(dt);
-  updateWolves(dt);
+  // Nothing of the real forest reaches Teto's clearing.
+  if (!arenaActive()) updateWolves(dt);
   updateSurvival(dt);
   updateWreck(dt);
   updateSites(dt);
   updateItems(dt);
-  updateRabbits(dt);
+  if (!arenaActive()) updateRabbits(dt);
   updateStory(dt);
   updateMap(dt);
   updateKatana(dt);
   updateCrimson(dt);
   updateBalloon(dt);
-  updateBoss(dt);
+  updateShowdown(dt);
 }
 
 // Slow drift in front of her on the title screen, so the skin choice shows.
@@ -1298,7 +1304,7 @@ initMap();
 initKatana();
 initCrimson();
 initBalloon();
-initBoss();
+initShowdown();
 renderLoadout();
 pipeline.compile();
 
@@ -1325,6 +1331,8 @@ function frame(now) {
   if (['paused', 'book', 'reader', 'dead'].includes(game.state) && balloonRoar && balloon.burn > 0.01) { balloonRoar.set(0, 0.2); balloon.burn = 0; }
   // Nothing moves behind the field book or a note, so one frame of it will do.
   const still = game.state === 'book' || game.state === 'reader';
+  // The snow settling over Miku is shown as stills (showdown.js).
+  if (showdownFrozen()) return;
   if (!still || !frozenDrawn) pipeline.render(dt, game.time);
   frozenDrawn = still;
 }
@@ -1333,4 +1341,4 @@ addEventListener('resize', () => { frozenDrawn = false; });
 requestAnimationFrame(frame);
 
 // Exposed for debugging from the browser console.
-window.hollowSnow = { game, player, world, keys, arrows, survival, wolves, rabbits, pack, SITES, katana, crimson, balloon, boss, stats, setSkin, startDodge, startDraw, releaseArrow, startSwing, finishCutscene, teleport: (x, z) => teleport({ x, z }) };
+window.hollowSnow = { game, player, world, keys, arrows, survival, wolves, rabbits, pack, SITES, katana, crimson, balloon, showdown, fight, stats, setSkin, startDodge, startDraw, releaseArrow, startSwing, finishCutscene, teleport: (x, z) => teleport({ x, z }) };

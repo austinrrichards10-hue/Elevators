@@ -71,8 +71,8 @@ function animatedModel(file, materialFor) {
 
 /* ---------- The wolf ---------- */
 const WOLF = {
-  count: 6, // how many roam around her at once
-  spawnMin: 55, spawnMax: 95, despawn: 150,
+  count: 9, // how many roam around her at once
+  spawnMin: 40, spawnMax: 80, despawn: 150,
   walk: 1.5, run: 8.5, creep: 0.8,
   watch: 22, // closer than this, they stop and watch her
   flee: 9, // closer than this, they run
@@ -82,7 +82,8 @@ const WOLF = {
   attackChance: 0.12, // how often a wolf that starts watching her charges instead
   attackCooldown: [70, 150], // seconds before any wolf may attack again
   health: 100,
-  arrowDamage: [26, 55], // from the lightest draw that fires to a full one
+  arrowDamage: [40, 70], // from the lightest draw that fires to a full one
+  limp: 0.4, // how fast a wounded wolf can go, against a sound one
   headshot: 1.6, // an arrow to the head does this much more
   axeDamage: 40,
   cornered: 0.3, // chance a badly hurt wolf turns on her instead of running
@@ -208,8 +209,8 @@ class Wolf {
     }
 
     let want = this.heading, speed = 0, anim = 'idle';
-    // Badly hurt, it can't run as fast.
-    const lame = this.health < WOLF.health * 0.5 ? 0.85 : 1;
+    // Wounded, it can only limp.
+    const lame = this.wounded ? WOLF.limp : 1;
     if (this.state === 'flee') {
       want = toPlayer + Math.PI;
       speed = WOLF.run * lame;
@@ -263,9 +264,18 @@ class Wolf {
     this.play(anim);
     if (anim === 'walk') this.actions.walk.timeScale = Math.max(0.4, Math.abs(this.speed) / WOLF.walk);
     if (anim === 'creep') this.actions.creep.timeScale = this.state === 'feed' ? 0.12 : Math.max(0.4, Math.abs(this.speed) / WOLF.creep);
+    if (this.actions.run) this.actions.run.timeScale = this.wounded ? 0.55 : 1;
     this.mixer.update(dt);
     this.holder.position.copy(this.pos);
     this.holder.rotation.y = this.heading;
+    // A wounded wolf favours one leg: a dip and a lurch with every other stride.
+    if (this.wounded && Math.abs(this.speed) > 0.3) {
+      this.limpT = (this.limpT || 0) + dt * Math.abs(this.speed) * 1.6;
+      this.holder.position.y -= Math.max(0, Math.sin(this.limpT)) * 0.08;
+      this.holder.rotation.z = Math.sin(this.limpT) * 0.08;
+    } else {
+      this.holder.rotation.z = 0;
+    }
   }
 
   // Charges at her with a growl, which gives her a moment to dodge or strike first.
@@ -294,6 +304,7 @@ class Wolf {
     if (this.dead) return false;
     this.health -= amount;
     if (this.health <= 0) { this.die(by); return true; }
+    this.wounded = true;
     const dist = Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
     if (this.health < WOLF.health * 0.5 && dist < 14 && this.state !== 'attack' && !wolves.some((w) => w.state === 'attack') && Math.random() < WOLF.cornered) {
       Sfx.wolfYelp(1);

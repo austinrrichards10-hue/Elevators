@@ -178,6 +178,7 @@ const pack = {};
 const lootState = {
   used: new Set(), // items she has used this run, for her first-time thoughts
   got: new Set(),
+  taken: new Set(), // keys of the placed and scattered finds she's picked up, for saving
   toasts: [], // lines waiting for the toast, shown together once she's back in the snow
   glintT: 0,
   streamT: 0,
@@ -1068,6 +1069,8 @@ function lootPlace(id, x, z, opts = {}) {
     id, x, z, y: opts.y === undefined ? null : opts.y, count: Math.max(1, opts.count || 1), contents: opts.contents || null,
     yaw: opts.yaw === undefined ? hash2(x * 3.1, z * 1.7) * Math.PI : opts.yaw, source: opts.source || 'spawned',
     model: null, taken: false, settled: opts.source !== 'scatter', serial: lootSerial++,
+    // The same find gets the same key every run, from where it was first put.
+    key: `${id}@${Math.round(x * 10)},${Math.round(z * 10)}`,
   };
   const d = itemDef(rec.id);
   const sign = d.kind === 'note' && d.noteKind === 'sign';
@@ -1095,6 +1098,7 @@ function lootLabel(rec) {
 
 function lootTake(rec) {
   const d = itemDef(rec.id);
+  if (rec.source !== 'spawned') lootState.taken.add(rec.key);
   if (d.kind === 'note') {
     Sfx.itemPaper();
     // Signs stay where they stand, to be read again.
@@ -1519,6 +1523,7 @@ function resetItems() {
   lootFlying.length = 0;
   lootState.used.clear();
   lootState.got.clear();
+  lootState.taken.clear();
   lootState.toasts.length = 0;
   for (const entry of WORLD_ITEMS) {
     lootPlace(entry.item, entry.x, entry.z, { y: entry.y, count: entry.count, contents: entry.contents, yaw: entry.yaw, source: 'placed' });

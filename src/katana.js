@@ -841,9 +841,7 @@ function katanaCut(swing, mid, half) {
   // Creatures are cut in the same sector, trimmed to the arc in front of her.
   const lo = Math.max(-KATANA.arc / 2, katanaAngle(mid - player.bodyYaw) - half);
   const hi = Math.min(KATANA.arc / 2, katanaAngle(mid - player.bodyYaw) + half);
-  let killed = hi > lo ? sliceCreatures(px, pz, reach, player.bodyYaw + (lo + hi) / 2, hi - lo) || 0 : 0;
-  // The final boss in the balloon basket is cut in the same sector, once a stroke (boss.js).
-  if (hi > lo && bossSlice(px, pz, reach, player.bodyYaw + (lo + hi) / 2, hi - lo, swing)) killed++;
+  const killed = hi > lo ? sliceCreatures(px, pz, reach, player.bodyYaw + (lo + hi) / 2, hi - lo) || 0 : 0;
   if (trees || planks || killed) {
     Sfx.katanaCut(Math.min(1.4, 0.7 + (trees + killed) * 0.2));
     player.shake = Math.max(player.shake, killed ? 0.3 : 0.18);

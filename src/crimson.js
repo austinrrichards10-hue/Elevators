@@ -323,7 +323,7 @@ function updateCrimson(dt) {
     // Slow, shallow breaths, for anyone close enough to see them.
     if (d < 40) c.chest.rotation.x = survivor.chestX + Math.sin(game.time * 1.3) * 0.02;
     // Warmed through, she slips away once Miku's found somewhere else and is out of sight.
-    if (crimson.phase === 'warmed' && crimson.sitesLeft <= 0 && d > CRIMSON.away && boss.phase === 'none') crimsonVanish();
+    if (crimson.phase === 'warmed' && crimson.sitesLeft <= 0 && d > CRIMSON.away && showdown.stage === 'none') crimsonVanish();
   } else if (!crimson.noticed && d < CRIMSON.notice) {
     crimson.noticed = true;
     showNote(crimsonText('gone'));

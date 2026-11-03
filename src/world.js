@@ -631,6 +631,10 @@ function createTiles(scene) {
       felledTrees.clear();
       for (const [key, tile] of tiles) drop(key, tile);
     },
+    // Builds every tile afresh, leaving out the trees in felledTrees (as a loaded game sets it).
+    refresh() {
+      for (const [key, tile] of tiles) drop(key, tile);
+    },
   };
 }
 
@@ -854,6 +858,9 @@ function buildWorld(renderer, scene) {
     // A fresh forest for a new run: felled trees grow back and the clearings are rebuilt.
     resetForest() {
       tiles.reset();
+    },
+    refreshForest() {
+      tiles.refresh();
     },
     update(dt, time, cameraPos, focus) {
       worldUniforms.uTime.value = time;

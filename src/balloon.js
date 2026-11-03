@@ -556,14 +556,15 @@ function balloonLine(key) {
 }
 
 function balloonFrameLabel() {
-  if (balloon.phase === 'tethered') return 'Press E to climb in and cut the tether';
+  if (balloon.phase === 'tethered') return showdown.stage === 'none' ? 'Press E to climb in and cut the tether' : showdownRepairLabel();
   if (balloonReady()) return 'Press E to assemble Varga\'s balloon';
   const total = balloonPartIds().length;
   return `Varga's launch frame: ${balloonPartsHeld()}/${total} parts, ${Math.min(survival.planks, BALLOON.planks)}/${BALLOON.planks} planks`;
 }
 
 function useBalloonFrame() {
-  if (balloon.phase === 'tethered') { startBalloonLaunch(); return; }
+  // Climbing in sets off Teto's ambush, and what follows it (showdown.js).
+  if (balloon.phase === 'tethered') { showdownUseFrame(); return; }
   if (balloon.phase !== 'none') return;
   if (balloonReady()) { startBalloonAssembly(); return; }
   // Not yet: say what's still missing.
@@ -1058,10 +1059,17 @@ function tickBalloon(dt) {
   m.rig.rotation.x = (Math.sin(time * 0.53) * 0.014 + Math.sin(time * 1.7) * 0.004) * tug;
   m.rig.rotation.z = (Math.sin(time * 0.41 + 1) * 0.016 + Math.sin(time * 1.3) * 0.003) * tug;
   m.rig.rotation.y = balloon.launched ? Math.sin(time * 0.07) * 0.6 : 0;
-  m.envelope.scale.y = m.envelope.scale.x * (1 + Math.sin(time * 0.8) * 0.006);
+  // Shot full of holes, the envelope sags down over the basket (showdown.js).
+  const sag = balloon.sag || 0;
+  if (sag > 0) {
+    m.envelope.scale.x = m.envelope.scale.z = 1 + sag * 0.18;
+    m.envelope.scale.y = (1 - sag * 0.62) * (1 + Math.sin(time * 0.8) * 0.006);
+  } else {
+    m.envelope.scale.y = m.envelope.scale.x * (1 + Math.sin(time * 0.8) * 0.006);
+  }
 
-  // Tethered, it burns now and then to stay up.
-  if (balloon.phase === 'tethered') {
+  // Tethered, it burns now and then to stay up; not once it's been shot.
+  if (balloon.phase === 'tethered' && !sag) {
     balloon.burnTimer -= dt;
     if (balloon.burnTimer <= 0) {
       balloon.burnTimer = BALLOON.burnEvery[0] + Math.random() * (BALLOON.burnEvery[1] - BALLOON.burnEvery[0]);

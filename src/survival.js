@@ -537,13 +537,15 @@ const COMBAT_NOTES = { wolf: 'Not with wolves this close. I\'d never get up agai
 function toggleSit() {
   if (survival.sitting) { standUp(); return; }
   const fire = restingFire();
-  if (!fire || mod.fly || player.dodge || bossFighting()) return;
+  if (!fire || mod.fly || player.dodge || arenaActive()) return;
   const reason = combatReason();
   if (reason) { showNote(COMBAT_NOTES[reason]); return; }
   survival.sitting = { fire, blend: 0 };
   survival.swing = null;
   cancelDraw();
   Sfx.thud();
+  // Every rest by a fire saves the game, and the first after Teto's ambush brings the fairies.
+  if (!showdownSat(fire)) saveGame();
 }
 
 function standUp() {
@@ -619,7 +621,7 @@ function updateSurvival(dt) {
   // What's close enough to use with E. E only acts once per press.
   const pressed = keys.KeyE && !survival.eHeld;
   survival.eHeld = !!keys.KeyE;
-  const offer = nearestInteractable();
+  const offer = arenaActive() ? null : nearestInteractable();
   let prompt = offer ? (typeof offer.label === 'function' ? offer.label() : offer.label) : '';
   if (survival.sitting) prompt = 'Resting by the fire · C to stand';
   else if (!prompt && restingFire()) prompt = 'Press C to sit by the fire';

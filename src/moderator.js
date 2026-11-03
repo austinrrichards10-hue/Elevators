@@ -38,9 +38,10 @@ const MOD_ACTIONS = {
   items: ['Give chart, compass, binoculars, snowshoes', () => { for (const id of ['map', 'compass', 'binoculars', 'snowshoes']) packAdd(id); }],
   reveal: ['Reveal every site', () => { for (const s of SITES) revealSite(s.id); }],
   katana: ['Give the Ember Blade', () => grantKatana('mod')],
-  crimson: ['Teto wanders off', () => { if (crimson.phase !== 'gone' && boss.phase === 'none') crimsonVanish(); }],
+  crimson: ['Teto wanders off', () => { if (crimson.phase !== 'gone' && showdown.stage === 'none') crimsonVanish(); }],
   balloon: ['Give balloon parts and planks', () => giveBalloonParts()],
-  boss: ['Jump to the final boss', () => { closeMod(); if (game.state === 'paused') setPaused(false); bossJumpTo(); }],
+  pelts: ['Give 5 wolf and 10 hare pelts', () => { packAdd('wolfpelt', 5); packAdd('pelt', 10); }],
+  boss: ['Jump to Teto\'s ambush', () => { closeMod(); if (game.state === 'paused') setPaused(false); showdownJumpTo(); }],
 };
 
 let modReturn = null;
@@ -66,7 +67,7 @@ function renderMod() {
     </header>
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>
     ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['stamina', 'arrows']))}
-    ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire', 'items', 'reveal', 'katana', 'crimson', 'balloon', 'boss']))}
+    ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire', 'items', 'reveal', 'katana', 'crimson', 'balloon', 'pelts', 'boss']))}
     ${section('Move speed', chips('speed', MOD_SPEEDS, mod.speed, (v) => `${v}×`))}
     ${section('Game speed', chips('time', MOD_TIMES, mod.timeScale, (v) => `${v}×`))}
     ${section('Teleport', `<div class="chips">${Object.keys(MOD_TELEPORTS).map((name) => `<button data-teleport="${name}">${name}</button>`).join('')}</div>`)}

@@ -2,9 +2,9 @@
 
 A third-person survival game in a vast frozen, fog-bound forest. Your plane goes down in the Hollow, a crater the locals call the Death Crater, with walls nobody has ever climbed out of. You're Miku. The intro opens in the cabin, across the table from Teto, before the engine goes up and the door tears away; you're thrown out, crash down through a tree and wake in the snow. The intro and the story's scenes always play through. Find the axe, cut wood, build a fire before the cold takes you, and work out how to get out. Wolves roam the forest. The world is generated in code and stretches a kilometre in every direction from its centre, with mountains around the edge.
 
-The way out was left by Dr. Ilse Varga, a weather scientist stranded here in 1980. She worked out that the Breath, a column of warm air rising from the crater's centre, could carry a hot air balloon over the rim. She hid ten balloon parts at ten sites around the crater, each under a red flag with a page of her journal. Find all ten, bring them and 10 planks to her launch frame at the Breath, and fly out.
+The way out was left by Dr. Ilse Varga, a weather scientist stranded here in 1980. She worked out that the Breath, a column of warm air rising from the crater's centre, could carry a hot air balloon over the rim. She hid ten balloon parts at ten sites around the crater, each under a red flag with a page of her journal. Find all ten, bring them and 10 planks to her launch frame at the Breath, and get ready to fly out. This is part one of the story; it ends at the balloon.
 
-Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it.
+Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it. The game saves itself every time you sit down by a campfire, and **Load last save** on the title screen picks up from there.
 
 | Input | Action |
 | --- | --- |
@@ -15,7 +15,7 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 | Right click | Aim the bow (zooms in) |
 | 1 / 2 / 3 | Bow / axe / the Ember Blade (once you have it) |
 | E | Pick up, read, open, cook, skin, use |
-| C | Sit by a campfire to heal quickly; C again, or move, to get up |
+| C | Sit by a campfire to heal quickly and save; C again, or move, to get up |
 | Tab | Crafting (then a number to craft) |
 | M / J / I | Field book: map, journal, pack. Press again or Tab to close |
 | F | Eat or drink the best thing you're carrying |
@@ -35,10 +35,10 @@ On the map: click to set a waypoint, scroll to zoom, drag to pan, C to centre on
 - **Warmth** drains away from a fire, over about three and a half minutes. Frost creeps across the screen as it falls, and once it's gone the cold eats your health.
 - **The axe** is buried in a tree stump near where you land; it catches the light now and then.
 - **Trees** take a few chops to fell and topple away from you. Chop the fallen log to split it into planks.
-- **A campfire** costs 5 planks. Stand within a few metres of it to warm up, or sit by it (C) to heal quickly. You can't sit down in a fight: not for a few seconds after a blow either way, with a wolf charging or close by, or with a hare you're hunting still bolting nearby.
+- **A campfire** costs 5 planks. Stand within a few metres of it to warm up, or sit by it (C) to heal quickly and save the game. You can't sit down in a fight: not for a few seconds after a blow either way, with a wolf charging or close by, or with a hare you're hunting still bolting nearby.
 - **Wolves** wander in packs. They'll stop and watch you if you come near, and bolt if you get too close. Once in a long while one charges with a growl; dodge, or hit it with an arrow or the axe to send it running.
-- **Wolves** have health now: two good arrows or three axe blows. Skin a dead one for a pelt and meat.
-- **Snow hares** are everywhere. They freeze, then bolt in zig-zags, and they're easier to get close to if you creep or stand still with the bow up. Take a hare for meat and a pelt, and cook raw meat at a fire.
+- **Wolves** have health now: two arrows or three axe blows. A wounded wolf can only limp, so it's easy to finish off. Skin a dead one for a pelt and meat.
+- **Snow hares** are everywhere, still in their brown coats so they stand out on the snow. They freeze, then bolt in zig-zags, and they're easier to get close to if you creep or stand still with the bow up. A full draw drops one; a light shot wounds it and it limps away slowly. Take a hare for meat and a pelt, and cook raw meat at a fire.
 - **Gear** cuts how fast the cold gets to you: a parka, fur mittens and a hood crafted from hare pelts, and a wolf-pelt cloak. Snowshoes make you faster.
 - **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops. Teto is off its nose, still strapped into her torn-off seat and out cold. Nothing you do wakes her, but light a fire beside her and, once you've found another site or two, she'll come round and wander off on her own.
 - **If you die** you can start over or wake by your last campfire, keeping everything you found.
@@ -55,7 +55,14 @@ The ten sites are the Ranger Lookout, Henrik's Cabin, Hollow Station, the Frozen
 
 ## The way out
 
-Bring all ten parts and 10 planks to Varga's launch frame at the Breath and press E to assemble the balloon, then again to climb in and cut the tether. You won't be alone up there. The final fight happens in the basket: watch for the glint in her eyes and dodge with Space, then hit her while she's dazed. If she shoves you onto the rim, mash Space to get back in. If you lose, the fight starts again from the top.
+Bring all ten parts and 10 planks to Varga's launch frame at the Breath and press E to assemble the balloon, then again to climb in. Teto has other ideas: she shoots the balloon full of holes and throws you into the forest, and the fight with her is long and hard.
+
+- **Your swords.** You tear off your twin tails and they become two blue flame swords. Left click slashes (three times for a combo, ending in a spin); right click crosses them and throws a wave of heat at range.
+- **Her gatling hair.** She points, her drills light up with red sights, and then they rattle out bullets. Keep moving sideways or dodge with Space. After each burst she has to rest: that's when to hit her, and hits land harder then. Get too close and she whips her hair round you.
+- **Railguns.** Get hit too often and you're knocked down: she charges two railgun beams and you have to mash Space to roll clear. It takes more presses every time she knocks you down.
+- **If you lose**, the fight starts again from the top.
+
+Afterwards you wake by the ruined balloon, hurt. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in, and that's the end of part one.
 
 ## The Ember Blade
 
@@ -89,7 +96,8 @@ src/
   katana.js      The Ember Blade
   crimson.js     Teto by the wreck: checking on her, warming her, and her wandering off
   balloon.js     Varga's balloon: the launch frame, assembly, the launch and the ending
-  boss.js        The fight in the basket
+  showdown.js    Teto's ambush at the balloon, the fight in the clearing, and the end of part one
+  save.js        Saving at campfires, and loading from the title screen
   moderator.js   Moderator menu: flying, no cold, give items, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
   boots.js       Black tactical boots, shaped from the characters' own feet
