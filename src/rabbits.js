@@ -763,6 +763,7 @@ function arrowHitsCreature(arrow) {
       rabbitDir.copy(arrow.vel).setY(0).normalize().multiplyScalar(1.5 * arrow.power);
       killRabbit(hare, 'arrow', rabbitDir.clone());
       Sfx.arrowFlesh();
+      markCombat('hare');
       return true;
     }
     if (Math.hypot(dx, dz) < 3 && tip.y - hare.pos.y < 2.5 && hare.state !== 'flee') rabbitSpook(hare, player.pos.x, player.pos.z, 0.05);
@@ -777,6 +778,7 @@ function arrowHitsCreature(arrow) {
     burst(tip, 0x8a7a6a, 6, 1.6);
     Sfx.arrowFlesh();
     wolf.hurt(damage, 'arrow');
+    markCombat('wolf');
     return true;
   }
   return false;
@@ -809,6 +811,7 @@ function meleeHit(x, z, reach, weapon) {
   }
   Sfx.arrowFlesh();
   player.shake = Math.max(player.shake, 0.12);
+  markCombat(isWolf ? 'wolf' : 'hare');
   return true;
 }
 
@@ -841,6 +844,7 @@ function sliceCreatures(x, z, radius, yaw, arc) {
   }
   // Whatever survived the sweep heard it.
   rabbitsHear(x, z, radius + 20, 0.05);
+  if (count) markCombat('wolf');
   return count;
 }
 

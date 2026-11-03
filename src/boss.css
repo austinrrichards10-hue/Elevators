@@ -1,5 +1,5 @@
 /* ---------- boss ---------- */
-/* Crimson Curls, the final fight in the balloon basket (src/boss.js). */
+/* Teto, the final fight in the balloon basket (src/boss.js). */
 
 /* Her health across the top, in the HUD's own bar style. */
 #boss-bar { position: absolute; top: 22px; left: 50%; width: min(520px, 64vw); transform: translateX(-50%); text-align: center; text-shadow: 0 1px 3px #0a0e22; animation: boss-in .6s ease-out both; }

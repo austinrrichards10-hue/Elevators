@@ -1,6 +1,6 @@
-// Crimson Curls, the final boss. The wolves never kept her (or she never stayed asleep):
+// Teto, the final boss. She woke by Miku's fire and wandered off (or never stayed asleep):
 // she has been clinging under the balloon's basket since the Breath, and once it clears
-// the trees she climbs over the rim, owns up to crashing the plane, and fights Twin Tails
+// the trees she climbs over the rim, owns up to crashing the plane, and fights Miku
 // for it in a basket a metre and a half across. Beaten, she loses her grip on the rim and
 // drops into the cloud, and the balloon carries on up to the dawn.
 
@@ -23,7 +23,7 @@ const BOSS = {
   // while she's seeing stars.
   taken: { guard: 0.4, windup: 1, strike: 0.6, open: 1.5 },
   blows: { lunge: 14, claw: 4, teeter: 20, burner: 16 },
-  dodge: 0.5, // seconds into a dodge in which she can't touch Twin Tails
+  dodge: 0.5, // seconds into a dodge in which she can't touch Miku
   teeter: { time: 2.8, need: [6, 6, 7] },
   warmth: 9, // per second, from the burner over their heads
   cam: { dist: 2.05, height: 1.72, tilt: 0.12, shoulder: 0.42, top: 3.0, assist: 2.4 },
@@ -42,7 +42,7 @@ const BOSS_FALL = { rim: 1.0, line: 1.2, last: 2.9, slip: 4.3, pomf: 6.4, far: 7
 
 // Her words, in case the story's are missing.
 const BOSS_LINES = {
-  name: 'Crimson Curls',
+  name: 'Teto',
   kicker: 'Final boss',
   sub: 'Influencer. Saboteur. No pants.',
   lurch: 'Why are we listing?',
@@ -560,9 +560,9 @@ function bossChest(out) {
   return bossKit.avatar.chest.getWorldPosition(out);
 }
 
-/* ---------- Twin Tails ---------- */
+/* ---------- Miku ---------- */
 // Called from updatePlayer once she has moved: in the fight she stays on the basket floor,
-// inside the wicker, out of the tanks and off Crimson's toes. A dodge is a quick side-step
+// inside the wicker, out of the tanks and off Teto's toes. A dodge is a quick side-step
 // in here rather than a roll across a clearing.
 function bossHoldPlayer(pos, dt = 1 / 60) {
   if (!bossFighting()) return;
@@ -640,7 +640,7 @@ function bossPoseRider(dt, x, z, yaw) {
 }
 
 /* ---------- Hits on her ---------- */
-// A blow from Twin Tails: how much lands depends on what Crimson is doing. True if it
+// A blow from Miku: how much lands depends on what Teto is doing. True if it
 // struck her at all (an arrow stops in her, guarded or not).
 function bossDamage(base, by, at) {
   const f = bossFight;
@@ -718,7 +718,7 @@ function bossSlice(px, pz, reach, yaw, arc, swing) {
 }
 
 /* ---------- Her blows ---------- */
-// A blow at Twin Tails, unless she's mid-dodge. True if it landed.
+// A blow at Miku, unless she's mid-dodge. True if it landed.
 function bossBlow(kind, dodgeable = true) {
   if (dodgeable && bossDodging()) { Sfx.bossWhoosh(); return false; }
   hurtPlayer(BOSS.blows[kind] * BOSS.harder[boss.stage], 'wolf');
@@ -726,7 +726,7 @@ function bossBlow(kind, dodgeable = true) {
   return true;
 }
 
-// What happens if Twin Tails' health runs out mid-fight (game.js playerDied): the fight
+// What happens if Miku's health runs out mid-fight (game.js playerDied): the fight
 // starts over instead of the death screen.
 function bossCatchDeath() {
   if (boss.phase === 'fight') { boss.pendingRetry = true; return true; }
@@ -827,7 +827,7 @@ function bossNextStage() {
   bar.classList.add('stage-up');
 }
 
-// The shove landed: Twin Tails goes back against the rim, over the drop.
+// The shove landed: Miku goes back against the rim, over the drop.
 function bossStartTeeter(dir) {
   const f = bossFight;
   // Against whichever wall the shove mostly went; the tanks fill the back, so a shove that
@@ -868,14 +868,14 @@ function bossTeeterTick(dt) {
   if (!tt.done) {
     tt.lean = Math.min(1, tt.lean + dt * 5);
     if (tt.got >= tt.need) {
-      // Hauled herself back in: Crimson didn't expect that.
+      // Hauled herself back in: Teto didn't expect that.
       tt.done = 'saved';
       tt.doneT = 0;
       Sfx.wicker();
       say(bossText('teeterBack'), 2.4);
       bossOpen(0.3);
     } else if (tt.t >= BOSS.teeter.time) {
-      // Too slow: Crimson yanks her back by the twin tails, for the footage.
+      // Too slow: Teto yanks her back by the twin tails, for the footage.
       tt.done = 'yanked';
       tt.doneT = 0;
       f.act = 'yank';
@@ -937,7 +937,7 @@ function bossThink(dt) {
       // Coiling back, eyes on her.
       step(f.at.x - toX / dist, f.at.z - toZ / dist, 0.12);
     }
-    // Her aim follows Twin Tails until a moment before she goes.
+    // Her aim follows Miku until a moment before she goes.
     if (!f.locked) f.target.set(tt.x, 0, tt.z);
     if (!f.locked && f.t >= f.dur - (k === 'burner' ? 0.3 : 0.1)) {
       f.locked = true;
@@ -1027,7 +1027,7 @@ function bossThink(dt) {
       f.at.x = tt.x + nx * BOSS.apart;
       f.at.z = tt.z + nz * BOSS.apart;
       bossKeepIn(f.at);
-      // Cornered against the wicker, she shoves Twin Tails back instead.
+      // Cornered against the wicker, she shoves Miku back instead.
       const gx = tt.x - f.at.x, gz = tt.z - f.at.z, g = Math.hypot(gx, gz);
       if (g < BOSS.apart - 0.01) {
         tt.x = f.at.x + (g > 1e-4 ? gx / g : -nx) * BOSS.apart;
@@ -1217,11 +1217,11 @@ function bossSteamFade(at, size) {
 /* ---------- The fight's camera and HUD ---------- */
 // Tighter than the forest's follow camera and a little higher, looking down into the
 // basket so both of them fit. The mouse still steers it (the bow aims down its middle), but
-// it leans gently towards Crimson when she drifts out of view.
+// it leans gently towards Teto when she drifts out of view.
 function bossCamera(dt) {
   const C = BOSS.cam, f = bossFight;
   if (!f.teeter && !player.drawing && !aiming && dt > 0) {
-    // Turned so she sits under the crosshair, clear of Twin Tails' shoulder.
+    // Turned so she sits under the crosshair, clear of Miku's shoulder.
     bossKit.avatar.hips.getWorldPosition(bossV);
     const dx = bossV.x - player.pos.x, dz = bossV.z - player.pos.z, d = Math.max(0.3, Math.hypot(dx, dz));
     const side = lerp(C.shoulder, 0.38, player.adsCam || 0);
@@ -1270,7 +1270,6 @@ function bossGuard() {
   if (binocularsUp()) toggleBinoculars();
   setPrompt('');
   wolfAttack.cooldown = Math.max(wolfAttack.cooldown, 20);
-  if (crimson.pending) crimson.pending = null;
 }
 
 /* ---------- The reveal ---------- */
@@ -1285,7 +1284,6 @@ function bossBegin(resume) {
   boss.health = BOSS.health;
   boss.stage = 0;
   // She's here now, not by the wreck.
-  if (crimson.pending) crimson.pending = null;
   if (survivor.avatar) survivor.avatar.setVisible(false);
   clearWolves();
   bossHoses(false);
@@ -1411,7 +1409,7 @@ function bossRevealUpdate(dt) {
     bossKit.avatar.simulate(dt);
   }
 
-  // Twin Tails, braced by the burner, facing the side she comes over.
+  // Miku, braced by the burner, facing the side she comes over.
   bossPoseRider(dt, 0, -0.2, 0);
   if (t > R.lurch && t < R.lurch + 0.5) avatar.head.rotation.z = Math.sin((t - R.lurch) * 20) * 0.08;
 
@@ -1444,7 +1442,7 @@ function bossRevealUpdate(dt) {
 }
 
 /* ---------- The fight ---------- */
-// Both of them back to the start: full health, her on the side she climbed in, Twin Tails
+// Both of them back to the start: full health, her on the side she climbed in, Miku
 // by the tanks.
 function bossResetFight() {
   const f = bossFight;
@@ -1588,7 +1586,7 @@ function bossStartDefeat() {
     kind: 'defeat', t: 0, fired: {}, from: f.at.clone(), out: new THREE.Vector3(out[0], 0, out[1]),
     rim: new THREE.Vector3(out[0] * 0.5, 0, out[1] * 0.5), tt: new THREE.Vector3(tt.x, 0, tt.z), fall: null, scream: null,
   };
-  // Twin Tails can't be standing where she staggers to.
+  // Miku can't be standing where she staggers to.
   const s = bossScene;
   if (s.tt.distanceTo(s.rim) < 0.6) s.tt.copy(s.rim).addScaledVector(s.out, -0.62);
   bossKeepIn(s.tt);
@@ -1661,7 +1659,7 @@ function bossDefeatUpdate(dt) {
   if (c.root.visible) c.simulate(dt);
   bossEffects(dt);
 
-  // Twin Tails stays where she is, watching.
+  // Miku stays where she is, watching.
   const watch = s.fall ? Math.atan2(s.rim.x - s.tt.x, s.rim.z - s.tt.z) : Math.atan2(f.at.x - s.tt.x, f.at.z - s.tt.z);
   bossPoseRider(dt, s.tt.x, s.tt.z, watch);
 
@@ -1691,7 +1689,7 @@ function bossRimPose(p, T, t) {
   const tip = span(t, F.rim, F.slip);
   bossTeeterPose(p, T, 0.5 + tip * 0.5);
   if (t > F.line && t < F.slip) {
-    // The other hand points at Twin Tails for the last word.
+    // The other hand points at Miku for the last word.
     p.handR.set(-0.08, 0.2, 0.36);
     p.poleR.set(-0.3, -0.9, -0.3);
   }
@@ -1739,7 +1737,7 @@ function bossFightTime() {
   return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
 }
 
-// Everything back as it was: no Crimson in the basket, no bar, no flags.
+// Everything back as it was: no Teto in the basket, no bar, no flags.
 function resetBoss() {
   const s = bossScene;
   if (s && s.scream) s.scream.stop();
@@ -1761,7 +1759,7 @@ function resetBoss() {
 function bossAbort() {
   if (boss.phase === 'none' || boss.phase === 'done') return;
   resetBoss();
-  if (survivor.avatar && crimson.phase === 'asleep') survivor.avatar.setVisible(true);
+  if (survivor.avatar && crimson.phase !== 'gone') survivor.avatar.setVisible(true);
 }
 
 function initBoss() {

@@ -41,7 +41,7 @@ const ITEMS = {
     desc: 'Ranger Brandt\'s field glasses. Hold one steady on a far landmark and it goes on the chart.',
   },
   scarf: {
-    name: 'Crimson\'s scarf', plural: 'scarves', kind: 'gear', cold: 0.88, proper: true, hint: 'a little warmer',
+    name: 'Teto\'s scarf', plural: 'scarves', kind: 'gear', cold: 0.88, proper: true, hint: 'a little warmer',
     desc: 'Red cashmere, monogrammed C.C. It was always going to outlive her.',
     got: 'She\'d want me to have it. She\'d want everyone to know she wanted me to have it.',
   },
@@ -202,7 +202,7 @@ function itemName(id, n = 1) {
   return d.proper ? d.name : d.name.charAt(0).toLowerCase() + d.name.slice(1);
 }
 
-// 'the tin of beans', '2 tins of beans', 'Crimson's scarf'.
+// 'the tin of beans', '2 tins of beans', 'Teto's scarf'.
 function lootThe(id, n = 1) {
   if (n > 1) return `${n} ${itemName(id, n)}`;
   const d = itemDef(id);
@@ -1135,7 +1135,7 @@ function lootRemove(rec, fly = false) {
   if (i >= 0) lootItems.splice(i, 1);
 }
 
-// Something dropped at runtime: Crimson's things, a carcass. Returns a handle for
+// Something dropped at runtime: Teto's things, a carcass. Returns a handle for
 // removeWorldItem. opts: { count, y, yaw, contents }.
 function spawnWorldItem(id, x, z, opts = {}) {
   const rec = lootPlace(id, x, z, { ...opts, source: 'spawned' });

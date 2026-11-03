@@ -1,10 +1,12 @@
 // Player avatar: the imported character models, driven by the game's own rig.
 // "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
 const SKINS = {
-  teal: { name: 'Twin Tails', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
-  crimson: { name: 'Crimson Curls', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
+  teal: { name: 'Miku', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, outfit: (...args) => dressMiku(...args) },
+  crimson: { name: 'Teto', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
 };
-// The skins you can play as. Crimson Curls isn't one: she's another survivor, found at the crash site.
+// Teto as she's found by the wreck: the same model, out cold with her eyes closed.
+SKINS.tetoAsleep = { ...SKINS.crimson, eyesClosed: true };
+// The skins you can play as. Teto isn't one: she's another survivor, found at the crash site.
 const SKIN_ORDER = ['teal'];
 
 // The model's bind pose to game space: feet on the ground, centred, facing +Z.
@@ -250,6 +252,84 @@ function removeSkinUnderCloth(parts) {
   }
 }
 
+// Closed eyes, for someone out cold: the eyes, their whites and the lash lines round them
+// go, each eye is covered over with plain skin, and a single dark line is drawn across it,
+// curved like a sleeping eye.
+function closeEyes(parts) {
+  const toGame = (pos, i, out) => out.set((pos.getX(i) - MODEL_CENTER.x) * MODEL_SCALE, pos.getY(i) * MODEL_SCALE, (pos.getZ(i) - MODEL_CENTER.z) * MODEL_SCALE);
+  const whites = parts.find((p) => p.matName === 'White');
+  const face = parts.filter((p) => p.matName === 'Gray' && !p.isHair).sort((a, b) => a.geometry.attributes.position.count - b.geometry.attributes.position.count)[0];
+  if (!whites || !face) return;
+  const wp = whites.geometry.attributes.position;
+  const p = new THREE.Vector3();
+  // Each eye's box, from its white.
+  let mid = 0;
+  for (let i = 0; i < wp.count; i++) mid += toGame(wp, i, p).x / wp.count;
+  const boxes = [new THREE.Box3(), new THREE.Box3()];
+  for (let i = 0; i < wp.count; i++) { toGame(wp, i, p); boxes[p.x < mid ? 0 : 1].expandByPoint(p); }
+  const inEye = (v) => boxes.some((b) => v.x > b.min.x - 0.012 && v.x < b.max.x + 0.012 && v.y > b.min.y - 0.006 && v.y < b.max.y + 0.008 && v.z > b.min.z - 0.03);
+  // The lash lines are part of the black details: take out the pieces round the eyes.
+  for (const part of parts) {
+    if (part.matName !== 'Black' || part.isHair) continue;
+    const pos = part.geometry.attributes.position, index = part.geometry.index.array, kept = [];
+    const c = new THREE.Vector3();
+    for (let t = 0; t < index.length; t += 3) {
+      c.set(0, 0, 0);
+      for (let k = 0; k < 3; k++) c.add(toGame(pos, index[t + k], p));
+      if (!inEye(c.multiplyScalar(1 / 3))) kept.push(index[t], index[t + 1], index[t + 2]);
+    }
+    part.geometry.setIndex(kept);
+  }
+  // Skin over each eye: the white's own shape, a hair in front, coloured from the cheek.
+  const fp = face.geometry.attributes.position, fuv = face.geometry.attributes.uv;
+  let cheek = 0, best = Infinity;
+  const below = new THREE.Vector3((boxes[1].min.x + boxes[1].max.x) / 2, boxes[1].min.y - 0.012, boxes[1].max.z);
+  for (let i = 0; i < fp.count; i++) {
+    const d = toGame(fp, i, p).distanceToSquared(below);
+    if (d < best) { best = d; cheek = i; }
+  }
+  const lid = whites.geometry.clone();
+  const lp = lid.attributes.position;
+  for (let i = 0; i < lp.count; i++) lp.setZ(i, lp.getZ(i) + 0.0015 / MODEL_SCALE);
+  const uv = new Float32Array(lp.count * 2);
+  for (let i = 0; i < lp.count; i++) { uv[i * 2] = fuv.getX(cheek); uv[i * 2 + 1] = fuv.getY(cheek); }
+  lid.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  // The line across each eye, riding with the head like the rest of the face.
+  const sw = whites.geometry.attributes.skinWeight, si = whites.geometry.attributes.skinIndex;
+  const scale = sw.normalized ? (sw.array instanceof Uint8Array ? 255 : 65535) : 1;
+  const pos = [], joints = [], weights = [], index = [];
+  const gameToModelPoint = (x, y, z) => [x / MODEL_SCALE + MODEL_CENTER.x, y / MODEL_SCALE, z / MODEL_SCALE + MODEL_CENTER.z];
+  for (const b of boxes) {
+    const w = b.max.x - b.min.x, h = b.max.y - b.min.y, steps = 10;
+    for (let s = 0; s <= steps; s++) {
+      const u = s / steps;
+      const x = b.min.x + w * (0.08 + u * 0.88);
+      const sag = Math.sin(u * Math.PI) * h * 0.18;
+      const y = b.min.y + h * 0.42 - sag;
+      // The nearest point of the white sets how far forward the line sits.
+      let z = b.max.z, near = Infinity, at = 0;
+      for (let i = 0; i < wp.count; i++) {
+        const d = (toGame(wp, i, p).x - x) ** 2 + (p.y - y) ** 2;
+        if (d < near) { near = d; z = p.z; at = i; }
+      }
+      const thick = h * (0.05 + 0.07 * Math.sin(u * Math.PI)) + (u > 0.8 ? h * 0.04 : 0);
+      pos.push(...gameToModelPoint(x, y + thick, z + 0.003), ...gameToModelPoint(x, y - thick, z + 0.003));
+      for (let k = 0; k < 2; k++) for (let j = 0; j < 4; j++) { joints.push(si.array[at * 4 + j]); weights.push(sw.array[at * 4 + j] / scale); }
+      if (s) { const a = pos.length / 3 - 4; index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    }
+  }
+  const line = new THREE.BufferGeometry();
+  line.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  line.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(joints, 4));
+  line.setAttribute('skinWeight', new THREE.Float32BufferAttribute(weights, 4));
+  line.setIndex(index);
+  for (let i = parts.length - 1; i >= 0; i--) if (parts[i] === whites || /Eyes/.test(parts[i].matName)) parts.splice(i, 1);
+  parts.push(
+    { geometry: lid, material: face.material, isHair: false, isCloth: false, matName: 'Eyelids' },
+    { geometry: line, material: new THREE.MeshBasicMaterial({ color: 0x241619, side: THREE.DoubleSide }), isHair: false, isCloth: false, matName: 'Lashes' },
+  );
+}
+
 function makeMaterial(file, index) {
   const def = file.json.materials[index];
   const pbr = def.pbrMetallicRoughness || {};
@@ -287,14 +367,17 @@ function loadSkinData(skinId) {
       if (def.scalpTrim && !isHair) trimScalp(geometry, def.scalpTrim);
       if (!materials.has(primitive.material)) materials.set(primitive.material, makeMaterial(file, primitive.material));
       // Shirts, shorts and skirts, by their material names in the file.
-      const isCloth = !isHair && /Shirt|Cloth|Gradient/.test(json.materials[primitive.material].name);
-      parts.push({ geometry, material: materials.get(primitive.material), isHair, isCloth });
+      const matName = json.materials[primitive.material].name;
+      const isCloth = !isHair && /Shirt|Cloth|Gradient/.test(matName);
+      parts.push({ geometry, material: materials.get(primitive.material), isHair, isCloth, matName });
     }
   });
 
   removeSkinUnderCloth(parts);
   fitClothToLegs(parts, names);
   addBoots(parts);
+  if (def.outfit) def.outfit(parts, names, inverses);
+  if (def.eyesClosed) closeEyes(parts);
 
   // Which bones actually move vertices, so only those are updated each frame.
   const usedBones = new Set();

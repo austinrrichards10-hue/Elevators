@@ -9,6 +9,11 @@ const SURVIVAL = {
   campfireCost: 5,
   axeSwing: 0.62, // seconds per swing
   axeReach: 1.3,
+  restHeal: 7, // health per second sitting by a fire
+  restRadius: 3.2, // how close to a fire she has to be to sit by it
+  combatCalm: 8, // seconds after a fight (a blow either way) before she can sit
+  wolfNear: 12, // a wolf this close is too close to sit down
+  hareNear: 20, // a hare bolting this close means she's mid-hunt
 };
 const STUMP_SPOT = { x: LANDMARKS.start.x + 2.0, z: LANDMARKS.start.z - 4.4 };
 LANDMARK_COLLIDERS.push({ x: STUMP_SPOT.x, z: STUMP_SPOT.z, r: 0.5, h: 0.6 });
@@ -25,6 +30,8 @@ const survival = {
   fires: [],
   stump: null,
   hintT: 0,
+  sitting: null, // { fire, blend } while she sits by a fire
+  combatAt: -Infinity, // game time of the last blow, given or taken
 };
 
 /* ---------- Things to use ---------- */
@@ -494,6 +501,55 @@ function updateSurvivalHud(warming) {
   if (survival.crafting) renderCrafting();
 }
 
+/* ---------- Resting by a fire ---------- */
+// Whether she's in a fight: struck or striking in the last few seconds, a wolf charging or
+// close by, or a hare she's after still bolting nearby. 'wolf', 'hare' or null.
+function combatReason() {
+  if (game.time - survival.combatAt < SURVIVAL.combatCalm) return survival.combatWith || 'wolf';
+  for (const wolf of wolves) {
+    if (wolf.dead) continue;
+    if (wolf.state === 'attack' || Math.hypot(wolf.pos.x - player.pos.x, wolf.pos.z - player.pos.z) < SURVIVAL.wolfNear) return 'wolf';
+  }
+  for (const hare of rabbits) {
+    if (!hare.dead && hare.state === 'flee' && Math.hypot(hare.pos.x - player.pos.x, hare.pos.z - player.pos.z) < SURVIVAL.hareNear) return 'hare';
+  }
+  return null;
+}
+
+// A blow given or taken: no sitting down for a while.
+function markCombat(withWhat) {
+  survival.combatAt = game.time;
+  survival.combatWith = withWhat;
+  if (survival.sitting) standUp();
+}
+
+function restingFire() {
+  let best = null, bestD = SURVIVAL.restRadius;
+  for (const fire of survival.fires) {
+    const d = Math.hypot(fire.x - player.pos.x, fire.z - player.pos.z);
+    if (d < bestD) { best = fire; bestD = d; }
+  }
+  return best;
+}
+
+const COMBAT_NOTES = { wolf: 'Not with wolves this close. I\'d never get up again.', hare: 'Not now. I\'m in the middle of a hunt.' };
+
+function toggleSit() {
+  if (survival.sitting) { standUp(); return; }
+  const fire = restingFire();
+  if (!fire || mod.fly || player.dodge || bossFighting()) return;
+  const reason = combatReason();
+  if (reason) { showNote(COMBAT_NOTES[reason]); return; }
+  survival.sitting = { fire, blend: 0 };
+  survival.swing = null;
+  cancelDraw();
+  Sfx.thud();
+}
+
+function standUp() {
+  survival.sitting = null;
+}
+
 /* ---------- Each frame ---------- */
 function nearestFire() {
   let best = Infinity;
@@ -534,6 +590,17 @@ function updateSurvival(dt) {
   }
   // Shivering shakes the view a little when she's very cold.
   if (survival.warmth < 20) player.shake = Math.max(player.shake, 0.012 * (1 - survival.warmth / 20));
+  // Sitting by the fire heals her quickly, until trouble comes along.
+  if (survival.sitting) {
+    const reason = combatReason();
+    if (reason || !survival.fires.includes(survival.sitting.fire)) {
+      standUp();
+      if (reason) showNote(COMBAT_NOTES[reason]);
+    } else {
+      survival.health = Math.min(100, survival.health + SURVIVAL.restHeal * dt);
+    }
+  }
+  $('hp-fill').parentElement.classList.toggle('healing', !!survival.sitting && survival.health < 100);
 
   const stump = survival.stump;
   // The axe's glint: a soft twinkle every few seconds until it's taken.
@@ -553,7 +620,10 @@ function updateSurvival(dt) {
   const pressed = keys.KeyE && !survival.eHeld;
   survival.eHeld = !!keys.KeyE;
   const offer = nearestInteractable();
-  setPrompt(offer ? (typeof offer.label === 'function' ? offer.label() : offer.label) : '');
+  let prompt = offer ? (typeof offer.label === 'function' ? offer.label() : offer.label) : '';
+  if (survival.sitting) prompt = 'Resting by the fire · C to stand';
+  else if (!prompt && restingFire()) prompt = 'Press C to sit by the fire';
+  setPrompt(prompt);
   if (offer && pressed) offer.use();
   updateSurvivalHud(heat > 0);
 }
@@ -571,6 +641,7 @@ function showNote(text) {
 // Damage from anything but the cold, with a red flash and a jolt.
 function hurtPlayer(amount, cause) {
   if (game.state !== 'playing') return;
+  markCombat(cause === 'wolf' ? 'wolf' : survival.combatWith);
   survival.health = Math.max(0, survival.health - amount);
   player.shake = Math.max(player.shake, 0.3);
   Sfx.bite();
@@ -609,7 +680,7 @@ function setPrompt(text) {
 
 /* ---------- A new run ---------- */
 function resetSurvival() {
-  Object.assign(survival, { health: 100, warmth: 100, planks: 0, hasAxe: false, tool: 'bow', swing: null, crafting: false, hintT: 0 });
+  Object.assign(survival, { health: 100, warmth: 100, planks: 0, hasAxe: false, tool: 'bow', swing: null, crafting: false, hintT: 0, sitting: null, combatAt: -Infinity, combatWith: null });
   for (const log of survival.fallen) scene.remove(log.group);
   survival.fallen.length = 0;
   for (const fire of survival.fires) {

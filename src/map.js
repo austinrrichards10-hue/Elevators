@@ -63,7 +63,7 @@ const mapState = {
   trailCount: 0,
   crumb: { x: 0, z: 0, set: false }, // where the last breadcrumb was dropped
   waypoint: null, // { x, z, label }
-  crimson: null, // where Crimson fell
+  crimson: null, // where Teto's empty seat is
   partsTaken: new Set(),
   fresh: new Set(), // sites marked since she last looked at the map
   flagSpots: new Map(),
@@ -309,7 +309,7 @@ const MAP_ICONS = {
     g.beginPath(); g.moveTo(0.02, -0.06); g.bezierCurveTo(0.16, 0.08, 0.14, 0.26, 0, 0.3); g.bezierCurveTo(-0.14, 0.26, -0.12, 0.1, 0.02, -0.06); g.fill();
     g.strokeStyle = g.fillStyle = ink;
   },
-  // Where Crimson fell: a small cross in the snow.
+  // Teto's empty seat: a small cross in the snow.
   crimson(g) {
     g.save();
     g.strokeStyle = MAP_INK.red;
@@ -976,14 +976,14 @@ function mapCollectMarkers() {
     }
   }
   if (wreck.group) list.push({ x: wreck.x, z: wreck.z, kind: 'wreck', label: 'The wreck' });
-  if (mapState.crimson) list.push({ x: mapState.crimson.x, z: mapState.crimson.z, kind: 'crimson', label: 'Where Crimson fell' });
+  if (mapState.crimson) list.push({ x: mapState.crimson.x, z: mapState.crimson.z, kind: 'crimson', label: 'Teto\'s empty seat' });
   for (const fire of survival.fires) list.push({ x: fire.x, z: fire.z, kind: 'fire', label: 'Your campfire' });
   for (const provider of MAP_MARKERS) {
     const found = mapSafe(provider, null);
     if (!Array.isArray(found)) continue;
     for (const m of found) {
       if (!m || !Number.isFinite(m.x) || !Number.isFinite(m.z)) continue;
-      // Where Crimson fell is marked once, by whoever marks it.
+      // Teto's empty seat is marked once, by whoever marks it.
       if (mapState.crimson && Math.hypot(m.x - mapState.crimson.x, m.z - mapState.crimson.z) < 8) {
         const mine = list.find((e) => e.kind === 'crimson');
         if (mine) list.splice(list.indexOf(mine), 1);
@@ -1741,7 +1741,7 @@ function initMap() {
   });
   onGame('siteDiscovered', (site) => { s.fresh.add(site.id); s.hudT = 0; });
   onGame('siteRevealed', (site) => { s.fresh.add(site.id); s.hudT = 0; });
-  onGame('crimsonGone', (at) => { if (at) s.crimson = { x: at.x, z: at.z }; s.hudT = 0; });
+  onGame('crimsonNoticed', () => { if (crimson.fell) s.crimson = { x: crimson.fell.x, z: crimson.fell.z }; s.hudT = 0; });
   onGame('campfire', () => { s.hudT = 0; });
   onGame('revived', () => mapBreakTrail());
   requestAnimationFrame(mapTick);

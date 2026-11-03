@@ -482,7 +482,7 @@ function storyListen() {
   onGame('campfire', (fire) => {
     if (story.flags.fire) return;
     story.flags.fire = true;
-    // A fire by the sleeping Crimson has other consequences, and they speak for themselves.
+    // A fire by the sleeping Teto gets a line of its own (crimson.js).
     const byCrimson = typeof crimson !== 'undefined' && crimson.phase === 'asleep'
       && Math.hypot(fire.x - survivor.x, fire.z - survivor.z) < 7;
     if (!byCrimson) sayLine('firstFire');
@@ -500,10 +500,9 @@ function storyListen() {
     if (kind === 'wolf') { stats.wolves++; sayLine('firstWolfKill'); }
   });
   onGame('katanaObtained', () => storyLater(5, () => sayLine('katana')));
-  onGame('crimsonGone', () => {
-    story.flags.crimsonGone = true;
-    storyLater(35, () => sayLine('crimsonAfter'));
-  });
+  onGame('crimsonGone', () => { story.flags.crimsonGone = true; });
+  // Coming back to find her seat empty.
+  onGame('crimsonNoticed', () => storyLater(4.5, () => sayLine('crimsonAfter')));
   // The balloon's own scenes caption 'assemble' and 'launch'.
   onGame('balloonAssembled', () => { story.flags.assembled = true; });
   onGame('escaped', () => { story.flags.escaped = true; });

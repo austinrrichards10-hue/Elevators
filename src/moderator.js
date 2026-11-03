@@ -38,7 +38,7 @@ const MOD_ACTIONS = {
   items: ['Give chart, compass, binoculars, snowshoes', () => { for (const id of ['map', 'compass', 'binoculars', 'snowshoes']) packAdd(id); }],
   reveal: ['Reveal every site', () => { for (const s of SITES) revealSite(s.id); }],
   katana: ['Give the Ember Blade', () => grantKatana('mod')],
-  crimson: ['Wake Crimson', () => { if (crimson.phase === 'asleep' && boss.phase === 'none') { closeMod(); wakeCrimson(null); } }],
+  crimson: ['Teto wanders off', () => { if (crimson.phase !== 'gone' && boss.phase === 'none') crimsonVanish(); }],
   balloon: ['Give balloon parts and planks', () => giveBalloonParts()],
   boss: ['Jump to the final boss', () => { closeMod(); if (game.state === 'paused') setPaused(false); bossJumpTo(); }],
 };

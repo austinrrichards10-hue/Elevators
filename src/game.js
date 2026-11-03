@@ -151,9 +151,8 @@ addEventListener('keydown', (e) => {
   if (e.repeat) return;
   keys[e.code] = true;
   if (e.code === 'KeyN') toggleMute();
-  // The intro and scenes can be skipped with Space, Enter or Escape.
-  if (game.state === 'cutscene' && ['Space', 'Enter', 'Escape'].includes(e.code)) { finishCutscene(); return; }
-  if (game.state === 'scene' && ['Space', 'Enter', 'Escape'].includes(e.code)) { skipScene(); return; }
+  // The intro and the scenes always play through.
+  if (game.state === 'cutscene' || game.state === 'scene') return;
   if (e.code === 'Backquote' || e.code === 'F2') { e.preventDefault(); toggleMod(); return; }
   if (game.state !== 'playing') return;
   cheatKey(e.code);
@@ -163,6 +162,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') { e.preventDefault(); aimLock = !aimLock; }
   if (e.code === 'Tab') setCrafting(!survival.crafting);
   if (e.code === 'KeyF') quickEat();
+  if (e.code === 'KeyC') toggleSit();
   if (e.code === 'KeyZ') toggleBinoculars();
   const digit = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
   // With the crafting list open, numbers craft; otherwise they pick what's in her hands.
@@ -178,9 +178,9 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; aiming = false; cancelDraw(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousedown', (e) => {
-  if (game.state === 'cutscene') { finishCutscene(); return; }
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
+  if (survival.sitting) { standUp(); return; }
   if (e.button === 0) {
     if (survival.tool === 'axe') startSwing();
     else if (survival.tool === 'katana') startSlash();
@@ -352,10 +352,10 @@ function playerDied(cause) {
 }
 
 /* ---------- Scenes ---------- */
-// Scripted moments played out in the world, like the other survivor waking or the balloon
-// lifting off. A scene is { update(dt), skip() }: it runs the camera and whatever else it
-// needs each frame, and calls endScene() when it's over. While one plays she can't be
-// controlled, and the HUD gives way to the letterbox.
+// Scripted moments played out in the world, like the climb up the lookout or the balloon
+// lifting off. A scene is { update(dt) }: it runs the camera and whatever else it needs each
+// frame, and calls endScene() when it's over. It always plays through: while it does she
+// can't be controlled, and the HUD gives way to the letterbox.
 let activeScene = null;
 
 function playScene(scene) {
@@ -394,10 +394,6 @@ function endScene() {
     if (hadLock && document.pointerLockElement !== canvas) setPaused(true);
     else lockPointer();
   }
-}
-
-function skipScene() {
-  if (activeScene && activeScene.skip) activeScene.skip();
 }
 
 /* ---------- Subtitles ---------- */
@@ -607,6 +603,7 @@ function moveInput() {
 // The roll axis follows the direction of travel, so forward, backward, sideways and
 // diagonal dodges each tumble their own way.
 function startDodge() {
+  if (survival.sitting) { standUp(); return; }
   if (player.dodge || player.stamina < 25) return;
   player.stamina -= 25;
   cancelDraw();
@@ -656,6 +653,11 @@ function updatePlayer(dt) {
   if (mod.fly) {
     flyPlayer(dt, move, moving);
     return;
+  }
+  // Sitting by a fire until she moves off (survival.js).
+  if (survival.sitting) {
+    if (moving) standUp();
+    else { poseSitting(dt); avatar.simulate(dt); return; }
   }
 
   let step = 0;
@@ -708,6 +710,39 @@ function updatePlayer(dt) {
   // Shoved onto the basket's rim in the final fight, she teeters (boss.js).
   bossPosePlayer(dt);
   avatar.simulate(dt);
+}
+
+// Sat in the snow by a fire, knees drawn up and hands held out to the warmth. She sinks
+// down over a moment, and turns to face the flames.
+const sitHand = new THREE.Vector3(), SIT_POLE_L = new THREE.Vector3(0.5, -0.7, -0.1), SIT_POLE_R = new THREE.Vector3(-0.5, -0.7, -0.1);
+function poseSitting(dt) {
+  const sit = survival.sitting;
+  sit.blend = Math.min(1, sit.blend + dt * 2.5);
+  const k = smooth(sit.blend);
+  player.stride = 0;
+  player.runBlend = 0;
+  player.bodyYaw = angleLerp(player.bodyYaw, Math.atan2(sit.fire.x - player.pos.x, sit.fire.z - player.pos.z), 1 - Math.exp(-6 * dt));
+  poseAvatar(dt, new THREE.Vector3(), false);
+  const { root, hips, chest, head, legL, legR, armL, armR } = avatar;
+  root.quaternion.setFromAxisAngle(UP, player.bodyYaw);
+  root.position.copy(player.pos);
+  hips.position.y = lerp(avatar.dims.hips, 0.26, k);
+  hips.rotation.set(0, 0, 0);
+  chest.rotation.set(0.3 * k + Math.sin(game.time * 1.4) * 0.015, 0, 0);
+  head.rotation.set(0.12 * k, 0, 0);
+  for (const [leg, side] of [[legL, 1], [legR, -1]]) {
+    leg.thigh.rotation.set(-2.0 * k, 0, side * 0.22 * k);
+    leg.shin.rotation.set(2.15 * k, 0, 0);
+  }
+  // Palms out to the fire, rocking a little.
+  if (k > 0.3) {
+    for (const [arm, side, pole] of [[armL, 1, SIT_POLE_L], [armR, -1, SIT_POLE_R]]) {
+      const s = arm.upper.position;
+      sitHand.set(s.x * 0.35 + side * 0.04, s.y - 0.2 + Math.sin(game.time * 1.1 + side) * 0.01, 0.38);
+      solveArm(arm, sitHand, pole);
+      arm.hand.quaternion.identity();
+    }
+  }
 }
 
 // Moderator flight: Space climbs, C descends, Shift goes faster. Trees don't block it,

@@ -1,6 +1,6 @@
-// The opening: a stricken plane over the forest, a fall through the sky and the trees,
-// and the crash site the plane leaves somewhere out on the map. Staged in the game world
-// with hard cuts, impact frames, speed lines and letterboxing for an anime feel.
+// The opening: aboard the stricken plane, a fall through the sky and the trees, and the
+// crash site the plane leaves somewhere out on the map. Staged in the game world with hard
+// cuts, impact frames, speed lines and letterboxing for an anime feel.
 
 /* ---------- Models ---------- */
 // "RAF Voyager Aeroplane (Private Plane)" by Foggy_123 (CC BY 4.0); see the README.
@@ -8,6 +8,7 @@ const PLANE = {
   length: 26, // nose to tail, in metres
   fileLength: 122.7, // the same in the file's own units
   engine: new THREE.Vector3(-5.3, -3, 0.6), // the near engine's exhaust, in metres from the centre
+  wingFire: new THREE.Vector3(-5.0, -1.55, 2.3), // where the blast burns up through the wing, ahead of the window
 };
 let planeFile = null;
 const planeMaterials = new Map();
@@ -315,32 +316,86 @@ function setWreckBurning() {
 }
 
 /* ---------- The other survivor ---------- */
-// Crimson Curls, thrown from the plane like the player, lying unconscious on her back in
-// the snow a little way from the wreck.
-const survivor = { avatar: null, x: 0, z: 0 };
-const survivorTilt = new THREE.Quaternion(), survivorYaw = new THREE.Quaternion(), survivorPivot = new THREE.Vector3();
+// Teto rode the plane down still buckled into her seat, which tore loose in the crash and
+// ploughed a furrow through the snow off the wreck's nose. She's slumped in it, out cold.
+const survivor = { avatar: null, seat: null, furrow: null, x: 0, z: 0, chestX: 0 };
+const SURVIVOR_SEAT = { ahead: 18, across: 4, sink: 0.14, tip: -0.32, roll: 0.22, furrow: 7.5 };
+
+function buildFurrow() {
+  const group = new THREE.Group();
+  // The trough itself, a little darker than the snow round it, draped over the ground.
+  const trough = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1, 4, 24).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x7482a8, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+  );
+  group.add(trough);
+  // Snow thrown up along its sides and piled in front of the seat.
+  const lumps = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xf4f7ff, roughness: 0.95 }), 34);
+  lumps.castShadow = false;
+  group.add(lumps);
+  scene.add(group);
+  return { group, trough, lumps };
+}
 
 function placeSurvivor() {
-  if (!survivor.avatar) survivor.avatar = createAvatar(scene, 'crimson');
-  const a = survivor.avatar;
+  if (!survivor.avatar) survivor.avatar = createAvatar(scene, 'tetoAsleep');
+  if (!survivor.seat) {
+    const leather = new THREE.MeshStandardMaterial({ color: 0xd8ccb5, roughness: 0.72 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0x55534f, roughness: 0.6, metalness: 0.3 });
+    const belt = new THREE.MeshStandardMaterial({ color: 0x2c2e35, roughness: 0.8 });
+    survivor.seat = buildSeat(leather, trim, { torn: true, belt });
+    scene.add(survivor.seat);
+    survivor.furrow = buildFurrow();
+  }
+  const a = survivor.avatar, seat = survivor.seat;
   // Off the nose of the plane, clear of the wings.
-  const ahead = 18, across = 4;
+  const { ahead, across } = SURVIVOR_SEAT;
   survivor.x = wreck.x + Math.sin(wreck.heading) * ahead + Math.cos(wreck.heading) * across;
   survivor.z = wreck.z + Math.cos(wreck.heading) * ahead - Math.sin(wreck.heading) * across;
-  const y = groundHeight(survivor.x, survivor.z);
-  survivorYaw.setFromAxisAngle(UP_AXIS, wreck.heading + 2.2);
-  survivorTilt.setFromAxisAngle(SIDE_AXIS, -Math.PI / 2 + 0.06);
-  a.root.quaternion.copy(survivorYaw).multiply(survivorTilt);
-  survivorPivot.set(0, a.dims.hips, 0).applyQuaternion(a.root.quaternion);
-  a.root.position.set(survivor.x, y + 0.13, survivor.z).sub(survivorPivot);
-  // Arms flung out a little, one knee bent, her head lolling to one side.
-  a.armL.upper.rotation.set(0, 0, 0.55);
-  a.armR.upper.rotation.set(0.2, 0, -0.4);
-  a.armL.fore.rotation.set(0, 0, 0.3);
-  a.legL.thigh.rotation.set(-0.35, 0, 0.08);
-  a.legL.shin.rotation.set(0.6, 0, 0);
-  a.legR.thigh.rotation.set(0, 0, -0.05);
-  a.head.rotation.set(0, 0.5, 0.15);
+  // It came to rest facing away from the plane, tipped back and over on one side.
+  const yaw = wreck.heading + 0.25;
+  seat.position.set(survivor.x, groundHeight(survivor.x, survivor.z) - SURVIVOR_SEAT.sink, survivor.z);
+  seat.rotation.set(SURVIVOR_SEAT.tip, yaw, SURVIVOR_SEAT.roll, 'YXZ');
+  seat.visible = true;
+  // The furrow runs back towards the wreck.
+  const { trough, lumps } = survivor.furrow;
+  const back = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), across3 = new THREE.Vector3(back.z, 0, -back.x);
+  const pos = trough.geometry.attributes.position;
+  const len = SURVIVOR_SEAT.furrow;
+  for (let i = 0; i < pos.count; i++) {
+    // The plane's own x and z are across and along before they're laid on the ground.
+    const u = pos.getZ(i) + 0.5, w = pos.getX(i) * lerp(0.6, 1.05, u);
+    const x = survivor.x + back.x * (u * len + 0.2) + across3.x * w, z = survivor.z + back.z * (u * len + 0.2) + across3.z * w;
+    pos.setXYZ(i, x, groundHeight(x, z) + 0.03 - (1 - Math.abs(pos.getX(i)) * 2) * 0.02, z);
+  }
+  pos.needsUpdate = true;
+  trough.geometry.computeBoundingSphere();
+  const rand = seededRandom(Math.floor(survivor.x * 13 + survivor.z * 7));
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  for (let i = 0; i < lumps.count; i++) {
+    let along, off;
+    if (i < 24) { along = 0.4 + rand() * len; off = (i % 2 ? 1 : -1) * (0.55 + rand() * 0.25); }
+    else { along = -0.55 - rand() * 0.5; off = (rand() - 0.5) * 1.1; }
+    p.set(survivor.x + back.x * along + across3.x * off, 0, survivor.z + back.z * along + across3.z * off);
+    const size = i < 24 ? 0.05 + rand() * 0.09 * (1 - along / len) : 0.07 + rand() * 0.08;
+    p.y = groundHeight(p.x, p.z) - size * 0.15;
+    q.setFromEuler(new THREE.Euler(rand(), rand() * 6, rand()));
+    s.set(size * 1.4, size * 0.6, size);
+    lumps.setMatrixAt(i, m.compose(p, q, s));
+  }
+  lumps.instanceMatrix.needsUpdate = true;
+  survivor.furrow.group.visible = true;
+  // Slumped against the side it tipped to, head lolling, arms limp in her lap.
+  const sh = a.armL.upper.position;
+  poseSeated(a, seat, {
+    slump: 1,
+    hands: {
+      l: new THREE.Vector3(sh.x + 0.1, sh.y - 0.5, 0.18),
+      r: new THREE.Vector3(-sh.x - 0.28, sh.y - 0.56, 0.06),
+      poleL: POLE_L, poleR: POLE_R,
+    },
+  });
+  survivor.chestX = a.chest.rotation.x;
   a.reset();
 }
 
@@ -433,47 +488,118 @@ function poseLying(dt, at) {
 }
 
 /* ---------- The cutscene ---------- */
+// Aboard first, through Miku's eyes: Teto across from her, the engine going up outside the
+// window, the door tearing away and the cabin emptying out of it, Miku with it. Then the fall,
+// the treetops and the snow. It plays through; there's no skipping it.
 const CUT = {
-  eject: 3.4, // when she's thrown out
-  land: 9.4, // when she hits the snow
-  slow: 0.35, // story-time speed through the ejection beat
-  slowEnd: 5.0,
-  black: 9.9,
-  wake: 11.4,
-  boom: 12.4,
-  end: 15.2,
+  eject: 9.6, // out of the door
+  slow: 0.35, // story-time speed as she's thrown clear
+  slowEnd: 11.2,
+  canopy: 14.0, // into the top of the tree
+  through: 15.6, // out of the bottom of it
+  land: 16.5, // into the snow
+  black: 17.0,
+  wake: 18.5,
+  boom: 19.5,
+  end: 22.3,
   altitude: 120,
   speed: 55,
-  get landW() { return this.land - (this.slowEnd - this.eject) * (1 - this.slow); },
+  cruise: 16, // how fast the cabin scenes seem to fly: slow enough to keep the ground below loaded
 };
+// The cabin's beats.
+const CABIN_T = { vlog: 2.0, back: 3.9, window: 4.1, blast: 5.0, turn: 5.65, alarm: 5.9, yell: 6.0, yell2: 6.9, door: 7.4, burst: 8.4, lookBack: 8.85, lookOut: 9.25 };
+const CABIN_EYE = new THREE.Vector3(-0.46, CABIN.floor + 0.86, 0.5);
 
-const cutscene = { active: false, t: 0, plane: null, trail: null, debris: null, dir: new THREE.Vector3(), side: new THREE.Vector3(), engine: null, wind: null, shot: '', frame: 0 };
+const cutscene = { active: false, t: 0, w: 0, plane: null, cabin: null, teto: null, phone: null, trail: null, debris: null, boughs: [], tree: null, dir: new THREE.Vector3(), side: new THREE.Vector3(), engine: null, wind: null, fired: {} };
 const camTarget = new THREE.Vector3(), camAt = new THREE.Vector3(), herAt = new THREE.Vector3(), planeAt = new THREE.Vector3(), ground = new THREE.Vector3();
+const cutV = new THREE.Vector3(), cutV2 = new THREE.Vector3(), cutUp = new THREE.Vector3();
+const exitAt = new THREE.Vector3(), canopyTop = new THREE.Vector3(), canopyBottom = new THREE.Vector3();
 
 function landingSpot() {
   return ground.set(LANDMARKS.start.x, groundHeight(LANDMARKS.start.x, LANDMARKS.start.z), LANDMARKS.start.z);
 }
 
-function planePosition(t, out) {
-  const L = landingSpot();
-  const travel = (t - CUT.eject) * CUT.speed;
-  // Losing height after the blast.
-  const sink = t > CUT.eject ? (t - CUT.eject) ** 1.6 * 2.2 : 0;
-  return out.copy(L).addScaledVector(cutscene.dir, travel).add(new THREE.Vector3(0, CUT.altitude - sink + Math.sin(t * 2.1) * 0.6, 0));
+// Story time: it runs slow as she's thrown clear, so everything after is later in it.
+function storyTime(t) {
+  if (t <= CUT.eject) return t;
+  if (t <= CUT.slowEnd) return CUT.eject + (t - CUT.eject) * CUT.slow;
+  return CUT.eject + (CUT.slowEnd - CUT.eject) * CUT.slow + (t - CUT.slowEnd);
 }
 
-// Where she is at time t once thrown clear: out of the door, arcing forward, then
-// dropping onto the landing spot, reaching the treetops just as the forest shot begins.
+function planePosition(w, out) {
+  const L = landingSpot();
+  // Over the landing spot as she goes out; losing height after the blast.
+  const travel = w < CUT.eject ? (w - CUT.eject) * CUT.cruise : (w - CUT.eject) * CUT.speed;
+  const sink = w > CABIN_T.blast ? (w - CABIN_T.blast) ** 1.4 * 0.6 : 0;
+  return out.copy(L).addScaledVector(cutscene.dir, travel).add(cutV2.set(0, CUT.altitude + 6 - sink + Math.sin(w * 2.1) * 0.6, 0));
+}
+
+// Where she is once she's out of the door: arcing away from the plane down to the top of the
+// tree by the clearing, smashing down through it, and thrown out of it into the snow.
 function fallPosition(t, out) {
   const L = landingSpot();
-  const s = clamp((t - CUT.eject) / (CUT.landW - CUT.eject), 0, 1);
-  planePosition(CUT.eject, planeAt);
-  // She goes out of the side door, behind the wing.
-  const start = planeAt.clone().addScaledVector(cutscene.side, 2).addScaledVector(cutscene.dir, -6).add(new THREE.Vector3(0, 0.5, 0));
-  out.lerpVectors(start, L, s);
-  out.y = lerp(start.y, L.y, 1 - (1 - s) ** 1.6);
-  out.addScaledVector(cutscene.dir, Math.sin(s * Math.PI) * 14);
+  if (t < CUT.canopy) {
+    const s = clamp((storyTime(t) - CUT.eject) / (storyTime(CUT.canopy) - CUT.eject), 0, 1);
+    out.lerpVectors(exitAt, canopyTop, s);
+    out.y = lerp(exitAt.y, canopyTop.y, s * s * (3 - 2 * s) * 0.35 + s * 0.65);
+    out.addScaledVector(cutscene.dir, Math.sin(s * Math.PI) * 12);
+    return out;
+  }
+  if (t < CUT.through) {
+    // Each bough she hits checks her for a moment.
+    const u = (t - CUT.canopy) / (CUT.through - CUT.canopy);
+    const checked = u - 0.06 * Math.sin(u * Math.PI * 4) * (1 - u);
+    out.lerpVectors(canopyTop, canopyBottom, clamp(checked, 0, 1));
+    out.addScaledVector(cutscene.side, Math.sin(u * 9) * 0.25);
+    return out;
+  }
+  const u = clamp((t - CUT.through) / (CUT.land - CUT.through), 0, 1);
+  out.lerpVectors(canopyBottom, L, u);
+  out.y = lerp(canopyBottom.y, L.y, u * u) + Math.sin(u * Math.PI) * 0.9;
   return out;
+}
+
+// The tree by the clearing that breaks her fall: the nearest tall one just outside it.
+function pickCrashTree() {
+  const L = landingSpot();
+  let best = null;
+  for (const tree of world.treesNear(L.x, L.z, 18)) {
+    const d = Math.hypot(tree.placement.x - L.x, tree.placement.z - L.z);
+    if (tree.height < 8 || d < 7.5) continue;
+    if (!best || d < best.d) best = { tree, d };
+  }
+  // Failing one, a point in the air where a tree would be.
+  const at = best ? cutV.set(best.tree.placement.x, best.tree.placement.y, best.tree.placement.z) : cutV.copy(L).addScaledVector(cutscene.side, 9);
+  const height = best ? best.tree.height : 12;
+  // Down through its crown a little in from the trunk, on the clearing's side.
+  const toL = cutV2.set(L.x - at.x, 0, L.z - at.z).normalize();
+  canopyTop.copy(at).addScaledVector(toL, 1.0);
+  canopyTop.y = at.y + height + 1.5;
+  canopyBottom.copy(at).addScaledVector(toL, 1.7);
+  canopyBottom.y = at.y + 2.4;
+  cutscene.tree = { x: at.x, y: at.y, z: at.z, height, toL: toL.clone() };
+}
+
+// Boughs for the fall through the tree, close to her path, so they whip past the lens.
+function placeBoughs() {
+  if (!cutscene.boughs.length) {
+    const mat = new THREE.MeshStandardMaterial({ map: TEX.boughSnowy, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.92 });
+    const geo = new THREE.PlaneGeometry(2.2, 1.2).rotateX(-Math.PI / 2);
+    for (let i = 0; i < 12; i++) {
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh);
+      cutscene.boughs.push(mesh);
+    }
+  }
+  const rand = seededRandom(7);
+  cutscene.boughs.forEach((mesh, i) => {
+    const u = (i + 0.5) / cutscene.boughs.length;
+    mesh.position.lerpVectors(canopyTop, canopyBottom, u);
+    mesh.position.x += (rand() - 0.5) * 1.6;
+    mesh.position.z += (rand() - 0.5) * 1.6;
+    mesh.rotation.set((rand() - 0.5) * 0.5, rand() * 6.28, (rand() - 0.5) * 0.4);
+    mesh.visible = true;
+  });
 }
 
 function startCutscene() {
@@ -482,41 +608,90 @@ function startCutscene() {
   cutscene.side.set(cutscene.dir.z, 0, -cutscene.dir.x);
   if (!cutscene.plane) {
     cutscene.plane = buildPlane();
+    cutscene.cabin = buildCabin();
+    cutscene.plane.add(cutscene.cabin.group);
     cutscene.trail = buildPuffs(160, 0x2a2828);
     cutscene.debris = buildPuffs(60, 0xff9a50);
     cutscene.dust = buildPuffs(40, 0xf2f5ff);
-    scene.add(cutscene.plane, cutscene.trail.group, cutscene.debris.group, cutscene.dust.group);
+    cutscene.blast = buildPuffs(60, 0xffb060);
+    // Fire glows through the bloom.
+    for (const pool of [cutscene.blast, cutscene.debris]) pool.group.children[0].material.uniforms.diffuse.value.multiplyScalar(2.2);
+    scene.add(cutscene.plane, cutscene.trail.group, cutscene.debris.group, cutscene.dust.group, cutscene.blast.group);
+    cutscene.teto = createAvatar(scene, 'crimson');
+    // Her phone, in a glittery lilac case, the screen lit.
+    const phone = new THREE.Group();
+    phone.add(new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.15, 0.011), new THREE.MeshBasicMaterial({ color: 0xc9b6ff })));
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.066, 0.138), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xdfe9ff).multiplyScalar(1.5) }));
+    screen.position.z = -0.006;
+    screen.rotation.y = Math.PI;
+    phone.add(screen);
+    cutscene.phone = phone;
+    cutscene.teto.armR.hand.add(phone);
+    phone.position.set(0.0, -0.085, 0.03);
+    phone.rotation.set(-0.3, 0, 0);
   }
-  cutscene.plane.visible = true;
+  const { plane, cabin } = cutscene;
+  plane.visible = true;
   // The propellers spin too fast to see in flight.
-  cutscene.plane.userData.parts.Propellers.visible = false;
+  plane.userData.parts.Propellers.visible = false;
+  setPlaneShell(false);
+  cabin.group.visible = true;
+  resetCabin();
+  cutscene.teto.setVisible(true);
   cutscene.trail.clear();
   cutscene.debris.clear();
-  if (cutscene.dust) cutscene.dust.clear();
+  cutscene.dust.clear();
+  cutscene.blast.clear();
+  for (const b of cutscene.boughs) b.visible = false;
   cutscene.active = true;
   cutscene.t = 0;
   cutscene.w = 0;
-  cutscene.shot = '';
   cutscene.emitT = 0;
   cutscene.fired = {};
   player.bodyYaw = player.yaw = Math.atan2(cutscene.dir.x, cutscene.dir.z);
-  // Load the ground under the whole fall, and thin the fog for the views from the air.
+  // Load the ground under the whole flight and fall, and thin the fog for the views from the air.
   world.stream(L, Infinity, 230);
+  pickCrashTree();
   scene.fog.density = 0.0035;
   document.body.classList.add('cinematic');
   canvas.style.filter = 'saturate(1.3) contrast(1.08)';
-  cutscene.engine = Sfx.loop({ noise: 0.25, filter: 900, hum: 0.35, humFreq: 68 });
-  cutscene.engine.set(0.5, 1);
+  cutscene.engine = Sfx.loop({ noise: 0.25, filter: 700, hum: 0.4, humFreq: 62 });
+  cutscene.engine.set(0.42, 1);
   cutscene.wind = Sfx.loop({ noise: 1, filter: 1400 });
+  $('flash').className = 'black';
+}
+
+// Inside the cabin the plane's own skin is hidden, so the windows look out on the real
+// wing, engine and sky. Outside it's put back.
+function setPlaneShell(visible) {
+  const parts = cutscene.plane.userData.parts;
+  for (const name of ['Fusel_Lodge', 'Windows', 'Windowframe']) if (parts[name]) parts[name].visible = visible;
+}
+
+function resetCabin() {
+  const c = cutscene.cabin;
+  c.door.visible = true;
+  c.door.position.copy(c.doorCentre);
+  c.door.rotation.set(0, 0, 0);
+  c.leak.material.opacity = 0;
+  for (const m of c.masks) m.holder.visible = false;
+  for (const l of c.loose) { l.mesh.visible = l.onTable; l.gone = false; l.mesh.position.copy(l.home); l.vel.set(0, 0, 0); }
+  c.mist.clear();
+  c.wallMat.color.setRGB(1, 1, 1);
+  c.lightMat.color.setHex(0xfff1dc).multiplyScalar(1.6);
 }
 
 function finishCutscene() {
   if (!cutscene.active) return;
   cutscene.active = false;
   cutscene.plane.visible = false;
+  cutscene.cabin.group.visible = false;
+  cutscene.teto.setVisible(false);
+  for (const b of cutscene.boughs) b.visible = false;
   cutscene.trail.clear();
   cutscene.debris.clear();
-  if (cutscene.dust) cutscene.dust.clear();
+  cutscene.dust.clear();
+  cutscene.blast.clear();
   scene.fog.density = FOG_DENSITY;
   document.body.classList.remove('cinematic');
   canvas.style.filter = '';
@@ -546,111 +721,306 @@ function once(key, at, fn) {
   if (!cutscene.fired[key] && cutscene.t >= at) { cutscene.fired[key] = true; fn(); }
 }
 
+// A line from Teto, in her voice.
+function tetoLine(text) {
+  crimsonSay(text);
+  Sfx.crimsonChatter(text);
+}
+
+/* ---------- Aboard ---------- */
+const tetoHands = { l: new THREE.Vector3(), r: new THREE.Vector3(), poleL: new THREE.Vector3(0.35, -0.9, 0.25), poleR: new THREE.Vector3(-0.35, -0.9, 0.25) };
+const tetoHead = new THREE.Vector3();
+
+// Teto, across the table: on her phone, then filming, then holding on for dear life.
+function poseCabinTeto(t, dt) {
+  const T = CABIN_T, a = cutscene.teto;
+  const s = a.armL.upper.position;
+  const fright = t > T.blast;
+  let lean = 0;
+  if (!fright) {
+    const filming = span(t, T.vlog, T.vlog + 0.3) * (1 - span(t, T.back, T.back + 0.4));
+    // Scrolling in her lap, or holding the phone up to film.
+    tetoHands.l.set(lerp(0.03, s.x + 0.2, filming), lerp(-0.13, -0.42, filming), lerp(0.25, 0.16, filming));
+    tetoHands.r.set(lerp(-0.035, -0.07, filming), lerp(-0.13, 0.12, filming) + Math.sin(t * 7) * 0.004, lerp(0.25, 0.36, filming));
+    tetoHead.set(lerp(0.4, 0.02, filming), lerp(0, -0.12, filming), lerp(0.05, 0.12, filming));
+    if (filming > 0.5 && t < T.back) tetoHead.z += Math.sin(t * 5) * 0.04;
+  } else {
+    // Hands clamped on the armrests, flinching with every jolt.
+    const jolt = Math.max(0, 1 - (t - T.blast) * 3);
+    tetoHands.l.set(s.x + 0.26, -0.28, 0.1);
+    tetoHands.r.set(-s.x - 0.26, -0.28, 0.1);
+    tetoHead.set(-0.15 - jolt * 0.3 + Math.sin(t * 23) * 0.03, Math.sin(t * 6.5) * 0.35, Math.sin(t * 19) * 0.05);
+    // When the door goes she's dragged towards it against her belt, and looks.
+    if (t > T.door) tetoHead.y = lerp(tetoHead.y, 0.9, span(t, T.door, T.door + 0.4));
+    if (t > T.burst) { lean = -0.25 + Math.sin(t * 17) * 0.04; tetoHands.r.set(-s.x - 0.1, 0.1, 0.38); }
+  }
+  poseSeated(a, cutscene.cabin.seats.teto, { hands: tetoHands, head: tetoHead, lean });
+  // The phone goes flying for the door.
+  cutscene.phone.visible = !fright || t < T.blast + 0.15;
+  a.simulate(dt);
+}
+
+// Things in the cabin: masks, lights, the door, and everything loose once it's gone.
+function updateCabin(t, dt) {
+  const T = CABIN_T, c = cutscene.cabin;
+  // The alarm washes everything red in pulses.
+  if (t > T.alarm) {
+    const pulse = 0.5 + 0.5 * Math.sin((t - T.alarm) * 9);
+    c.wallMat.color.setRGB(1, 0.55 + 0.25 * (1 - pulse), 0.5 + 0.25 * (1 - pulse));
+    c.lightMat.color.setRGB(2 * pulse + 0.4, 0.15, 0.12);
+  }
+  for (const m of c.masks) {
+    if (!m.holder.visible) continue;
+    m.holder.rotation.set(Math.sin(t * 5 + m.phase) * 0.25 + (t > T.burst ? 0.5 : 0), 0, Math.sin(t * 4 + m.phase) * 0.2 + (t > T.burst ? -0.7 : 0));
+  }
+  // The door: rattling, its seal glowing, then gone.
+  const d = c.door;
+  if (t > T.door && t < T.burst) {
+    const k = span(t, T.door, T.burst);
+    d.position.copy(c.doorCentre).add(cutV.set((Math.random() - 0.5) * 0.02 * k + k * 0.015, (Math.random() - 0.5) * 0.015 * k, 0));
+    c.leak.material.opacity = 0.15 + k * 0.6 * (0.6 + Math.random() * 0.4);
+  }
+  if (t > T.burst && d.visible) {
+    const u = t - T.burst;
+    d.position.copy(c.doorCentre).add(cutV.set(0.3 + u * 18, u * 2, -u * u * 40));
+    d.rotation.set(u * 6, u * 4, u * 9);
+    c.leak.material.opacity = 0;
+    if (u > 0.5) d.visible = false;
+  }
+  // Everything loose streams for the doorway and out.
+  if (t > T.burst) {
+    const out = cutV2.copy(c.doorCentre).add(cutV.set(0.6, 0, 0));
+    for (const l of c.loose) {
+      if (l.gone) continue;
+      l.mesh.visible = true;
+      const toDoor = cutV.subVectors(out, l.mesh.position);
+      const dist = toDoor.length();
+      l.vel.addScaledVector(toDoor.normalize(), 40 * dt);
+      l.mesh.position.addScaledVector(l.vel, dt);
+      l.mesh.rotation.x += l.spin.x * dt; l.mesh.rotation.y += l.spin.y * dt; l.mesh.rotation.z += l.spin.z * dt;
+      if (dist < 0.3 || l.mesh.position.x > CABIN.radius + 0.4) { l.gone = true; l.mesh.visible = false; }
+    }
+    c.mist.emit(cutV.set((Math.random() - 0.5) * 1.5, CABIN.centre + (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 3 + 0.5), cutV2.set(6 + Math.random() * 4, 0, -2), { life: 0.5, size: 0.35, grow: 2, alpha: 0.4 });
+  }
+  c.mist.update(dt);
+}
+
+// Through her eyes: where she looks in the cabin, in the plane's space.
+const eyeAt = new THREE.Vector3(), eyeLook = new THREE.Vector3(), lookA = new THREE.Vector3(), lookB = new THREE.Vector3();
+function cabinCamera(t) {
+  const T = CABIN_T, c = cutscene.cabin;
+  // Teto's face, across from her.
+  const teto = cutV.set(CABIN.seats.teto[0], CABIN.floor + 0.98, CABIN.seats.teto[1] - 0.1);
+  const window = lookA.set(-5.0, -1.75, 1.7);
+  const door = lookB.copy(c.doorCentre);
+  eyeAt.copy(CABIN_EYE);
+  // Breathing, and the plane's shudder.
+  eyeAt.y += Math.sin(t * 1.4) * 0.006;
+  let fov = 50;
+  if (t < T.window) {
+    eyeLook.copy(teto);
+    // Her gaze drifts a little while Teto talks.
+    eyeLook.x += Math.sin(t * 0.7) * 0.04;
+    eyeLook.y += Math.sin(t * 0.5) * 0.02;
+  } else if (t < T.turn) {
+    eyeLook.lerpVectors(teto, window, smooth(span(t, T.window, T.window + 0.55)));
+    if (t > T.blast) fov = 56;
+  } else if (t < T.door) {
+    eyeLook.lerpVectors(window, teto, smooth(span(t, T.turn, T.turn + 0.25)));
+  } else if (t < T.burst) {
+    eyeLook.lerpVectors(teto, door, smooth(span(t, T.door, T.door + 0.5)));
+    fov = 64;
+  } else {
+    // Dragged across the aisle to the doorway, looking back at Teto, then out into the sky.
+    const u = span(t, T.burst + 0.1, CUT.eject);
+    eyeAt.lerp(cutV2.copy(c.doorCentre).add(cutV.set(0.9, -0.1, -0.3)), u * u);
+    if (t < T.lookBack) eyeLook.copy(door);
+    else if (t < T.lookOut) eyeLook.lerpVectors(door, cutV.set(CABIN.seats.teto[0], CABIN.floor + 0.8, CABIN.seats.teto[1]), smooth(span(t, T.lookBack, T.lookBack + 0.15)));
+    else eyeLook.lerpVectors(cutV.set(CABIN.seats.teto[0], CABIN.floor + 0.8, CABIN.seats.teto[1]), cutV2.set(6, -4, -3), smooth(span(t, T.lookOut, T.lookOut + 0.2)));
+    fov = 70;
+  }
+  // The blast and the burst shake everything.
+  const shakeAmt = (t > T.blast ? Math.max(0, 0.05 * (1 - (t - T.blast) * 1.5)) : 0) + (t > T.alarm && t < T.burst ? 0.005 : 0) + (t > T.burst ? 0.03 : 0);
+  if (shakeAmt) shake(eyeAt, shakeAmt);
+  const plane = cutscene.plane;
+  camera.position.copy(eyeAt).applyMatrix4(plane.matrixWorld);
+  camera.lookAt(cutV.copy(eyeLook).applyMatrix4(plane.matrixWorld));
+  // Her head rolls with the plane, and tumbles as she goes out.
+  cutUp.set(0, 1, 0).applyQuaternion(plane.quaternion);
+  if (t > T.lookOut) cutUp.applyAxisAngle(cutV.subVectors(camTarget.copy(eyeLook).applyMatrix4(plane.matrixWorld), camera.position).normalize(), (t - T.lookOut) * 6);
+  camera.up.copy(cutUp);
+  camera.lookAt(cutV.copy(eyeLook).applyMatrix4(plane.matrixWorld));
+  setFov(fov);
+}
+
 function updateCutscene(dt) {
   cutscene.t += dt;
-  // Story time runs slow through the ejection beat; positions follow it, cuts follow t.
-  cutscene.w += dt * (cutscene.t > CUT.eject && cutscene.t < CUT.slowEnd ? CUT.slow : 1);
-  const w = cutscene.w;
   const t = cutscene.t;
+  const w = cutscene.w = storyTime(t);
   game.time += dt;
   const L = landingSpot();
   const dir = cutscene.dir, side = cutscene.side;
   const plane = cutscene.plane;
+  const aboard = t < CUT.eject;
 
-  // The plane: banking, shuddering, the near engine streaming smoke.
+  // The plane: banking and shuddering; after the blast the near engine streams smoke.
   planePosition(w, planeAt);
   plane.position.copy(planeAt);
-  const lurch = t > 2.6 && t < 3.6 ? Math.sin((t - 2.6) * 30) * 0.06 * (3.6 - t) : 0;
-  plane.rotation.set(w > CUT.eject ? 0.08 + (w - CUT.eject) * 0.03 : 0, Math.atan2(dir.x, dir.z), 0.15 + Math.sin(t * 1.3) * 0.08 + lurch, 'YXZ');
+  const lurch = t > CABIN_T.blast && t < CABIN_T.blast + 1.2 ? Math.sin((t - CABIN_T.blast) * 30) * 0.07 * (CABIN_T.blast + 1.2 - t) : 0;
+  const bank = t > CABIN_T.blast ? 0.15 + Math.min(0.2, (t - CABIN_T.blast) * 0.05) : 0.06;
+  plane.rotation.set(w > CABIN_T.blast ? 0.03 + (w - CABIN_T.blast) * 0.012 : 0, Math.atan2(dir.x, dir.z), bank + Math.sin(t * 1.3) * 0.04 + lurch, 'YXZ');
   plane.updateMatrixWorld();
-  cutscene.emitT -= dt;
-  while (cutscene.emitT <= 0) {
-    cutscene.emitT += 0.03;
-    const engine = PLANE.engine.clone().applyMatrix4(plane.matrixWorld);
-    cutscene.trail.emit(engine, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { life: 3.5, size: 2.2, grow: 4, alpha: 0.95 });
-    if (Math.random() < 0.5) cutscene.debris.emit(engine, new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3), { life: 0.4, size: 0.9, grow: -0.6, alpha: 0.9 });
+  if (t > CABIN_T.blast) {
+    cutscene.emitT -= dt;
+    while (cutscene.emitT <= 0) {
+      cutscene.emitT += 0.03;
+      const engine = PLANE.engine.clone().applyMatrix4(plane.matrixWorld);
+      cutscene.trail.emit(engine, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { life: 3.5, size: 2.2, grow: 4, alpha: 0.95 });
+      if (Math.random() < 0.5) cutscene.debris.emit(engine, new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3), { life: 0.4, size: 0.9, grow: -0.6, alpha: 0.9 });
+      // Flames licking up through the wing, which is what shows from the cabin window.
+      if (aboard) {
+        const wing = PLANE.wingFire.clone().applyMatrix4(plane.matrixWorld);
+        cutscene.debris.emit(wing, cutV.set((Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 1.5), { life: 0.45, size: 1.2, grow: -0.3, alpha: 1 });
+        if (Math.random() < 0.4) cutscene.trail.emit(wing, cutV.set((Math.random() - 0.5), 2 + Math.random(), (Math.random() - 0.5)), { life: 1.8, size: 1.1, grow: 3, alpha: 0.9 });
+      }
+    }
   }
   cutscene.trail.update(dt);
   cutscene.debris.update(dt);
   cutscene.dust.update(dt);
+  cutscene.blast.update(dt);
 
-  // Her: aboard until the blast, then falling, then face-down in the snow.
-  if (t < CUT.eject) {
+  // Her: in her seat (unseen, behind the camera), then out of the door, falling, and down.
+  if (aboard) {
     avatar.setVisible(false);
-  } else if (t < CUT.land) {
-    avatar.setVisible(true);
-    fallPosition(w, herAt);
-    player.pos.copy(herAt);
-    poseFalling(dt, t, herAt, 0.4);
+    poseCabinTeto(t, dt);
+    updateCabin(t, dt);
   } else {
+    once('outside', CUT.eject, () => {
+      exitAt.copy(cutscene.cabin.doorCentre).add(cutV.set(0.8, 0, 0)).applyMatrix4(plane.matrixWorld);
+      cutscene.cabin.group.visible = false;
+      cutscene.teto.setVisible(false);
+      setPlaneShell(true);
+    });
     avatar.setVisible(true);
-    player.pos.copy(L);
-    poseLying(dt, L);
+    if (t < CUT.land) {
+      fallPosition(t, herAt);
+      player.pos.copy(herAt);
+      poseFalling(dt, t, herAt, t > CUT.canopy && t < CUT.through ? 0.9 : 0.4);
+    } else {
+      player.pos.copy(L);
+      poseLying(dt, L);
+    }
   }
 
-  // Sound cues.
-  once('blast', 2.6, () => { Sfx.boom(0.8); impact('white', 90); });
-  once('door', CUT.eject, () => { impact('invert', 80); cutscene.engine.set(0.25, 1.5); });
-  once('fall', CUT.eject + 0.2, () => cutscene.wind.set(0.6, 2.5));
-  once('snap1', 8.4, () => { Sfx.branchSnap(); impact('invert', 60); });
-  once('snap2', 8.75, () => { Sfx.branchSnap(); impact('white', 50); });
+  // Sound and light cues.
+  once('fadeIn', 0.25, () => { $('flash').className = ''; });
+  once('cap1', 0.6, () => caption('Somewhere over the northern range', 'place'));
+  once('cap1off', 3.0, () => caption(''));
+  once('vlog', CABIN_T.vlog + 0.25, () => tetoLine('Say hi to my followers!'));
+  once('vlogOff', CABIN_T.back, () => caption(''));
+  once('blast', CABIN_T.blast, () => {
+    Sfx.boom(0.9);
+    impact('white', 110);
+    const engine = PLANE.engine.clone().applyMatrix4(plane.matrixWorld);
+    const wing = PLANE.wingFire.clone().applyMatrix4(plane.matrixWorld);
+    for (let i = 0; i < 60; i++) cutscene.blast.emit(i % 3 ? wing : engine, new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.1) * 8, (Math.random() - 0.5) * 10), { life: 0.8 + Math.random() * 0.6, size: 2.4, grow: 2.2, alpha: 1 });
+    cutscene.engine.set(0.25, 0.8);
+  });
+  once('masks', CABIN_T.alarm, () => { for (const m of cutscene.cabin.masks) m.holder.visible = true; });
+  once('yell', CABIN_T.yell, () => tetoLine('WHAT WAS THAT?!'));
+  once('yell2', CABIN_T.yell2, () => tetoLine('Is it supposed to DO that?!'));
+  once('yellOff', CABIN_T.door, () => caption(''));
+  // The alarm, beeping until the door goes.
+  if (t > CABIN_T.alarm && t < CABIN_T.burst) {
+    const beat = Math.floor((t - CABIN_T.alarm) / 0.5);
+    once(`beep${beat}`, CABIN_T.alarm + beat * 0.5, () => Sfx.glide([[0, 1180], [0.16, 1180]], 0.035, 'square'));
+  }
+  once('creak', CABIN_T.door, () => { Sfx.burst(1, 500, 2, 0.12, 'bandpass'); Sfx.glide([[0, 120], [0.9, 70]], 0.05, 'sawtooth'); });
+  once('burst', CABIN_T.burst, () => {
+    impact('invert', 90);
+    Sfx.boom(0.7);
+    Sfx.burst(1.2, 1600, 0.7, 0.4, 'bandpass');
+    cutscene.wind.set(1, 0.15);
+    cutscene.engine.set(0.6, 0.2);
+  });
+  once('mikuu', CABIN_T.lookBack + 0.05, () => tetoLine('MIKUUU!'));
+  once('door', CUT.eject, () => { impact('white', 120); caption(''); cutscene.engine.set(0.25, 1.5); cutscene.wind.set(0.6, 1.5); });
+  once('trees', CUT.canopy - 0.4, () => placeBoughs());
+  for (const [key, at] of [['snap1', CUT.canopy + 0.25], ['snap2', CUT.canopy + 0.6], ['snap3', CUT.canopy + 1.0], ['snap4', CUT.canopy + 1.35]]) {
+    once(key, at, () => {
+      Sfx.branchSnap();
+      impact(key === 'snap2' || key === 'snap4' ? 'white' : 'invert', 50);
+      burst(herAt, 0x2d4a2a, 22, 5);
+      burst(herAt, 0xf2f5ff, 30, 5);
+    });
+  }
   once('slam', CUT.land, () => { Sfx.snowSlam(); impact('white', 160); cutscene.wind.set(0, 0.2); cutscene.engine.set(0, 0.3); });
-  once('ring', CUT.black, () => { Sfx.ring(); plane.visible = false; cutscene.trail.clear(); });
+  once('ring', CUT.black, () => {
+    Sfx.ring();
+    plane.visible = false;
+    cutscene.trail.clear();
+    for (const b of cutscene.boughs) b.visible = false;
+  });
   once('boom', CUT.boom, () => { Sfx.boom(0.45); setWreckBurning(); });
 
   // Shots, cut by time.
   let speed = 0;
   camera.up.set(0, 1, 0);
-  if (t < CUT.eject) {
-    // A: alongside the plane in trouble, with a canted frame.
-    const push = t * 1.2;
-    camAt.copy(planeAt).addScaledVector(dir, 20 - push).addScaledVector(side, -27).add(new THREE.Vector3(0, -5, 0));
-    camTarget.copy(planeAt).addScaledVector(dir, 2);
-    camera.up.set(Math.sin(0.12), Math.cos(0.12), 0);
-    setFov(40);
-    once('cap1', 0.4, () => caption('Somewhere over the northern range', 'place'));
-    once('cap1off', 2.4, () => caption(''));
-    if (t > 2.6) shake(camAt, 0.5 * (3.4 - t));
-  } else if (t < 5.0) {
-    // B: thrown from the door, in slow, heavy beats.
-    camAt.copy(herAt).addScaledVector(side, 9).addScaledVector(dir, -13).add(new THREE.Vector3(0, 1, 0));
+  const tree = cutscene.tree;
+  if (aboard) {
+    cabinCamera(t);
+    if (t > CABIN_T.burst) speed = 0.5;
+  } else if (t < CUT.slowEnd) {
+    // Thrown from the door, in slow, heavy beats.
+    camAt.copy(herAt).addScaledVector(side, 9).addScaledVector(dir, -13).add(cutV.set(0, 1, 0));
     camTarget.copy(herAt).lerp(planeAt, 0.22);
     setFov(48);
     speed = 0.4;
-  } else if (t < 6.6) {
-    // C1: from above, looking down past her at the forest far below.
-    camAt.copy(herAt).add(new THREE.Vector3(0, 5, 0)).addScaledVector(dir, -1.5);
-    camTarget.copy(herAt).add(new THREE.Vector3(0, -20, 0));
+  } else if (t < 12.6) {
+    // From above, looking down past her at the forest far below.
+    camAt.copy(herAt).add(cutV.set(0, 5, 0)).addScaledVector(dir, -1.5);
+    camTarget.copy(herAt).add(cutV.set(0, -20, 0));
     setFov(62);
     speed = 1;
-  } else if (t < 8.0) {
-    // C2: close on her face, from in front of her as she falls belly-down, hair streaming
-    // up behind her against the sky.
+  } else if (t < CUT.canopy) {
+    // Close on her face, from in front of her as she falls belly-down, hair streaming up
+    // behind her against the sky.
     const yaw = player.bodyYaw + t * 0.6;
-    const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-    const headDir = forward.clone().multiplyScalar(0.89).add(new THREE.Vector3(0, 0.45, 0));
-    const faceDir = forward.clone().multiplyScalar(0.45).add(new THREE.Vector3(0, -0.89, 0));
-    const headAt = herAt.clone().addScaledVector(headDir, 0.42);
+    const forward = cutV.set(Math.sin(yaw), 0, Math.cos(yaw));
+    const headDir = cutV2.copy(forward).multiplyScalar(0.89).add(cutUp.set(0, 0.45, 0));
+    const faceDir = forward.multiplyScalar(0.45).add(cutUp.set(0, -0.89, 0));
+    const headAt = camTarget.copy(herAt).addScaledVector(headDir, 0.42);
     camAt.copy(headAt).addScaledVector(faceDir, 1.1).addScaledVector(headDir, 0.35);
-    camTarget.copy(headAt);
     camera.up.set(Math.sin(-0.2), Math.cos(-0.2), 0);
     setFov(38);
     speed = 0.9;
-    once('fog', 6.6, () => { scene.fog.density = FOG_DENSITY * 0.5; });
-  } else if (t < 9.2) {
-    // D: from the forest floor at the clearing's edge, looking up as she comes through.
-    camAt.copy(L).addScaledVector(side, -6).addScaledVector(dir, -4).add(new THREE.Vector3(0, 1.2, 0));
+    once('fog', 12.6, () => { scene.fog.density = FOG_DENSITY * 0.5; });
+  } else if (t < CUT.canopy + 0.75) {
+    // Her view, straight down into the crown of the tree as it rushes up.
+    camAt.copy(herAt).add(cutV.set(0, 0.6, 0)).addScaledVector(tree.toL, -0.3);
+    camTarget.copy(canopyBottom).addScaledVector(tree.toL, 0.5);
+    setFov(78);
+    speed = 1;
+    shake(camAt, 0.06);
+  } else if (t < CUT.through) {
+    // From beside the trunk, as she smashes down through the boughs.
+    camAt.set(tree.x, tree.y + tree.height * 0.42, tree.z).addScaledVector(cutV.set(tree.toL.z, 0, -tree.toL.x), 3.6).addScaledVector(tree.toL, 2.4);
+    camTarget.copy(herAt);
+    setFov(58);
+    speed = 0.6;
+    once('fogD', CUT.canopy + 0.75, () => { scene.fog.density = FOG_DENSITY; });
+    shake(camAt, 0.12);
+  } else if (t < CUT.land) {
+    // From the snow at the clearing's edge, looking up as she drops out of the tree.
+    camAt.copy(L).addScaledVector(side, -6).addScaledVector(dir, -4).add(cutV.set(0, 1.2, 0));
     camTarget.copy(herAt);
     setFov(64);
     speed = 0.6;
-    once('fogD', 8.0, () => { scene.fog.density = FOG_DENSITY; });
-    once('needles', 8.4, () => { for (let i = 0; i < 4; i++) burst(herAt.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2)), 0x2d4a2a, 18, 5); burst(herAt, 0xf2f5ff, 30, 6); });
-    once('needles2', 8.75, () => { burst(herAt, 0x2d4a2a, 24, 6); burst(herAt, 0xf2f5ff, 30, 5); });
-    if (t > 8.4) shake(camAt, 0.25);
   } else if (t < CUT.black) {
-    // E: ground level as she hits the snow.
-    camAt.copy(L).addScaledVector(side, 4.5).addScaledVector(dir, 1.5).add(new THREE.Vector3(0, 0.5, 0));
-    camTarget.copy(L).add(new THREE.Vector3(0, 0.6, 0));
+    // Ground level as she hits the snow.
+    camAt.copy(L).addScaledVector(side, 4.5).addScaledVector(dir, 1.5).add(cutV.set(0, 0.5, 0));
+    camTarget.copy(L).add(cutV.set(0, 0.6, 0));
     setFov(50);
     once('plume', CUT.land, () => {
       for (let i = 0; i < 8; i++) burst(L.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0.3, (Math.random() - 0.5) * 2)), 0xf2f5ff, 30, 7);
@@ -662,27 +1032,29 @@ function updateCutscene(dt) {
     // Black, ringing.
     once('dark', CUT.black, () => { $('flash').className = 'black'; caption(''); });
   } else if (t < CUT.boom) {
-    // F1: waking, her cheek in the snow, framed on her face.
+    // Waking, her cheek in the snow, framed on her face.
     once('light', CUT.wake, () => { $('flash').className = ''; });
-    const head = avatar.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.03, 0));
-    const face = avatar.head.getWorldDirection(new THREE.Vector3());
-    camAt.copy(head).addScaledVector(face, 0.75).add(new THREE.Vector3(0, 0.12, 0));
+    const head = avatar.head.getWorldPosition(cutV).add(cutV2.set(0, 0.03, 0));
+    const face = avatar.head.getWorldDirection(cutV2);
+    camAt.copy(head).addScaledVector(face, 0.75).add(cutUp.set(0, 0.12, 0));
     camTarget.copy(head);
     setFov(42);
   } else {
-    // F2: a far-off boom, and smoke rising where the plane came down.
-    camAt.copy(L).addScaledVector(dir, -3.2).add(new THREE.Vector3(0, 1.6, 0)).addScaledVector(side, -0.8);
+    // A far-off boom, and smoke rising where the plane came down.
+    camAt.copy(L).addScaledVector(dir, -3.2).add(cutV.set(0, 1.6, 0)).addScaledVector(side, -0.8);
     camTarget.set(wreck.x, groundHeight(wreck.x, wreck.z) + 150, wreck.z);
     setFov(46);
     once('cap2', CUT.boom + 0.6, () => caption('The plane… it came down out there.', 'line'));
     if (t > CUT.boom + 0.3 && t < CUT.boom + 1) shake(camAt, 0.08);
   }
-  camera.position.copy(camAt);
-  camera.position.y = Math.max(camera.position.y, groundHeight(camAt.x, camAt.z) + 0.25);
-  camera.lookAt(camTarget);
+  if (!aboard) {
+    camera.position.copy(camAt);
+    camera.position.y = Math.max(camera.position.y, groundHeight(camAt.x, camAt.z) + 0.25);
+    camera.lookAt(camTarget);
+  }
   drawSpeedLines(speed, t);
 
-  world.stream(t < CUT.land ? herAt : L, 2, 230);
+  world.stream(aboard ? cutV.set(L.x, L.y, L.z) : t < CUT.land ? herAt : L, 2, 230);
   updateWreck(dt);
   if (t >= CUT.end) finishCutscene();
 }

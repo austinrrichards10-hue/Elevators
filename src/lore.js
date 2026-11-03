@@ -5,7 +5,7 @@
 // and east is +x. Dr. Ilse Varga ran Hollow Station from 1962 and was stranded in 1979,
 // when Aksel Holm's Dakota came down in the eastern forest. For five winters she gathered
 // ten parts for a hot air balloon that could ride the Breath out of the crater, leaving each
-// under a red flag with a page of her journal. Twin Tails, thrown clear of Jonas Holm's
+// under a red flag with a page of her journal. Miku, thrown clear of Jonas Holm's
 // charter, finds them.
 const LORE = {
   /* ---------- Sites ---------- */
@@ -452,10 +452,10 @@ const LORE = {
       ],
     },
 
-    /* Crimson's satchel */
+    /* Teto's satchel */
     'crimson-diary': {
-      title: 'Crimson’s diary',
-      author: 'Crimson Curls',
+      title: 'Teto’s diary',
+      author: 'Teto',
       date: 'Yesterday',
       sort: 114,
       kind: 'diary',
@@ -477,8 +477,8 @@ const LORE = {
       body: [
         'HOLM AIR CHARTER: PASSENGER MANIFEST',
         'Route: Tolvik to Nordby, for the Frost Festival. Weather: cloud over the range. Fine.',
-        'Passenger 1: C. Curls. Luggage: four cases (ring lights, wigs, “content”). Overweight. Paid.',
-        'Passenger 2: T. Tails. Luggage: one bow, one bag. Quiet. Paid on time.',
+        'Passenger 1: Teto. Luggage: four cases (ring lights, wigs, “content”). Overweight. Paid.',
+        'Passenger 2: Miku. Luggage: one bow, one bag. Quiet. Paid on time.',
         'Remarks: Detour over the Hollow at passenger 1’s request, for a photograph. Cash. DO NOT tell the office. DO NOT tell Mum.',
       ],
     },
@@ -604,9 +604,9 @@ const LORE = {
       'The miners called it a ward against the wolves. I’m calling it a very long kitchen knife.',
       'It’s warm. It hums. It’s ten feet long. We’re going to be friends.',
     ],
-    crimsonCheck: 'Crimson. She’s alive, out cold in the snow. Of course she landed somewhere photogenic.',
+    crimsonCheck: 'Teto. Still strapped into her seat, out cold. Of course she landed somewhere photogenic.',
     crimsonAfter: [
-      'I should feel worse about Crimson. I’ll schedule it for later.',
+      'She left her bag. And me. Classic Teto.',
       'In fairness, she did say nothing could stop her now.',
     ],
     revived: [
@@ -620,24 +620,12 @@ const LORE = {
     launch: 'Goodbye, Hollow. Thank you, Ilse.',
   },
 
-  /* ---------- Crimson Curls ---------- */
+  /* ---------- Teto ---------- */
   crimson: {
-    check: 'She’s breathing, but she won’t wake. Her lips are going blue.',
-    checkFire: 'If I built a fire right here, the warmth might bring her round.',
-    wake: 'Mm… five more minutes… WHERE IS MY PHONE?',
-    panic: [
-      'Who are YOU? Why is everything SNOW?',
-      'FIRE? Next to my FACE? My HAIR!',
-      'I have a show on FRIDAY!',
-      'No. I don’t do nature. I’m LEAVING!',
-    ],
-    flee: 'I’ll find a road! Roads are everywhere!',
-    scream: 'AAAAAAAAAH—',
-    after: [
-      'Well.',
-      'She did say she had a show on Friday.',
-      'I’ll take her scarf. She’d want it to be seen.',
-    ],
+    check: 'She’s breathing, but she won’t react to my presence.',
+    checkWarm: 'She’s warmer now. Still breathing. Still not reacting to me.',
+    fire: 'There. Get warm, Teto. Then wake up.',
+    gone: 'Her seat’s empty. Footprints, heading off into the trees.',
   },
 
   /* ---------- Objectives ---------- */
@@ -671,22 +659,22 @@ const LORE = {
       'Then the cloud thinned and tore, and you came out into a sky you had forgotten. Dawn lay along the rim in a line of gold. Below you the cloud cap filled the crater like milk in a bowl, and somewhere under it the wolves were singing to nobody.',
       'At the top the Breath leaned south, as she wrote it would. The rim slid by beneath the basket, close enough to see the rockslide across Brandt’s old road, and then the world opened out into ordinary mountains and ordinary forest, and far off, the lights of Tolvik coming on one by one.',
       'Her journal is inside your coat: eleven pages, and all the names. Henrik, who went to check the far lines. Aksel, who got them down alive. Sigrid, Nils and Tomas on the wall. Eleven men in the chapel register. Ilse herself, in her chair, facing the steam.',
-      'Somebody will hear about all of them now. You will also have to explain Crimson: the fuel cut-off, the fight in a basket the size of a phone box, and the long scream down into the cloud. And the pants. You have a few hours to work out how to put it.',
+      'Somebody will hear about all of them now. You will also have to explain Teto: the fuel cut-off, the fight in a basket the size of a phone box, and the long scream down into the cloud. And the pants. You have a few hours to work out how to put it.',
     ],
   },
 
   /* ---------- The final boss ---------- */
-  // Crimson, back from the snow (or the wolves), clinging under the balloon's basket. Her
-  // lines are hers; reply, hint, phase hints, teeterBack, retryThought and after are Twin Tails.
+  // Teto, back from the snow, clinging under the balloon's basket. Her
+  // lines are hers; reply, hint, phase hints, teeterBack, retryThought and after are Miku.
   boss: {
-    name: 'Crimson Curls',
+    name: 'Teto',
     kicker: 'Final boss',
     sub: 'Influencer. Saboteur. No pants.',
     lurch: 'Why are we listing?',
     peek: 'Knock knock!',
-    // If the wolves got her...
+    // If she woke by Miku's fire and wandered off...
     gone: [
-      'Miss me? The wolves spat me out. Apparently I’m “too much”.',
+      'Miss me? I woke up by your little fire and you’d just LEFT me there.',
       'I’ve been hanging under your basket since the Breath. My arms are SO toned now.',
     ],
     // ...or if nobody ever woke her.
