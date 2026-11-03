@@ -87,7 +87,7 @@ function tetoJoints(at) {
 // model standing in its T-pose.
 const MIKU_JOINTS = {
   'root.x': [0, 0.93, 0], 'spine_02.x': [0, 1.03, 0], 'neck.x': [0, 1.24, -0.01], 'head.x': [0, 1.31, -0.01],
-  shoulder: [0.05, 1.22, 0], arm: [0.105, 1.2, 0], elbow: [0.3, 1.11, 0], wrist: [0.495, 1.02, 0],
+  shoulder: [0.05, 1.22, 0], arm: [0.115, 1.205, 0], elbow: [0.3, 1.11, 0], wrist: [0.495, 1.02, 0],
   finger: [[0.55, 1.005, 0], [0.575, 1.0, 0], [0.595, 0.997, 0]], thumb: [[0.51, 1.0, 0.03], [0.53, 0.99, 0.045], [0.545, 0.985, 0.05]],
   hip: [0.072, 0.85, 0], knee: [0.07, 0.52, 0.01], ankle: [0.068, 0.12, -0.01],
 };
@@ -124,7 +124,10 @@ function mikuWeights(p, J, bone) {
   const u = rel.dot(dir);
   const along = (j) => J[j].clone().sub(shoulder).dot(dir);
   const pairs = [];
-  const armShare = sm(x, 0.1, 0.15) * sm(p.y, 0.92, 0.98);
+  // Out along the arm from the shoulder joint, blending gently over the shoulder so it
+  // rounds off as the arm comes down; close to the body below the armpit it stays torso.
+  const radial = rel.clone().addScaledVector(dir, -u).length();
+  const armShare = sm(u, -0.035, 0.085) * sm(x, 0.085, 0.12) * (1 - sm(radial, 0.13, 0.17)) * sm(p.y, 0.92, 0.98);
   if (armShare > 0) {
     const e = sm(u, along(`forearm_stretch.${s}`) - 0.04, along(`forearm_stretch.${s}`) + 0.04);
     const h = sm(u, along(`hand.${s}`) - 0.015, along(`hand.${s}`) + 0.015);

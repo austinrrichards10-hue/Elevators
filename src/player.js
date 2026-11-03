@@ -2,7 +2,7 @@
 // "Hatsune Miku" by Tigerar1, "PDF Teto" by 雨宮レン and "Doomer Miku and Teto" by
 // 0x00001337. See the README for the full credits.
 const SKINS = {
-  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tails: { top: 1.13, arms: 0.075, lean: [0.12, 0.3] } },
+  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tails: { top: 1.13, arms: 0.1, lean: [0.2, 0.38] } },
   teal: { name: 'Doomer Miku', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, tails: { top: 1.13 } },
   teto: { name: 'Teto', note: 'Her classic look', rig: 'teto', file: 'TETO_GLB', height: 1.5, hair: [4, 8, 9, 10], pieces: { 0: 'White', 1: 'Gray', 2: 'Black' } },
   crimson: { name: 'Doomer Teto', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
