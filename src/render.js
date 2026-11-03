@@ -102,5 +102,13 @@ function createPipeline(renderer, scene, camera) {
     drawTo(composite, null);
   }
 
-  return { render, resize };
+  // Builds every material's shader now, so new things coming into view don't hitch.
+  // The HDR target has to be bound: tone mapping and colour space are part of each program.
+  function compile() {
+    renderer.setRenderTarget(main);
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(null);
+  }
+
+  return { render, resize, compile };
 }

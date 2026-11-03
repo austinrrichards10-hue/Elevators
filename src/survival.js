@@ -27,6 +27,44 @@ const survival = {
   hintT: 0,
 };
 
+/* ---------- Things to use ---------- */
+// Anything she can use with E: the axe in the stump, something lying in the snow, a ladder.
+// Each is { x, z, r, label, use, active }, where label and active may be functions. Of
+// those in reach, the nearest gets the prompt.
+const INTERACTABLES = [];
+
+function addInteractable(entry) {
+  INTERACTABLES.push(entry);
+  return entry;
+}
+
+function removeInteractable(entry) {
+  const i = INTERACTABLES.indexOf(entry);
+  if (i >= 0) INTERACTABLES.splice(i, 1);
+}
+
+function nearestInteractable() {
+  let best = null, bestD = Infinity;
+  for (const entry of INTERACTABLES) {
+    const d = Math.hypot(entry.x - player.pos.x, entry.z - player.pos.z);
+    if (d > (entry.r || 2.4) || d >= bestD) continue;
+    if (entry.active && !entry.active()) continue;
+    best = entry;
+    bestD = d;
+  }
+  return best;
+}
+
+// Warmth from anything besides a campfire, such as a burning blade: functions that each
+// return warmth gained per second.
+const HEAT_SOURCES = [];
+
+function extraHeat() {
+  let heat = 0;
+  for (const source of HEAT_SOURCES) heat += source();
+  return heat;
+}
+
 /* ---------- Models ---------- */
 function woodRingsTexture() {
   return paintCanvas(128, 128, (g, w, h) => {
@@ -205,6 +243,7 @@ function buildCampfire(x, z) {
   survival.fires.push(fire);
   burst(new THREE.Vector3(x, group.position.y + 0.3, z), 0xffa860, 24, 3);
   Sfx.ignite();
+  emitGame('campfire', fire);
   return fire;
 }
 
@@ -240,6 +279,7 @@ function fellTree(tree) {
   const planks = Math.max(2, Math.round(tree.height / 3));
   survival.fallen.push({ tree, group, leaves: parts.leaves, dir, axis, angle: 0.02, speed: 0, land, landed: false, bounce: 0, planks, length: tree.height * 0.8 });
   Sfx.treeCreak();
+  emitGame('treeFelled', tree);
 }
 
 function updateFallen(dt) {
@@ -294,9 +334,8 @@ function startSwing() {
 // The moment the blade lands: a log gives planks, a standing tree takes another bite.
 function axeImpact() {
   const reachX = player.pos.x + Math.sin(player.bodyYaw) * 0.7, reachZ = player.pos.z + Math.cos(player.bodyYaw) * 0.7;
-  // A wolf in reach takes the blow and runs.
-  const wolf = wolves.find((w) => Math.hypot(w.pos.x - reachX, w.pos.z - reachZ) < 1.3);
-  if (wolf) { Sfx.chop(); wolf.scare(); return; }
+  // A wolf or a hare in reach takes the blow.
+  if (meleeHit(reachX, reachZ, 1.3, 'axe')) { Sfx.chop(); return; }
   const log = logInReach(reachX, reachZ);
   if (log) {
     if (log.leaves) { log.group.remove(log.leaves); log.leaves = null; }
@@ -377,24 +416,44 @@ function poseAxe(dt) {
 }
 
 /* ---------- Crafting ---------- */
+// Each recipe's cost lists planks and any items from her pack, by item id. `make` builds
+// it; `shown`, if given, hides the recipe until it returns true.
 const RECIPES = [
-  { id: 'campfire', name: 'Campfire', cost: { planks: SURVIVAL.campfireCost }, note: 'Warmth and light' },
+  {
+    id: 'campfire', name: 'Campfire', cost: { planks: SURVIVAL.campfireCost }, note: 'Warmth and light',
+    make() {
+      const x = player.pos.x + Math.sin(player.bodyYaw) * 1.8, z = player.pos.z + Math.cos(player.bodyYaw) * 1.8;
+      buildCampfire(x, z);
+      toast('Campfire built');
+    },
+  },
 ];
 
+function have(id) {
+  return id === 'planks' ? survival.planks : packCount(id);
+}
+
 function canCraft(recipe) {
-  return survival.planks >= recipe.cost.planks;
+  return Object.entries(recipe.cost).every(([id, n]) => have(id) >= n);
+}
+
+function costText(cost) {
+  return Object.entries(cost).map(([id, n]) => `${n} ${id === 'planks' ? (n === 1 ? 'plank' : 'planks') : itemName(id, n)}`).join(', ');
+}
+
+function shownRecipes() {
+  return RECIPES.filter((r) => !r.shown || r.shown());
 }
 
 function craft(index) {
-  const recipe = RECIPES[index];
+  const recipe = shownRecipes()[index];
   if (!recipe) return;
-  if (!canCraft(recipe)) { toast(`Need ${recipe.cost.planks} planks`); return; }
-  survival.planks -= recipe.cost.planks;
-  if (recipe.id === 'campfire') {
-    const x = player.pos.x + Math.sin(player.bodyYaw) * 1.8, z = player.pos.z + Math.cos(player.bodyYaw) * 1.8;
-    buildCampfire(x, z);
-    toast('Campfire built');
+  if (!canCraft(recipe)) { toast(`Need ${costText(recipe.cost)}`); return; }
+  for (const [id, n] of Object.entries(recipe.cost)) {
+    if (id === 'planks') survival.planks -= n;
+    else packTake(id, n);
   }
+  recipe.make();
   Sfx.craft();
   setCrafting(false);
 }
@@ -407,7 +466,7 @@ function setCrafting(open) {
 function renderCrafting() {
   $('craft').classList.toggle('hidden', !survival.crafting);
   if (!survival.crafting) return;
-  $('craft-list').innerHTML = RECIPES.map((r, i) => `<li class="${canCraft(r) ? 'ready' : ''}"><kbd>${i + 1}</kbd><b>${r.name}</b><span>${r.cost.planks} planks · ${r.note}</span></li>`).join('');
+  $('craft-list').innerHTML = shownRecipes().map((r, i) => `<li class="${canCraft(r) ? 'ready' : ''}"><kbd>${i + 1}</kbd><b>${r.name}</b><span>${costText(r.cost)} · ${r.note}</span></li>`).join('');
 }
 
 /* ---------- HUD bits ---------- */
@@ -420,14 +479,16 @@ function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove('on'), 1600);
 }
 
-function updateSurvivalHud() {
+function updateSurvivalHud(warming) {
   $('hp-fill').style.width = `${survival.health}%`;
   $('warmth-fill').style.width = `${survival.warmth}%`;
-  $('warmth').classList.toggle('warming', nearestFire() < SURVIVAL.fireRadius);
+  $('warmth').classList.toggle('warming', warming);
   $('planks').textContent = survival.planks;
   $('slot-axe').classList.toggle('hidden', !survival.hasAxe);
+  $('slot-katana').classList.toggle('hidden', !katana.owned);
   $('slot-bow').classList.toggle('active', survival.tool === 'bow');
   $('slot-axe').classList.toggle('active', survival.tool === 'axe');
+  $('slot-katana').classList.toggle('active', survival.tool === 'katana');
   // Frost creeps in from the edges as she gets cold.
   $('frost').style.opacity = smooth((45 - survival.warmth) / 45) * 0.9;
   if (survival.crafting) renderCrafting();
@@ -440,8 +501,8 @@ function nearestFire() {
   return best;
 }
 
-function updateSurvival(dt) {
-  updateFallen(dt);
+// Flames, firelight and crackle. Scenes run this too, so fires keep burning through them.
+function updateFires(dt) {
   for (const fire of survival.fires) {
     fire.flames.tick(dt);
     if (fire.light) fire.light.intensity = 9 + Math.sin(game.time * 13 + fire.x) * 1.5 + Math.sin(game.time * 29) * 1;
@@ -449,13 +510,21 @@ function updateSurvival(dt) {
     fire.crackle -= dt;
     if (fire.crackle <= 0 && d < 14) { fire.crackle = 0.08 + Math.random() * 0.4; Sfx.crackle(1 - d / 14); }
   }
+}
 
-  // Warmth comes from fires and drains away from them; once it's gone, the cold hurts.
-  if (nearestFire() < SURVIVAL.fireRadius) {
-    survival.warmth = Math.min(100, survival.warmth + 14 * dt);
-    survival.health = Math.min(100, survival.health + 2 * dt);
+function updateSurvival(dt) {
+  updateFallen(dt);
+  updateFires(dt);
+
+  // Warmth comes from fires and drains away from them, more slowly in warm clothes; once
+  // it's gone, the cold hurts.
+  const nearFire = nearestFire() < SURVIVAL.fireRadius;
+  const heat = (nearFire ? 14 : 0) + extraHeat();
+  if (heat > 0) {
+    survival.warmth = Math.min(100, survival.warmth + heat * dt);
+    if (nearFire) survival.health = Math.min(100, survival.health + 2 * dt);
   } else if (!mod.noCold) {
-    survival.warmth = Math.max(0, survival.warmth - SURVIVAL.warmthDrain * dt);
+    survival.warmth = Math.max(0, survival.warmth - SURVIVAL.warmthDrain * gearCold() * dt);
   }
   if (survival.warmth <= 0 && !mod.noCold) {
     survival.health -= SURVIVAL.freezeDamage * dt;
@@ -466,10 +535,6 @@ function updateSurvival(dt) {
   // Shivering shakes the view a little when she's very cold.
   if (survival.warmth < 20) player.shake = Math.max(player.shake, 0.012 * (1 - survival.warmth / 20));
 
-  // What's close enough to use with E. E only acts once per press.
-  let prompt = '';
-  const pressed = keys.KeyE && !survival.eHeld;
-  survival.eHeld = !!keys.KeyE;
   const stump = survival.stump;
   // The axe's glint: a soft twinkle every few seconds until it's taken.
   if (stump && !survival.hasAxe) {
@@ -478,21 +543,19 @@ function updateSurvival(dt) {
     stump.glint.material.opacity = 0.15 + flash * 0.75;
     stump.glint.scale.setScalar(0.14 + flash * 0.26);
     const d = Math.hypot(STUMP_SPOT.x - player.pos.x, STUMP_SPOT.z - player.pos.z);
-    if (d < 2.4) {
-      prompt = 'Press E to pull the axe from the stump';
-      if (pressed) takeAxe();
-    } else {
+    if (d >= 2.4) {
       survival.hintT += dt;
       if (survival.hintT > 8 && survival.hintT < 8 + dt && d < 30) say('Something is wedged in that stump.', 3);
     }
   }
-  // The other survivor, lying by the wreck.
-  if (survivor.avatar && Math.hypot(survivor.x - player.pos.x, survivor.z - player.pos.z) < 2.4) {
-    prompt = 'Press E to check on her';
-    if (pressed) showNote('She\'s breathing, but she won\'t react to my presence.');
-  }
-  setPrompt(prompt);
-  updateSurvivalHud();
+
+  // What's close enough to use with E. E only acts once per press.
+  const pressed = keys.KeyE && !survival.eHeld;
+  survival.eHeld = !!keys.KeyE;
+  const offer = nearestInteractable();
+  setPrompt(offer ? (typeof offer.label === 'function' ? offer.label() : offer.label) : '');
+  if (offer && pressed) offer.use();
+  updateSurvivalHud(heat > 0);
 }
 
 // A short line of her thoughts in a small box at the bottom of the screen.
@@ -525,10 +588,12 @@ function takeAxe() {
   Sfx.pickup();
   toast('Axe — 2 to hold it, 1 for the bow');
   say('This will do.', 2.4);
+  emitGame('axe');
 }
 
 function setTool(tool) {
   if (tool === 'axe' && !survival.hasAxe) return;
+  if (tool === 'katana' && !katana.owned) return;
   if (survival.tool === tool) return;
   survival.tool = tool;
   survival.swing = null;
@@ -564,4 +629,5 @@ function resetSurvival() {
 function initSurvival() {
   makeFireLights();
   resetSurvival();
+  addInteractable({ x: STUMP_SPOT.x, z: STUMP_SPOT.z, r: 2.4, label: 'Press E to pull the axe from the stump', active: () => !survival.hasAxe, use: takeAxe });
 }

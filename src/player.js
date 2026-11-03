@@ -19,6 +19,12 @@ const skinCache = new Map();
 /* ---------- Physics ---------- */
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
 const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+// How far a chain's anchor may move between steps before the chain is helped along. A jump
+// past `reset` (a teleport, a revive, a scene placing her by hand) lands it in its rest shape;
+// past `carry` (very fast moderator movement) the excess is carried along whole, so it can't
+// whip the hair out sideways. `slack` is how far past its own length any point may end up
+// from the anchor before the chain counts as broken and snaps back.
+const HAIR_CATCH = { reset: 2, carry: 0.6, slack: 0.5 };
 
 function collide(p, colliders, pad) {
   for (const c of colliders) {
@@ -50,11 +56,54 @@ class Chain {
     this.prev.forEach((p, i) => p.copy(this.pos[i]));
   }
 
+  // Keeps the chain on its anchor however far the head moved since the last step. Returns
+  // true when the chain had to be reset. Leaves the anchor's world position in v3.
+  catchUp() {
+    const { pos, prev, count } = this;
+    this.anchor.localToWorld(v3.copy(this.offset));
+    const jump = v3.distanceTo(pos[0]);
+    // Written so a NaN anywhere also resets.
+    if (!(jump <= HAIR_CATCH.reset) || !this.intact(pos[0])) {
+      this.reset();
+      this.anchor.localToWorld(v3.copy(this.offset));
+      return true;
+    }
+    if (jump > HAIR_CATCH.carry) {
+      v2.subVectors(v3, pos[0]).multiplyScalar(1 - HAIR_CATCH.carry / jump);
+      for (let i = 0; i < count; i++) { pos[i].add(v2); prev[i].add(v2); }
+    }
+    return false;
+  }
+
+  // Every point finite and within the chain's length (plus slack) of `root`.
+  intact(root) {
+    const reach = (this.count - 1) * this.segment + HAIR_CATCH.slack;
+    const limit = reach * reach;
+    for (const p of this.pos) {
+      const d2 = p.distanceToSquared(root);
+      if (!(d2 <= limit)) return false;
+    }
+    return true;
+  }
+
+  // Pulls the chain after its anchor without advancing time: for frames too short for a
+  // physics step, so the tails never lag a frame behind the head.
+  follow(colliders) {
+    if (this.catchUp()) return;
+    const { pos, count, segment } = this;
+    pos[0].copy(v3);
+    for (let i = 1; i < count; i++) {
+      v2.subVectors(pos[i], pos[i - 1]);
+      const len = v2.length() || 1e-5;
+      pos[i].copy(pos[i - 1]).addScaledVector(v2, segment / len);
+      collide(pos[i], colliders, this.pad);
+    }
+  }
+
   step(h, colliders) {
     this.time += h;
     const { pos, prev, count, segment } = this;
-    this.anchor.localToWorld(v3.copy(this.offset));
-    if (v3.distanceToSquared(pos[0]) > 4) { this.reset(); return; }
+    if (this.catchUp()) return;
     pos[0].copy(v3);
     this.anchor.getWorldQuaternion(q1);
     // Centre of the head, which the side limit below measures from.
@@ -523,13 +572,35 @@ function createAvatar(scene, skinId) {
     rig.root.updateMatrixWorld(true);
     updateProxies();
     // A fixed step keeps the hair stable at any frame rate; long hitches are simply skipped.
+    // A bad dt (missing, negative, NaN) counts as no time at all, so it can't stall the hair.
     const h = 1 / 120;
-    avatar.accumulator = Math.min((avatar.accumulator || 0) + dt, h * 6);
+    const time = dt > 0 && dt < Infinity ? dt : 0;
+    const carried = avatar.accumulator > 0 ? avatar.accumulator : 0;
+    avatar.accumulator = Math.min(carried + time, h * 6);
+    let steps = 0;
     while (avatar.accumulator >= h) {
       avatar.accumulator -= h;
+      steps++;
       for (const { chain } of tails) chain.step(h, colliders);
     }
+    // A frame too short for a step still drags the tails after her head.
+    if (!steps) for (const { chain } of tails) chain.follow(colliders);
+    // The last safety net: a tail that ends up anywhere implausible snaps back onto her.
+    for (const { chain } of tails) {
+      chain.anchor.localToWorld(v3.copy(chain.offset));
+      if (!chain.intact(v3)) chain.reset();
+    }
     updateBones();
+  };
+
+  // How far the furthest point of either tail is from where it hangs, in metres (0 without tails).
+  avatar.hairReach = () => {
+    let reach = 0;
+    for (const { chain } of tails) {
+      chain.anchor.localToWorld(v3.copy(chain.offset));
+      for (const p of chain.pos) reach = Math.max(reach, p.distanceTo(v3));
+    }
+    return reach;
   };
 
   avatar.setVisible = (visible) => {

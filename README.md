@@ -1,6 +1,8 @@
 # Hollow Snow
 
-A third-person survival game in a vast frozen, fog-bound forest. Your plane goes down over the northern range; you're thrown clear and wake in the snow. Find the axe, cut wood, build a fire before the cold takes you, and track down the wreck by its column of smoke. Wolves roam the forest. The world is generated in code and stretches a kilometre in every direction from its centre, with mountains around the edge.
+A third-person survival game in a vast frozen, fog-bound forest. Your plane goes down in the Hollow, a crater the locals call the Death Crater, with walls nobody has ever climbed out of. You're thrown clear and wake in the snow. Find the axe, cut wood, build a fire before the cold takes you, and work out how to get out. Wolves roam the forest. The world is generated in code and stretches a kilometre in every direction from its centre, with mountains around the edge.
+
+The way out was left by Dr. Ilse Varga, a weather scientist stranded here in 1980. She worked out that the Breath, a column of warm air rising from the crater's centre, could carry a hot air balloon over the rim. She hid ten balloon parts at ten sites around the crater, each under a red flag with a page of her journal. Find all ten, bring them and 10 planks to her launch frame at the Breath, and fly out.
 
 Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. Choose a skin on the title screen or in the pause menu. The Character room on the title screen lets you orbit and zoom around the character to inspect it.
 
@@ -9,18 +11,23 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 | WASD | Move |
 | Mouse | Look around her (free look) |
 | Ctrl | Toggle aim lock: she always faces the crosshair |
-| Left click | Bow: hold to draw, release to shoot. Axe: swing |
+| Left click | Bow: hold to draw, release to shoot. Axe or blade: swing |
 | Right click | Aim the bow (zooms in) |
-| 1 / 2 | Bow / axe |
-| E | Pick up |
+| 1 / 2 / 3 | Bow / axe / the Ember Blade (once you have it) |
+| E | Pick up, read, open, cook, skin, use |
 | Tab | Crafting (then a number to craft) |
+| M / J / I | Field book: map, journal, pack. Press again or Tab to close |
+| F | Eat or drink the best thing you're carrying |
+| Z | Binoculars (once you have them) |
 | Shift | Sprint |
-| Space | Dodge; skips the intro |
-| M | Mute |
+| Space | Dodge; skips the intro and other scenes |
+| N | Mute |
 | ` or F2 | Moderator menu |
 | P or Esc | Pause, with a way back to the main menu |
 
 Arrows fly further the longer you draw, drop with gravity and stick in the snow and the trees.
+
+On the map: click to set a waypoint, scroll to zoom, drag to pan, C to centre on yourself.
 
 ## Surviving
 
@@ -29,7 +36,29 @@ Arrows fly further the longer you draw, drop with gravity and stick in the snow 
 - **Trees** take a few chops to fell and topple away from you. Chop the fallen log to split it into planks.
 - **A campfire** costs 5 planks. Stand within a few metres of it to warm up.
 - **Wolves** wander in packs. They'll stop and watch you if you come near, and bolt if you get too close. Once in a long while one charges with a growl; dodge, or hit it with an arrow or the axe to send it running.
-- **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops. Another survivor lies in the snow beside it.
+- **Wolves** have health now: two good arrows or three axe blows. Skin a dead one for a pelt and meat.
+- **Snow hares** are everywhere. They freeze, then bolt in zig-zags, and they're easier to get close to if you creep or stand still with the bow up. Take a hare for meat and a pelt, and cook raw meat at a fire.
+- **Gear** cuts how fast the cold gets to you: a parka, fur mittens and a hood crafted from hare pelts, and a wolf-pelt cloak. Snowshoes make you faster.
+- **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops. Another survivor lies in the snow beside it, out cold. A fire might bring her round.
+- **If you die** you can start over or wake by your last campfire, keeping everything you found.
+
+## Finding your way
+
+- **The flight bag**, a few steps from where you land, holds the pilot's chart and a compass. With them you get the map, a minimap and a compass strip.
+- **The Ranger Lookout** is close to the start. Climb it to see across the crater and mark every site on your chart. The binoculars and snowshoes are there too.
+- **Notes, signposts and Varga's pages** mark more places on the chart as you read them.
+- **Beacons** show through the fog: the lookout lamp, the radio mast's red light and the steam column over the Breath.
+- **The journal** keeps every page you've read, the sites you've found and the parts you still need.
+
+The ten sites are the Ranger Lookout, Henrik's Cabin, Hollow Station, the Frozen Lake, the Radio Mast, the Dakota, Last Camp, the Frozen Altar, the Chapel of the Snows and the Star-Iron Mine. About 250 things lie around the crater to find: food, warmth, medicine, gear, crates, 32 notes and pages, and 15 star-iron shards.
+
+## The way out
+
+Bring all ten parts and 10 planks to Varga's launch frame at the Breath and press E to assemble the balloon, then again to climb in and cut the tether. You won't be alone up there. The final fight happens in the basket: watch for the glint in her eyes and dodge with Space, then hit her while she's dazed. If she shoves you onto the rim, mash Space to get back in. If you lose, the fight starts again from the top.
+
+## The Ember Blade
+
+A ten-foot burning katana, hidden from the start. Enter the Konami code (up, up, down, down, left, right, left, right, B, A) or type `hotblade` while playing. Press 3 to hold it. It cuts down every tree and creature in a wide arc, splits fallen logs straight into planks and keeps you warm. The moderator menu can give it too.
 
 ## Project layout
 
@@ -46,7 +75,19 @@ src/
   game.js        Main loop, controls, camera, arrows, HUD, menus and the Character room
   cutscene.js    The opening plane crash, and the wreck site it leaves on the map
   survival.js    The axe and stump, chopping and planks, crafting, campfires and the cold
-  wolves.js      The wolves and how they roam, plus a loader for animated models
+  wolves.js      The wolves: how they roam, hunt, take damage and die, plus a loader for animated models
+  rabbits.js     The snow hares, and the combat checks shared by every weapon
+  events.js      Game events that one part announces and others respond to
+  lore.js        Every piece of story text: notes, Varga's pages, thoughts, site names, the ending
+  story.js       The note reader, the journal page, the objective tracker, site banners and stats
+  sites.js       The ten sites and the Breath: placing them, finding them, beacons, the lookout climb
+  structures.js  The buildings and props at each site, built in code
+  items.js       Everything you can pick up, the pack, eating, cooking, gear and the binoculars
+  map.js         The field book, the survey chart, the minimap and the compass strip
+  katana.js      The Ember Blade
+  crimson.js     Crimson waking up by the fire
+  balloon.js     Varga's balloon: the launch frame, assembly, the launch and the ending
+  boss.js        The fight in the basket
   moderator.js   Moderator menu: flying, no cold, give items, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
   boots.js       Black tactical boots, shaped from the characters' own feet
@@ -56,7 +97,7 @@ src/
   render.js      Lighting, bloom and colour grading
   textures.js    Textures painted in code (snow, bark, fur)
   glb.js         Reads the embedded model files
-  style.css      Menus and HUD styling
+  style.css      Menus and HUD styling (each module above also has its own .css where it needs one)
 ```
 
 Each file in `models/` is a `.glb` 3D model stored as text, because browsers won't load separate model files from a page opened straight from disk. They can't be edited directly. To change a model, edit the original `.glb` in Blender or a similar tool, then convert it again.

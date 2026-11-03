@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hollow Snow</title>
 <link rel="stylesheet" href="src/style.css">
+<link rel="stylesheet" href="src/story.css">
+<link rel="stylesheet" href="src/map.css">
+<link rel="stylesheet" href="src/items.css">
+<link rel="stylesheet" href="src/crimson.css">
+<link rel="stylesheet" href="src/balloon.css">
+<link rel="stylesheet" href="src/boss.css">
 </head>
 <body>
 <canvas id="view"></canvas>
@@ -17,6 +23,10 @@
   <div id="prompt" class="hidden"></div>
   <div id="toast"></div>
   <div id="note"></div>
+  <div id="objective"></div>
+  <div id="compass" class="hidden"></div>
+  <canvas id="minimap" class="hidden" width="180" height="180"></canvas>
+  <div id="binoculars" class="hidden"></div>
   <div id="vitals">
     <div class="vital"><label>Health</label><div class="bar hp"><i id="hp-fill"></i></div></div>
     <div class="vital" id="warmth"><label>Warmth</label><div class="bar warmth"><i id="warmth-fill"></i></div></div>
@@ -26,9 +36,11 @@
     <div class="slots">
       <div class="slot" id="slot-bow"><kbd>1</kbd>Bow</div>
       <div class="slot hidden" id="slot-axe"><kbd>2</kbd>Axe</div>
+      <div class="slot hidden" id="slot-katana"><kbd>3</kbd>Ember Blade</div>
       <div class="slot resource"><b id="planks">0</b> planks</div>
+      <div class="slot resource hidden" id="slot-food"><kbd>F</kbd><b id="food-count">0</b> food</div>
     </div>
-    <p class="hotbar-hint"><kbd>Tab</kbd> craft &nbsp;·&nbsp; <kbd>Ctrl</kbd> <span id="look-mode">Free look</span></p>
+    <p class="hotbar-hint"><kbd>Tab</kbd> craft &nbsp;·&nbsp; <kbd>M</kbd> map &nbsp;·&nbsp; <kbd>J</kbd> journal &nbsp;·&nbsp; <kbd>I</kbd> pack &nbsp;·&nbsp; <kbd>Ctrl</kbd> <span id="look-mode">Free look</span></p>
   </div>
   <div id="craft" class="hidden">
     <h3>Crafting</h3>
@@ -38,6 +50,7 @@
 </div>
 
 <div id="subtitle"></div>
+<div id="banner"><p class="banner-kicker"></p><h2 class="banner-title"></h2><p class="banner-sub"></p></div>
 
 <div id="cine">
   <div class="letterbox top"></div>
@@ -70,8 +83,14 @@
       <li><b>Left click</b> draw bow / swing axe</li>
       <li><b>Right click</b> aim</li>
       <li><b>1 · 2</b> bow · axe</li>
-      <li><b>E</b> pick up</li>
+      <li><b>E</b> pick up · use</li>
       <li><b>Tab</b> craft</li>
+      <li><b>M</b> map (click to mark)</li>
+      <li><b>J</b> journal</li>
+      <li><b>I</b> pack</li>
+      <li><b>F</b> eat</li>
+      <li><b>Z</b> binoculars</li>
+      <li><b>N</b> mute</li>
       <li><b>Shift</b> sprint</li>
       <li><b>Space</b> dodge</li>
       <li><b>Esc</b> pause</li>
@@ -118,9 +137,35 @@
   <p class="tag" id="dead-text">Out here, a fire is the difference between morning and never.</p>
   <div class="title-actions">
     <button id="dead-menu" class="secondary">Main menu</button>
-    <button id="dead-retry">Try again</button>
+    <button id="dead-retry" class="secondary">Start over</button>
+    <button id="dead-continue">Wake by your last fire</button>
   </div>
 </section>
+
+<!-- The field book: her map, journal and pack, opened with M, J and I. -->
+<section id="book" class="hidden">
+  <nav class="book-tabs">
+    <button data-tab="map"><kbd>M</kbd> Map</button>
+    <button data-tab="journal"><kbd>J</kbd> Journal</button>
+    <button data-tab="pack"><kbd>I</kbd> Pack</button>
+  </nav>
+  <div class="book-page" id="book-map"><canvas id="map-canvas"></canvas><aside id="map-legend"></aside></div>
+  <div class="book-page" id="book-journal"></div>
+  <div class="book-page" id="book-pack"></div>
+  <p class="book-hint"></p>
+</section>
+
+<!-- A note or journal page, held up to read. -->
+<section id="reader" class="hidden">
+  <article class="paper">
+    <p class="reader-meta"></p>
+    <h3 class="reader-title"></h3>
+    <div class="reader-body"></div>
+    <p class="reader-hint">E, Space or click to put it away</p>
+  </article>
+</section>
+
+<section id="ending" class="screen hidden"></section>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 <!-- 3D models, embedded as scripts so the game runs straight from the folder. -->
@@ -132,12 +177,24 @@
 <script src="src/textures.js"></script>
 <script src="src/render.js"></script>
 <script src="src/audio.js"></script>
+<script src="src/events.js"></script>
+<script src="src/lore.js"></script>
 <script src="src/world.js"></script>
+<script src="src/sites.js"></script>
+<script src="src/structures.js"></script>
 <script src="src/bow.js"></script>
 <script src="src/player.js"></script>
 <script src="src/boots.js"></script>
 <script src="src/wolves.js"></script>
+<script src="src/rabbits.js"></script>
 <script src="src/survival.js"></script>
+<script src="src/items.js"></script>
+<script src="src/story.js"></script>
+<script src="src/map.js"></script>
+<script src="src/katana.js"></script>
+<script src="src/crimson.js"></script>
+<script src="src/balloon.js"></script>
+<script src="src/boss.js"></script>
 <script src="src/cutscene.js"></script>
 <script src="src/game.js"></script>
 <script src="src/moderator.js"></script>

@@ -27,12 +27,20 @@ const MOD_TELEPORTS = {
   'East edge': () => ({ x: WORLD_RADIUS - 30, z: 0 }),
   'West edge': () => ({ x: -(WORLD_RADIUS - 30), z: 0 }),
 };
+// One chip per site, landing on the edge of it.
+for (const s of SITES) MOD_TELEPORTS[mapSiteName(s).replace(/^The /, '')] = () => ({ x: s.x, z: s.z + s.radius - 4 });
 const MOD_ACTIONS = {
   stamina: ['Heal and warm up', () => { player.stamina = 100; survival.health = 100; survival.warmth = 100; }],
   axe: ['Give axe', () => { if (!survival.hasAxe) takeAxe(); }],
   planks: ['+10 planks', () => { survival.planks += 10; }],
   fire: ['Build campfire', () => { survival.planks += SURVIVAL.campfireCost; craft(0); }],
   arrows: ['Clear arrows', () => clearArrows()],
+  items: ['Give chart, compass, binoculars, snowshoes', () => { for (const id of ['map', 'compass', 'binoculars', 'snowshoes']) packAdd(id); }],
+  reveal: ['Reveal every site', () => { for (const s of SITES) revealSite(s.id); }],
+  katana: ['Give the Ember Blade', () => grantKatana('mod')],
+  crimson: ['Wake Crimson', () => { if (crimson.phase === 'asleep' && boss.phase === 'none') { closeMod(); wakeCrimson(null); } }],
+  balloon: ['Give balloon parts and planks', () => giveBalloonParts()],
+  boss: ['Jump to the final boss', () => { closeMod(); if (game.state === 'paused') setPaused(false); bossJumpTo(); }],
 };
 
 let modReturn = null;
@@ -42,6 +50,7 @@ function teleport(spot) {
   player.pos.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
   player.dodge = null;
   world.stream(player.pos, Infinity);
+  poseAvatar(1 / 60, new THREE.Vector3(), false);
   avatar.reset();
 }
 
@@ -57,7 +66,7 @@ function renderMod() {
     </header>
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>
     ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['stamina', 'arrows']))}
-    ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire']))}
+    ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire', 'items', 'reveal', 'katana', 'crimson', 'balloon', 'boss']))}
     ${section('Move speed', chips('speed', MOD_SPEEDS, mod.speed, (v) => `${v}×`))}
     ${section('Game speed', chips('time', MOD_TIMES, mod.timeScale, (v) => `${v}×`))}
     ${section('Teleport', `<div class="chips">${Object.keys(MOD_TELEPORTS).map((name) => `<button data-teleport="${name}">${name}</button>`).join('')}</div>`)}
@@ -76,7 +85,7 @@ function applyMod() {
 }
 
 function openMod() {
-  if (game.state === 'room' || game.state === 'cutscene' || game.state === 'dead') return;
+  if (['room', 'cutscene', 'dead', 'scene', 'book', 'reader', 'ending'].includes(game.state)) return;
   modReturn = game.state;
   if (game.state === 'playing') setPaused(true);
   $('pause').classList.add('hidden');

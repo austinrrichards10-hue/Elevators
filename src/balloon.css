@@ -1,0 +1,25 @@
+/* ---------- balloon ---------- */
+/* The fade for the assembly montage: under the letterbox and captions, over the world. */
+#balloon-fade { position: fixed; inset: 0; pointer-events: none; background: #05060c; opacity: 0; transition: opacity .6s ease; }
+#balloon-fade.on { opacity: 1; }
+
+/* The ending: the dawn stays in view above, the words sit low over a dark wash. */
+#ending { justify-content: flex-start; align-items: flex-start; padding: 0 0 7vh 7vw; text-align: left; background:
+  linear-gradient(180deg, rgba(14, 10, 30, 0) 0%, rgba(14, 10, 30, 0) 30%, rgba(14, 10, 30, .55) 62%, rgba(10, 8, 24, .88) 100%),
+  linear-gradient(90deg, rgba(10, 8, 24, .55), rgba(10, 8, 24, 0) 65%);
+  animation: ending-in 2.4s ease-out both; }
+@keyframes ending-in { from { opacity: 0; } }
+.ending-card { width: min(640px, 86vw); margin-top: auto; }
+.ending-card > *, .ending-text p { animation: ending-rise 1.4s ease-out both; animation-delay: calc(1.2s + var(--i, 0) * .55s); }
+@keyframes ending-rise { from { opacity: 0; transform: translateY(12px); } }
+.ending-kicker { font-size: 13px; letter-spacing: .4em; text-transform: uppercase; color: #ffd2b0; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
+.ending-title { margin: 6px 0 16px; font-size: clamp(36px, 5.4vw, 64px); line-height: 1.02; color: #fff6ec; text-shadow: 0 0 6px rgba(255, 140, 90, .7), 0 0 30px rgba(255, 120, 70, .45), 0 3px 14px rgba(0, 0, 0, .5); }
+.ending-text p { margin-bottom: 12px; font-size: clamp(16px, 1.6vw, 19px); line-height: 1.6; color: #f6ece4; text-shadow: 0 1px 6px rgba(0, 0, 0, .7); }
+.ending-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 18px 0 22px; }
+.ending-stats div { padding: 8px 11px; border: 1px solid rgba(255, 210, 176, .22); border-radius: 8px; background: rgba(16, 12, 34, .5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.ending-stats dt { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #ffc9a8; opacity: .85; }
+.ending-stats dd { margin: 2px 0 0; font-size: 20px; color: #fff6ec; }
+#ending .title-actions { justify-content: flex-start; }
+#ending button { background: linear-gradient(90deg, #a01f3c, #c8304d); border-color: #ffc9a8; box-shadow: 0 6px 24px rgba(160, 31, 60, .4); }
+#ending button:hover, #ending button:focus-visible { background: linear-gradient(90deg, #b8264a, #e03d5c); }
+@media (max-width: 760px) { #ending { padding: 0 16px 5vh; } }

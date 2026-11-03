@@ -150,18 +150,26 @@ addEventListener('keydown', (e) => {
   if (['Space', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   keys[e.code] = true;
-  if (e.code === 'KeyM') toggleMute();
-  // The intro can be skipped with Space, Enter or Escape.
+  if (e.code === 'KeyN') toggleMute();
+  // The intro and scenes can be skipped with Space, Enter or Escape.
   if (game.state === 'cutscene' && ['Space', 'Enter', 'Escape'].includes(e.code)) { finishCutscene(); return; }
+  if (game.state === 'scene' && ['Space', 'Enter', 'Escape'].includes(e.code)) { skipScene(); return; }
   if (e.code === 'Backquote' || e.code === 'F2') { e.preventDefault(); toggleMod(); return; }
   if (game.state !== 'playing') return;
+  cheatKey(e.code);
+  // The field book: her map, journal and pack.
+  const page = { KeyM: 'map', KeyJ: 'journal', KeyI: 'pack' }[e.code];
+  if (page) { openBook(page); return; }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') { e.preventDefault(); aimLock = !aimLock; }
   if (e.code === 'Tab') setCrafting(!survival.crafting);
-  const digit = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+  if (e.code === 'KeyF') quickEat();
+  if (e.code === 'KeyZ') toggleBinoculars();
+  const digit = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
   // With the crafting list open, numbers craft; otherwise they pick what's in her hands.
   if (digit >= 0 && survival.crafting) craft(digit);
   else if (digit === 0) setTool('bow');
   else if (digit === 1) setTool('axe');
+  else if (digit === 2) setTool('katana');
   // Flying uses Space to climb, so there is no dodge in the air.
   if (e.code === 'Space' && !mod.fly) startDodge();
   if (e.code === 'KeyP') setPaused(true);
@@ -173,7 +181,11 @@ canvas.addEventListener('mousedown', (e) => {
   if (game.state === 'cutscene') { finishCutscene(); return; }
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
-  if (e.button === 0) { if (survival.tool === 'axe') startSwing(); else startDraw(); }
+  if (e.button === 0) {
+    if (survival.tool === 'axe') startSwing();
+    else if (survival.tool === 'katana') startSlash();
+    else startDraw();
+  }
   if (e.button === 2 && survival.tool === 'bow') aiming = true;
 });
 addEventListener('mouseup', (e) => {
@@ -222,11 +234,23 @@ function setPaused(paused) {
 /* ---------- Runs and menus ---------- */
 // A fresh run: new crash site, the forest grown back, nothing in her pockets.
 function resetRun() {
+  subtitles.length = 0;
+  subtitleT = 0;
+  $('subtitle').classList.remove('on');
   clearWolves();
   clearArrows();
   placeWreck();
   world.resetForest();
   resetSurvival();
+  resetSites();
+  resetItems();
+  resetRabbits();
+  resetStory();
+  resetMap();
+  resetKatana();
+  resetCrimson();
+  resetBalloon();
+  resetBoss();
   for (const k in keys) keys[k] = false;
   aiming = false;
   cancelDraw();
@@ -236,7 +260,8 @@ function resetRun() {
   world.stream(player.pos, Infinity);
 }
 
-function beginPlay() {
+// `fresh` is a new run; otherwise she's waking by a fire after dying, with all she found.
+function beginPlay(fresh = true) {
   game.state = 'playing';
   for (const id of ['title', 'pause', 'dead']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden');
@@ -246,8 +271,31 @@ function beginPlay() {
   camera.up.set(0, 1, 0);
   lockPointer();
   updateMusic();
-  say('Cold. So cold. I need to find something to make a fire.', 3.8);
+  if (fresh) {
+    say('Cold. So cold. I need to find something to make a fire.', 3.8);
+    emitGame('runStart');
+  }
 }
+
+// After dying, she can wake by the last campfire she built, keeping everything she found.
+function continueFromFire() {
+  const fire = survival.fires[survival.fires.length - 1];
+  if (!fire) return;
+  clearWolves();
+  survival.health = 60;
+  survival.warmth = 80;
+  player.stamina = 100;
+  player.dodge = null;
+  for (const k in keys) keys[k] = false;
+  player.pos.set(fire.x + 1.6, groundHeight(fire.x + 1.6, fire.z), fire.z);
+  world.stream(player.pos, Infinity);
+  poseAvatar(1 / 60, new THREE.Vector3(), false);
+  avatar.reset();
+  beginPlay(false);
+  say('I\'m still here. Barely.', 3);
+  emitGame('revived');
+}
+$('dead-continue').addEventListener('click', continueFromFire);
 
 $('start').addEventListener('click', () => {
   Sfx.init();
@@ -264,7 +312,9 @@ $('resume').addEventListener('click', () => setPaused(false));
 // the title shows her as she was before it began.
 function toMainMenu() {
   game.state = 'title';
-  for (const id of ['pause', 'dead', 'hud']) $(id).classList.add('hidden');
+  if (activeScene) endScene();
+  document.body.classList.remove('cinematic');
+  for (const id of ['pause', 'dead', 'hud', 'book', 'reader', 'ending']) $(id).classList.add('hidden');
   $('title').classList.remove('hidden');
   $('frost').style.opacity = 0;
   pointerWasLocked = false;
@@ -286,6 +336,8 @@ const DEATHS = {
 };
 
 function playerDied(cause) {
+  // In the final fight a loss restarts the fight instead (boss.js).
+  if (bossCatchDeath(cause)) return;
   game.state = 'dead';
   pointerWasLocked = false;
   document.exitPointerLock();
@@ -293,8 +345,59 @@ function playerDied(cause) {
   const [title, text] = DEATHS[cause];
   $('dead-title').textContent = title;
   $('dead-text').textContent = text;
+  $('dead-continue').classList.toggle('hidden', !survival.fires.length);
   $('hud').classList.add('hidden');
   $('dead').classList.remove('hidden');
+  emitGame('playerDied', cause);
+}
+
+/* ---------- Scenes ---------- */
+// Scripted moments played out in the world, like the other survivor waking or the balloon
+// lifting off. A scene is { update(dt), skip() }: it runs the camera and whatever else it
+// needs each frame, and calls endScene() when it's over. While one plays she can't be
+// controlled, and the HUD gives way to the letterbox.
+let activeScene = null;
+
+function playScene(scene) {
+  activeScene = scene;
+  scene.hadLock = document.pointerLockElement === canvas;
+  // Scenes can follow straight on from one another. If the last one just paused because
+  // the mouse came free, this one plays anyway and pauses at its own end.
+  if (game.state === 'paused') { $('pause').classList.add('hidden'); scene.hadLock = true; }
+  game.state = 'scene';
+  katana.swing = null;
+  survival.swing = null;
+  aiming = false;
+  cancelDraw();
+  setCrafting(false);
+  setPrompt('');
+  for (const k in keys) keys[k] = false;
+  document.body.classList.add('cinematic');
+}
+
+function endScene() {
+  if (!activeScene) return;
+  const hadLock = activeScene.hadLock;
+  activeScene = null;
+  document.body.classList.remove('cinematic');
+  drawSpeedLines(0, 0);
+  caption('');
+  $('flash').className = '';
+  camera.fov = 58;
+  camera.up.set(0, 1, 0);
+  camera.updateProjectionMatrix();
+  // A scene can hand over to another state itself, such as the ending.
+  if (game.state === 'scene') {
+    game.state = 'playing';
+    // If the mouse came free during the scene, the browser won't lock it again without a
+    // click, so pause and let the Resume button do it.
+    if (hadLock && document.pointerLockElement !== canvas) setPaused(true);
+    else lockPointer();
+  }
+}
+
+function skipScene() {
+  if (activeScene && activeScene.skip) activeScene.skip();
 }
 
 /* ---------- Subtitles ---------- */
@@ -382,11 +485,20 @@ function findAimPoint(out) {
   camera.getWorldDirection(viewDir);
   const origin = camera.position;
   const start = origin.distanceTo(player.pos) * 0.6;
+  let hit = 300;
   for (let t = start; t < 300; t += 0.5) {
-    if (solidAt(origin.x + viewDir.x * t, origin.y + viewDir.y * t, origin.z + viewDir.z * t)) return out.copy(origin).addScaledVector(viewDir, t);
+    if (solidAt(origin.x + viewDir.x * t, origin.y + viewDir.y * t, origin.z + viewDir.z * t)) { hit = t; break; }
   }
-  return out.copy(origin).addScaledVector(viewDir, 300);
+  const nearer = (centre, r) => {
+    const t = aimCreatureTmp.subVectors(centre, origin).dot(viewDir);
+    if (t > start && t < hit && aimCreatureTmp.addScaledVector(viewDir, -t).length() < r) hit = t;
+  };
+  for (const hare of rabbits) if (!hare.dead) nearer(rabbitCentre(hare, aimCreatureAt), RABBIT.hit * RABBIT.scale + 0.08);
+  for (const wolf of wolves) if (!wolf.dead) nearer(wolf.bodyCentre(aimCreatureAt), WOLF_BODY.r + 0.1);
+  if (bossFighting()) for (const [part, r] of [['head', 0.28], ['chest', 0.38], ['hips', 0.38]]) nearer(bossKit.avatar[part].getWorldPosition(aimCreatureAt), r);
+  return out.copy(origin).addScaledVector(viewDir, hit);
 }
+const aimCreatureAt = new THREE.Vector3(), aimCreatureTmp = new THREE.Vector3();
 
 function startDraw() {
   if (player.drawing || player.dodge || player.releaseCd > 0) return;
@@ -410,6 +522,9 @@ function releaseArrow() {
   avatar.root.updateMatrixWorld(true);
   bowModel.arrow.getWorldPosition(nockWorld);
   const tip = nockWorld.clone().addScaledVector(viewDir, BOW.arrowLength);
+  // Aim a little high for the drop, so the arrow comes down where the crosshair is.
+  const flight = Math.hypot(aimPoint.x - tip.x, aimPoint.z - tip.z) / lerp(BOW.minSpeed, BOW.maxSpeed, power);
+  aimPoint.y += 0.5 * BOW.gravity * flight * flight;
   const dir = aimPoint.clone().sub(tip).normalize();
   // A half-drawn arrow wobbles off line.
   const wobble = (1 - power) * 0.025;
@@ -420,7 +535,7 @@ function releaseArrow() {
 
   const mesh = buildArrowMesh();
   scene.add(mesh);
-  const arrow = { mesh, tip, vel: dir.multiplyScalar(lerp(BOW.minSpeed, BOW.maxSpeed, power)), flying: true, life: 0 };
+  const arrow = { mesh, tip, vel: dir.multiplyScalar(lerp(BOW.minSpeed, BOW.maxSpeed, power)), power, flying: true, life: 0 };
   arrows.push(arrow);
   placeArrow(arrow);
   player.releaseCd = 0.3;
@@ -460,11 +575,8 @@ function updateArrows(dt) {
     for (let i = 0; i < steps; i++) {
       arrow.vel.y -= BOW.gravity * h;
       arrow.tip.addScaledVector(arrow.vel, h);
-      // A wolf that's hit yelps and runs; the arrow drops away.
-      const wolf = wolves.find((w) => Math.hypot(w.pos.x - arrow.tip.x, w.pos.y + 0.5 - arrow.tip.y, w.pos.z - arrow.tip.z) < 0.6);
-      if (wolf) {
-        wolf.scare();
-        burst(arrow.tip, 0x8a7a6a, 6, 1.6);
+      // A wolf or a hare that's hit takes the arrow with it; so does the final boss (boss.js).
+      if (bossArrowHit(arrow) || arrowHitsCreature(arrow)) {
         arrow.flying = false;
         removeArrow(arrow);
         break;
@@ -514,7 +626,7 @@ function angleLerp(from, to, amount) {
 // Whether she faces the crosshair: always with aim lock, otherwise only while aiming,
 // drawing or just after a shot.
 function facingAim() {
-  return aimLock || aiming || player.drawing || player.aimT > 0 || !!survival.swing;
+  return aimLock || aiming || player.drawing || player.aimT > 0 || !!survival.swing || katanaBusy();
 }
 
 function turnBody(dt, move, moving) {
@@ -562,13 +674,14 @@ function updatePlayer(dt) {
     }
     if (u >= 1) player.dodge = null;
   } else if (moving) {
-    // Numb with cold, she slows down.
-    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * mod.speed * (survival.warmth < 15 ? 0.8 : 1);
+    // Numb with cold, she slows down; snowshoes carry her faster.
+    const speed = (ads ? 2.6 : sprinting ? 6.9 : 4.3) * mod.speed * (survival.warmth < 15 ? 0.8 : 1) * gearSpeed();
     move.normalize();
     player.pos.addScaledVector(move, speed * dt);
     step = speed * dt;
   }
-  if (!mod.noclip) pushOutOfColliders(player.pos, 0.34);
+  // Up in the balloon basket the trunks and rocks below don't apply (boss.js).
+  if (!mod.noclip && !bossFighting()) pushOutOfColliders(player.pos, 0.34);
 
   const r = Math.hypot(player.pos.x, player.pos.z);
   if (r > WORLD_RADIUS) {
@@ -576,6 +689,8 @@ function updatePlayer(dt) {
     player.pos.z *= WORLD_RADIUS / r;
   }
   player.pos.y = groundHeight(player.pos.x, player.pos.z);
+  // The final fight keeps her on the balloon basket's floor (boss.js).
+  bossHoldPlayer(player.pos, dt);
 
   // Faster movement keeps the same stride length, so the legs speed up with it.
   step /= mod.speed;
@@ -590,6 +705,8 @@ function updatePlayer(dt) {
   player.stride += (stride - player.stride) * (1 - Math.exp(-9 * dt));
   player.walkPhase += step * (sprinting ? 1.95 : 2.55) * player.gaitDir;
   poseAvatar(dt, move, moving);
+  // Shoved onto the basket's rim in the final fight, she teeters (boss.js).
+  bossPosePlayer(dt);
   avatar.simulate(dt);
 }
 
@@ -690,6 +807,7 @@ function poseAvatar(dt, move, moving) {
 
   poseBow(dt, ease);
   poseAxe(dt);
+  poseKatana(dt);
 }
 
 /* ---------- Bow handling ---------- */
@@ -826,8 +944,8 @@ function updateCamera(dt) {
   }
   camera.lookAt(camera.position.x + s * cp, camera.position.y + sp, camera.position.z + c * cp);
 
-  // Right click zooms in further than drawing alone.
-  const fov = aiming ? 42 : lerp(58, 50, a);
+  // Right click zooms in further than drawing alone, and binoculars much further.
+  const fov = binocularsUp() ? 13 : aiming ? 42 : lerp(58, 50, a);
   camera.fov += (fov - camera.fov) * ease(12);
   camera.updateProjectionMatrix();
 }
@@ -854,6 +972,15 @@ function update(dt) {
   updateWolves(dt);
   updateSurvival(dt);
   updateWreck(dt);
+  updateSites(dt);
+  updateItems(dt);
+  updateRabbits(dt);
+  updateStory(dt);
+  updateMap(dt);
+  updateKatana(dt);
+  updateCrimson(dt);
+  updateBalloon(dt);
+  updateBoss(dt);
 }
 
 // Slow drift in front of her on the title screen, so the skin choice shows.
@@ -1128,27 +1255,47 @@ function updateRoom(dt) {
 setSkin(skinId);
 initSurvival();
 placeWreck();
+initSites();
+initItems();
+initRabbits();
+initStory();
+initMap();
+initKatana();
+initCrimson();
+initBalloon();
+initBoss();
 renderLoadout();
+pipeline.compile();
 
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min((now - last) / 1000, 0.05);
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.05));
   last = now;
 
   if (game.state === 'title') updateTitle(dt);
   if (game.state === 'playing') update(dt * mod.timeScale);
   if (game.state === 'room') updateRoom(dt);
   if (game.state === 'cutscene') updateCutscene(dt);
+  if (game.state === 'scene' && activeScene) activeScene.update(dt);
   if (game.state === 'playing' || game.state === 'title') world.stream(player.pos);
-  if (game.state === 'playing' || game.state === 'title' || game.state === 'room' || game.state === 'cutscene') {
+  if (game.state === 'playing' || game.state === 'title' || game.state === 'room' || game.state === 'cutscene' || game.state === 'scene') {
     updateSparks(dt);
-    updateSubtitles(dt);
+    // Her thoughts wait while a scene hides the subtitles.
+    if (game.state !== 'scene') updateSubtitles(dt);
     world.update(dt, game.time, camera.position, player.pos);
   }
-  pipeline.render(dt, game.time);
+  // The blade's roar and the tethered burner are only kept going by play.
+  if (game.state !== 'playing' && katana.roarLevel) katanaSilence();
+  if (['paused', 'book', 'reader', 'dead'].includes(game.state) && balloonRoar && balloon.burn > 0.01) { balloonRoar.set(0, 0.2); balloon.burn = 0; }
+  // Nothing moves behind the field book or a note, so one frame of it will do.
+  const still = game.state === 'book' || game.state === 'reader';
+  if (!still || !frozenDrawn) pipeline.render(dt, game.time);
+  frozenDrawn = still;
 }
+let frozenDrawn = false;
+addEventListener('resize', () => { frozenDrawn = false; });
 requestAnimationFrame(frame);
 
 // Exposed for debugging from the browser console.
-window.hollowSnow = { game, player, world, keys, arrows, survival, wolves, setSkin, startDodge, startDraw, releaseArrow, startSwing, finishCutscene };
+window.hollowSnow = { game, player, world, keys, arrows, survival, wolves, rabbits, pack, SITES, katana, crimson, balloon, boss, stats, setSkin, startDodge, startDraw, releaseArrow, startSwing, finishCutscene, teleport: (x, z) => teleport({ x, z }) };
