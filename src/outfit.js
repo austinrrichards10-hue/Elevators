@@ -1,24 +1,29 @@
 // Miku's clothes: the oversized sweater and baggy jeans from models/clothing, in place of
-// the outfit she came with. Both were modelled on a full-size person standing in an A-pose,
-// so each is scaled down to her, the sleeves are lifted level with her arms (her bind pose
-// is a T-pose, facing +Z), and every point is then skinned to the bones it should ride with.
+// the outfit she came with. Both were modelled on a full-size person standing in an A-pose.
+// Rather than bending them into her own bind pose (a T-pose), they're scaled down evenly,
+// keeping their shape, and bound to her bones with her arms lowered to the sweater's
+// angle and her legs hanging straight. Each garment then rides those bones from there.
 const OUTFIT = {
-  // The sweater's body: a point on the garment maps to `to + scale * (point - from)`.
+  // How far below level the sweater's sleeves hang, in radians; her arms match it.
+  armDrop: 0.5,
+  // The sweater: a point maps to `to + scale * (point - from)`, `from` being where its
+  // sleeves meet the body, so the sleeves line up with her shoulders.
   sweater: {
-    from: new THREE.Vector3(0, 1.43, -0.03),
-    to: new THREE.Vector3(0, 1.17, -0.004),
-    scale: new THREE.Vector3(0.6, 0.72, 0.7),
-    // The tall collar is pressed down above the shoulders, so it stops under her chin.
-    collar: { from: 1.43, squash: 0.42 },
-    // Each sleeve hangs from `pivot`, angled `drop` radians below level. It's turned level
-    // and scaled to her arm: `along` down its length, `around` across it.
-    sleeve: { pivot: new THREE.Vector3(0.2, 1.36, -0.06), drop: 0.5, along: 0.72, around: 0.56, blend: [-0.04, 0.07], armpit: 1.12 },
+    from: new THREE.Vector3(0, 1.36, -0.03),
+    to: new THREE.Vector3(0, 1.144, -0.012),
+    scale: 0.66,
+    // The tall funnel collar is pressed down above its base, so it stops under her chin.
+    collar: { from: 1.5, squash: 0.35 },
+    // Each sleeve hangs from `pivot`; `elbow` is how far down it her elbow comes.
+    sleeve: { pivot: new THREE.Vector3(0.2, 1.36, -0.06), blend: [-0.04, 0.07], armpit: 1.12, elbow: [0.2, 0.28] },
   },
-  // The jeans: heights map through these pairs (garment, Miku), widths and depths scale.
+  // The jeans: heights map through these pairs (garment, Miku); each leg is centred on
+  // hers and scaled across by `scale`, flaring out over the boots at the hem.
   jeans: {
-    heights: [[0, 0.012], [0.66, 0.79], [1.09, 0.995]],
+    heights: [[0, 0.015], [0.66, 0.79], [1.09, 0.995]],
     scale: { x: 0.8, z: 0.82 },
     crotch: 0.66, // in the garment: below this, each leg is its own tube
+    flare: { top: 0.36, amount: 0.45, forward: 0.035 }, // over the boots: from what height, how much, and pushed towards the toes
   },
   light: new THREE.Vector3(0.3, 0.8, 0.5).normalize(),
 };
@@ -63,8 +68,8 @@ function packWeights(pairs, joints, weights, i) {
   }
 }
 
-// A garment part as geometry in the model's own space, with light baked into its colours,
-// since the character materials are unlit.
+// A garment part as geometry in game space, in the pose it's bound in, with light baked
+// into its colours, since the character materials are unlit.
 function garmentGeometry(source, positions, joints, weights) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -81,7 +86,6 @@ function garmentGeometry(source, positions, joints, weights) {
     colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = shade;
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.applyMatrix4(gameToModel);
   geometry.deleteAttribute('normal');
   return geometry;
 }
@@ -95,38 +99,28 @@ function garmentMaterial(source) {
 
 /* ---------- The sweater ---------- */
 function fitSweater(bones) {
-  const fit = OUTFIT.sweater, sleeve = fit.sleeve;
-  const p = new THREE.Vector3(), body = new THREE.Vector3(), arm = new THREE.Vector3();
-  const local = new THREE.Vector3();
-  const elbowAt = (bones.elbowX - bones.shoulderX);
+  const fit = OUTFIT.sweater, sleeve = fit.sleeve, c = fit.collar;
+  const p = new THREE.Vector3(), out3 = new THREE.Vector3();
+  const cos = Math.cos(OUTFIT.armDrop), sin = Math.sin(OUTFIT.armDrop);
   return decodeGarment(SWEATER_MODEL).map((source) => {
     const src = source.positions, count = src.length / 3;
     const out = new Float32Array(src.length);
     const joints = new Uint16Array(count * 4), weights = new Float32Array(count * 4);
     for (let i = 0; i < count; i++) {
       p.fromArray(src, i * 3);
-      // The body, scaled about the shoulders, with the collar pressed down.
-      body.subVectors(p, fit.from).multiply(fit.scale).add(fit.to);
-      if (p.y > fit.collar.from) body.y = fit.to.y + (p.y - fit.collar.from) * fit.scale.y * fit.collar.squash + (fit.collar.from - fit.from.y) * fit.scale.y;
-      // The sleeve on this side, turned level about its pivot.
+      // Its own shape, scaled down evenly; only the collar is pressed down.
+      out3.subVectors(p, fit.from).multiplyScalar(fit.scale).add(fit.to);
+      if (p.y > c.from) out3.y -= (p.y - c.from) * fit.scale * (1 - c.squash);
+      out3.toArray(out, i * 3);
+      // Which sleeve it's on, if either: how far out along it, in the garment's own space.
       const side = p.x < 0 ? -1 : 1;
-      local.set(p.x - side * sleeve.pivot.x, p.y - sleeve.pivot.y, p.z - sleeve.pivot.z);
-      const c = Math.cos(sleeve.drop), s = Math.sin(sleeve.drop);
-      // Along the arm (outward and down), and the offsets across it.
-      const along = side * local.x * c - local.y * s;
-      const up = side * local.x * s + local.y * c;
-      const pivotTo = new THREE.Vector3(side * sleeve.pivot.x, sleeve.pivot.y, sleeve.pivot.z).sub(fit.from).multiply(fit.scale).add(fit.to);
-      arm.set(pivotTo.x + side * along * sleeve.along, pivotTo.y + up * sleeve.around, pivotTo.z + local.z * sleeve.around);
+      const along = (side * (p.x - side * sleeve.pivot.x)) * cos - (p.y - sleeve.pivot.y) * sin;
       // Below the armpits (the hem, the hanging straps) it's all body.
       const belowArm = Math.max(THREE.MathUtils.smoothstep(p.y, sleeve.armpit - 0.06, sleeve.armpit), THREE.MathUtils.smoothstep(Math.abs(p.x), 0.32, 0.42));
-      const w = THREE.MathUtils.smoothstep(along, sleeve.blend[0], sleeve.blend[1]) * belowArm;
-      p.lerpVectors(body, arm, w);
-      p.toArray(out, i * 3);
-      // Skin: the hem rides with the hips, the rest with the chest, the sleeves with the arms.
-      const reach = Math.abs(p.x) - bones.shoulderX;
-      const onArm = THREE.MathUtils.smoothstep(reach, -0.01, 0.05) * w;
-      const elbow = THREE.MathUtils.smoothstep(reach, elbowAt - 0.04, elbowAt + 0.03);
-      const waist = THREE.MathUtils.smoothstep(p.y, 0.93, 1.05);
+      const onArm = THREE.MathUtils.smoothstep(along, sleeve.blend[0], sleeve.blend[1]) * belowArm;
+      const elbow = THREE.MathUtils.smoothstep(along, sleeve.elbow[0], sleeve.elbow[1]);
+      // The hem rides with the hips, the rest with the chest, the sleeves with the arms.
+      const waist = THREE.MathUtils.smoothstep(out3.y, 0.93, 1.05);
       packWeights([
         [bones.hips, (1 - onArm) * (1 - waist)],
         [bones.chest, (1 - onArm) * waist],
@@ -185,7 +179,7 @@ function jeansLegs(sources, crotch) {
 }
 
 function fitJeans(bones) {
-  const fit = OUTFIT.jeans;
+  const fit = OUTFIT.jeans, flare = fit.flare;
   const sources = decodeGarment(JEANS_MODEL);
   const legs = jeansLegs(sources, fit.crotch);
   const mapHeight = (y) => {
@@ -195,16 +189,46 @@ function fitJeans(bones) {
     }
     return y;
   };
+  // Each leg's own centre in the garment, band by band down its length.
+  const BAND = 0.03, bands = Math.ceil(fit.crotch / BAND) + 1;
+  const centre = { 1: Array.from({ length: bands }, () => [0, 0, 0]), [-1]: Array.from({ length: bands }, () => [0, 0, 0]) };
+  sources.forEach((source, k) => {
+    const src = source.positions;
+    for (let i = 0; i < src.length / 3; i++) {
+      const side = legs[k][i];
+      if (!side) continue;
+      const b = centre[side][clamp(Math.floor(src[i * 3 + 1] / BAND), 0, bands - 1)];
+      b[0] += src[i * 3]; b[1] += src[i * 3 + 2]; b[2]++;
+    }
+  });
+  for (const side of [1, -1]) {
+    let last = [side * 0.12, 0];
+    for (const b of centre[side]) { if (b[2]) last = [b[0] / b[2], b[1] / b[2]]; b[0] = last[0]; b[1] = last[1]; }
+  }
   return sources.map((source, k) => {
     const src = source.positions, count = src.length / 3;
     const out = new Float32Array(src.length);
     const joints = new Uint16Array(count * 4), weights = new Float32Array(count * 4);
     for (let i = 0; i < count; i++) {
-      const x = src[i * 3] * fit.scale.x, y = mapHeight(src[i * 3 + 1]), z = src[i * 3 + 2] * fit.scale.z;
+      const gx = src[i * 3], gy = src[i * 3 + 1], gz = src[i * 3 + 2];
+      const y = mapHeight(gy);
+      let x = gx * fit.scale.x, z = gz * fit.scale.z;
+      const side = legs[k][i];
+      if (side) {
+        // Each leg centred on hers, hanging straight from the hip, and opening out round the
+        // boot at the bottom so the hem drapes over it.
+        const [cx, cz] = centre[side][clamp(Math.floor(gy / BAND), 0, bands - 1)];
+        const wide = 1 + flare.amount * THREE.MathUtils.smoothstep(flare.top - y, 0, flare.top);
+        const lx = bones.hipX * side + (gx - cx) * fit.scale.x * wide;
+        const lz = bones.legZ + (gz - cz) * fit.scale.z * wide + flare.forward * THREE.MathUtils.smoothstep(flare.top - y, 0, flare.top);
+        // Easing over from the seat's shape just under the crotch.
+        const w = THREE.MathUtils.smoothstep(fit.crotch - gy, 0, 0.12);
+        x = lerp(x, lx, w);
+        z = lerp(z, lz, w);
+      }
       out[i * 3] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
       // Above the crotch the seat blends from one thigh to the other; below it, each leg
       // rides with its own thigh and shin, bending at the knee.
-      let side = legs[k][i];
       const legShare = side ? 1 : 1 - THREE.MathUtils.smoothstep(y, bones.crotchY - 0.02, bones.hipY + 0.06);
       const left = side ? (side > 0 ? 1 : 0) : THREE.MathUtils.clamp((x + 0.03) / 0.06, 0, 1);
       const knee = 1 - THREE.MathUtils.smoothstep(y, bones.kneeY - 0.07, bones.kneeY + 0.06);
@@ -220,24 +244,41 @@ function fitJeans(bones) {
   });
 }
 
+/* ---------- Dressing her ---------- */
+// The pose the clothes are bound in: her rig at rest (legs hanging straight), with her
+// arms lowered to the sweater's angle. Each bone's inverse there maps a garment point in
+// game space onto that bone.
+function garmentBind(data) {
+  const rig = buildRig(data);
+  rig.armL.upper.rotation.z = Math.PI / 2 - OUTFIT.armDrop;
+  rig.armR.upper.rotation.z = -(Math.PI / 2 - OUTFIT.armDrop);
+  rig.root.updateMatrixWorld(true);
+  const offset = new THREE.Matrix4(), bind = new THREE.Matrix4();
+  return data.names.map((name, i) => {
+    const group = rig.segments.get(name) || rig.hips;
+    offset.multiplyMatrices(rig.rests.get(group), bind.fromArray(data.inverses, i * 16).invert());
+    return new THREE.Matrix4().multiplyMatrices(group.matrixWorld, offset).invert();
+  });
+}
+
 // Swaps the clothes she came with for the sweater and jeans.
-function dressMiku(parts, names, inverses) {
-  const bone = (name) => names.indexOf(name);
-  const data = {
-    joint: (name) => new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().fromArray(inverses, bone(name) * 16).invert()).applyMatrix4(modelToGame),
-  };
+function dressMiku(parts, data) {
+  const bone = (name) => data.names.indexOf(name);
+  const hip = data.joint('thigh_twist.l');
+  const legLength = hip.distanceTo(data.joint('leg_stretch.l'));
   const bones = {
     hips: bone('root.x'), chest: bone('spine_02.x'),
     upper: { 1: bone('arm_stretch.l'), [-1]: bone('arm_stretch.r') },
     fore: { 1: bone('forearm_stretch.l'), [-1]: bone('forearm_stretch.r') },
     thigh: { 1: bone('thigh_twist.l'), [-1]: bone('thigh_twist.r') },
     shin: { 1: bone('leg_stretch.l'), [-1]: bone('leg_stretch.r') },
-    shoulderX: data.joint('c_arm_twist_offset.l').x,
-    elbowX: data.joint('forearm_stretch.l').x,
-    hipY: data.joint('thigh_twist.l').y,
-    crotchY: data.joint('thigh_twist.l').y - 0.07,
-    kneeY: data.joint('leg_stretch.l').y,
+    // At rest her legs hang straight down from the hip joints.
+    hipX: hip.x, legZ: hip.z,
+    hipY: hip.y,
+    crotchY: hip.y - 0.07,
+    kneeY: hip.y - legLength,
   };
+  data.garmentInverses = garmentBind(data);
   for (let i = parts.length - 1; i >= 0; i--) if (parts[i].isCloth) parts.splice(i, 1);
   // Her bare legs are under the jeans now, and would only poke through them.
   for (const part of parts) {
@@ -253,5 +294,5 @@ function dressMiku(parts, names, inverses) {
     }
     if (kept.length !== index.length) part.geometry.setIndex(kept);
   }
-  for (const piece of [...fitSweater(bones), ...fitJeans(bones)]) parts.push({ ...piece, isHair: false, isCloth: false, isOutfit: true });
+  for (const piece of [...fitSweater(bones), ...fitJeans(bones)]) parts.push({ ...piece, isHair: false, isCloth: false, isOutfit: true, garment: true });
 }

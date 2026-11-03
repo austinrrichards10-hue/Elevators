@@ -376,7 +376,12 @@ function loadSkinData(skinId) {
   removeSkinUnderCloth(parts);
   fitClothToLegs(parts, names);
   addBoots(parts);
-  if (def.outfit) def.outfit(parts, names, inverses);
+  const data = { parts, names, inverses, jointCount: skin.joints.length };
+  data.joint = (name) => {
+    const m = new THREE.Matrix4().fromArray(inverses, names.indexOf(name) * 16).invert();
+    return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(modelToGame);
+  };
+  if (def.outfit) def.outfit(parts, data);
   if (def.eyesClosed) closeEyes(parts);
 
   // Which bones actually move vertices, so only those are updated each frame.
@@ -385,11 +390,7 @@ function loadSkinData(skinId) {
     const joints = geometry.attributes.skinIndex.array, weights = geometry.attributes.skinWeight;
     for (let i = 0; i < joints.length; i++) if (weights.array[i] > 0) usedBones.add(joints[i]);
   }
-  const data = { parts, names, inverses, usedBones: [...usedBones], jointCount: skin.joints.length };
-  data.joint = (name) => {
-    const m = new THREE.Matrix4().fromArray(inverses, names.indexOf(name) * 16).invert();
-    return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(modelToGame);
-  };
+  data.usedBones = [...usedBones];
   if (skinId === 'teal') data.tails = buildTailBones(data);
   skinCache.set(skinId, data);
   return data;
@@ -594,10 +595,14 @@ function createAvatar(scene, skinId) {
   // Bones the skin weights never reach still need a valid matrix.
   bones.forEach((bone) => bone.matrixWorld.identity());
 
-  const meshes = data.parts.map(({ geometry, material }) => {
+  // Clothes fitted in a pose of their own (outfit.js) share the bones but not the bind pose.
+  const garmentSkeleton = data.garmentInverses
+    ? new THREE.Skeleton(bones, bones.map((_, i) => (data.garmentInverses[i] || new THREE.Matrix4()).clone()))
+    : null;
+  const meshes = data.parts.map(({ geometry, material, garment }) => {
     const mesh = new THREE.SkinnedMesh(geometry, material);
     mesh.bindMode = 'detached';
-    mesh.bind(skeleton, new THREE.Matrix4());
+    mesh.bind(garment ? garmentSkeleton : skeleton, new THREE.Matrix4());
     mesh.castShadow = true;
     mesh.frustumCulled = false;
     scene.add(mesh);
@@ -695,6 +700,7 @@ function createAvatar(scene, skinId) {
     scene.remove(rig.root);
     for (const mesh of meshes) scene.remove(mesh);
     skeleton.dispose();
+    if (garmentSkeleton) garmentSkeleton.dispose();
   };
 
   return avatar;
