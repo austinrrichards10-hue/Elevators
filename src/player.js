@@ -2,7 +2,7 @@
 // "Hatsune Miku ¡Escenario colorido!" by mega mix, "PDF Teto" by 雨宮レン and "Doomer Miku and Teto" by
 // 0x00001337. See the README for the full credits.
 const SKINS = {
-  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tailBones: /_BS_hair/, attach: 'head.x', tails: { top: 1.13, arms: 0.1, lean: [0.2, 0.38] } },
+  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tailBones: /_BS_hair/, attach: 'head.x', tails: { top: 1.13, arms: 0.1, lean: [0.12, 0.2], leanLinks: 3 } },
   teal: { name: 'Doomer Miku', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, tails: { top: 1.13 } },
   teto: { name: 'Teto', note: 'Her classic look', rig: 'teto', file: 'TETO_GLB', height: 1.5, hair: [4, 8, 9, 10], pieces: { 0: 'White', 1: 'Gray', 2: 'Black' } },
   crimson: { name: 'Doomer Teto', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
@@ -648,9 +648,12 @@ function createAvatar(scene, skinId) {
       for (let i = 1; i < path.length; i++) length += path[i].distanceTo(path[i - 1]);
       const segment = length / (path.length - 1);
       const directions = path.map((p, i) => (i ? p.clone().sub(path[i - 1]).normalize() : new THREE.Vector3(0, -1, 0)));
-      // The shape the tail springs back to, swung back and out by `lean` (as the skin asks).
+      // The shape the tail springs back to. Where it passes her arms (its top few links) it's
+      // swung back and out by `lean`, as the skin asks; below them it hangs straight down.
       const lean = tailFit.lean || [0, 0];
-      const pull = directions.map((d) => d.clone().add(new THREE.Vector3(side * lean[0], 0, -lean[1])).normalize());
+      const pull = directions.map((d, i) => (i >= 1 && i <= (tailFit.leanLinks || 0)
+        ? d.clone().add(new THREE.Vector3(side * lean[0], 0, -lean[1])).normalize()
+        : d.clone()));
       const chain = new Chain(rig.head, path[0].clone().sub(headWorldRest), {
         count: path.length, segment, rest: (i) => pull[i], stiffness: (i) => [0, 0.7, 0.55, 0.42, 0.3, 0.22][i] || 0.15, pad: 0.03, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
       });
