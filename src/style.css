@@ -75,6 +75,13 @@ body.cinematic #hud, body.cinematic #subtitle { display: none; }
 .loadout .option[aria-pressed="true"] { background: #8e1b35; border-color: #ffb3bf; }
 .loadout .option:hover, .loadout .option:focus-visible { background: #6e1a33; }
 .loadout .option[aria-pressed="true"]:hover { background: #a02140; }
+/* The skin picker: a drop-down styled like the menu buttons, with its own arrow. */
+.loadout .skin-pick { position: relative; display: block; }
+.loadout .skin-pick::after { content: ''; position: absolute; right: 13px; top: 50%; width: 7px; height: 7px; margin-top: -6px; border: solid #ffc2cc; border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
+.loadout .skin-select { width: 100%; padding: 8px 34px 8px 10px; font: inherit; font-size: 15px; color: #eef1ff; background: #8e1b35; border: 1px solid #ffb3bf; border-radius: 8px; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.loadout .skin-select:hover, .loadout .skin-select:focus-visible { background: #a02140; outline: none; }
+.loadout .skin-select option { color: #eef1ff; background: #1a1f3a; }
+.loadout .skin-note { margin: 5px 2px 0; font-size: 12px; opacity: .74; }
 .credit { font-size: 12px; opacity: .6; }
 .title-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 button.secondary { background: rgba(16, 21, 44, .78); border-color: rgba(238, 241, 255, .45); }
@@ -97,6 +104,7 @@ button.secondary:hover, button.secondary:focus-visible { background: #2d3760; }
 #title .loadout > div { display: contents; }
 #title .loadout h3 { grid-column: 1 / -1; margin: 0; }
 #title .loadout .option { margin: 0; }
+#title .loadout .skin-pick, #title .loadout .skin-note { grid-column: 1 / -1; }
 .title-help { position: absolute; left: 4vw; bottom: 6vh; width: min(380px, 40vw); text-align: left; opacity: .8; }
 .title-help h3 { margin-bottom: 8px; font-size: 12px; font-weight: 400; letter-spacing: .3em; text-transform: uppercase; color: #ffc2cc; }
 .title-help .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; justify-content: start; font-size: 13px; }

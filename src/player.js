@@ -1,13 +1,18 @@
 // Player avatar: the imported character models, driven by the game's own rig.
-// "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
+// "Hatsune Miku" by Tigerar1, "PDF Teto" by 雨宮レン and "Doomer Miku and Teto" by
+// 0x00001337. See the README for the full credits.
 const SKINS = {
-  teal: { name: 'Miku', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
-  crimson: { name: 'Teto', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
+  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tails: { top: 1.13 } },
+  teal: { name: 'Doomer Miku', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, tails: { top: 1.13 } },
+  teto: { name: 'Teto', note: 'Her classic look', rig: 'teto', file: 'TETO_GLB', height: 1.5, hair: [4, 8, 9, 10], pieces: { 0: 'White', 1: 'Gray', 2: 'Black' } },
+  crimson: { name: 'Doomer Teto', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
 };
-// Teto as she's found by the wreck: the same model, out cold with her eyes closed.
-SKINS.tetoAsleep = { ...SKINS.crimson, eyesClosed: true };
-// The skins you can play as. Teto isn't one: she's another survivor, found at the crash site.
-const SKIN_ORDER = ['teal'];
+// Teto as she's found by the wreck: out cold, with her eyes closed.
+SKINS.tetoAsleep = { ...SKINS.teto, eyesClosed: true };
+// The skins Miku can wear. Teto's are her own; she's another survivor, found at the crash
+// site. Her Doomer look is kept for unlocking later.
+const SKIN_ORDER = ['miku', 'teal'];
+const TETO_SKIN = 'teto';
 
 // The model's bind pose to game space: feet on the ground, centred, facing +Z.
 const MODEL_SCALE = 0.9375;
@@ -341,6 +346,24 @@ function makeMaterial(file, index) {
 function loadSkinData(skinId) {
   if (skinCache.has(skinId)) return skinCache.get(skinId);
   const def = SKINS[skinId];
+  // The newer models bring skeletons of their own making (characters.js).
+  const data = def.rig ? loadRiggedSkin(def) : loadModelSkin(def);
+  if (def.eyesClosed) closeEyes(data.parts);
+
+  // Which bones actually move vertices, so only those are updated each frame.
+  const usedBones = new Set();
+  for (const { geometry } of data.parts) {
+    const joints = geometry.attributes.skinIndex.array, weights = geometry.attributes.skinWeight;
+    for (let i = 0; i < joints.length; i++) if (weights.array[i] > 0) usedBones.add(joints[i]);
+  }
+  data.usedBones = [...usedBones];
+  if (def.tails) data.tails = buildTailBones(data, def.tails.top);
+  skinCache.set(skinId, data);
+  return data;
+}
+
+// A skin from the original "Doomer Miku and Teto" file, which holds both characters.
+function loadModelSkin(def) {
   if (!modelFiles.has(def.file)) modelFiles.set(def.file, readGlb(window[def.file]));
   const file = modelFiles.get(def.file);
   const { json } = file;
@@ -381,27 +404,15 @@ function loadSkinData(skinId) {
     const m = new THREE.Matrix4().fromArray(inverses, names.indexOf(name) * 16).invert();
     return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(modelToGame);
   };
-  if (def.eyesClosed) closeEyes(parts);
-
-  // Which bones actually move vertices, so only those are updated each frame.
-  const usedBones = new Set();
-  for (const { geometry } of parts) {
-    const joints = geometry.attributes.skinIndex.array, weights = geometry.attributes.skinWeight;
-    for (let i = 0; i < joints.length; i++) if (weights.array[i] > 0) usedBones.add(joints[i]);
-  }
-  data.usedBones = [...usedBones];
-  if (skinId === 'teal') data.tails = buildTailBones(data);
-  skinCache.set(skinId, data);
   return data;
 }
 
-// The hair has no bones of its own. Long tails get generated ones: vertices below the
-// shoulders are weighted along a chain per side, blending into the head higher up.
-function buildTailBones(data) {
+// The hair has no bones of its own. Long tails get generated ones: vertices below `top`
+// (about the shoulders) are weighted along a chain per side, blending into the head higher up.
+function buildTailBones(data, top = 1.13) {
   const hair = data.parts.filter((p) => p.isHair);
   const point = new THREE.Vector3();
   const count = 10;
-  const top = 1.13;
   const toGame = (attr, i) => point.fromBufferAttribute(attr, i).applyMatrix4(modelToGame);
   let low = top;
   for (const { geometry } of hair) {
