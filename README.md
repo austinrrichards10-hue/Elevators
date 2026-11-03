@@ -68,9 +68,6 @@ index.html                 The page that runs the game
 models/
   characters/
     doomer-miku-and-teto.js  Miku, the player, and Teto, found at the wreck
-  clothing/
-    sweater.js               Miku's oversized sweater
-    jeans.js                 Miku's baggy jeans
   animals/
     wolf.js                  The wolf, with its run, walk, creep, idle and sit animations
   vehicles/
@@ -96,7 +93,6 @@ src/
   moderator.js   Moderator menu: flying, no cold, give items, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
   boots.js       Black tactical boots, shaped from the characters' own feet
-  outfit.js      Fits the sweater and jeans to Miku and skins them to her bones
   bow.js         The bow and arrow models, built in code
   world.js       The snow forest: terrain, trees and mountains, built in tiles around the player
   audio.js       All sound effects and music, synthesized in code
@@ -115,7 +111,3 @@ Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doome
 Wolf: ["Wolf with Animations"](https://sketchfab.com/3d-models/wolf-with-animations-f3769a474a714ebbbaca0d97f9b0a5a0) by [3DHaupt](https://sketchfab.com/dennish2010), licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). Textures scaled down and unused ones removed. The file is `models/animals/wolf.js`. Its licence doesn't allow commercial use, so the game can't be sold while it includes this model.
 
 Plane: ["RAF Voyager Aeroplane (Private Plane)"](https://sketchfab.com/3d-models/raf-voyager-aeroplane-private-plane-750e92f1cf7e4fb5b8e78c91a0253648) by [Foggy_123](https://sketchfab.com/foggy_123), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Only its colour textures are kept, scaled down. The file is `models/vehicles/plane.js`.
-
-Miku's sweater: ["Oversized Sweater"](https://sketchfab.com/3d-models/oversized-sweater-1a029999a9aa40db97fd651118a4db16) by [dejan31](https://sketchfab.com/dejan31), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Refitted to her and skinned to her bones; only its colour texture is kept, scaled down. The file is `models/clothing/sweater.js`.
-
-Miku's jeans: ["JNCO Twin Cannon Baggy Jeans"](https://sketchfab.com/3d-models/jnco-twin-cannon-baggy-jeans-024efe9c2b4345409e3b703ab7f565fc) by [Roman Demichev](https://sketchfab.com/romazu3), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Refitted to her and skinned to her bones; the colour texture is kept, scaled down, with its shading baked in. The file is `models/clothing/jeans.js`.

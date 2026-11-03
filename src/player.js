@@ -1,7 +1,7 @@
 // Player avatar: the imported character models, driven by the game's own rig.
 // "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
 const SKINS = {
-  teal: { name: 'Miku', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, outfit: (...args) => dressMiku(...args) },
+  teal: { name: 'Miku', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
   crimson: { name: 'Teto', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
 };
 // Teto as she's found by the wreck: the same model, out cold with her eyes closed.
@@ -381,7 +381,6 @@ function loadSkinData(skinId) {
     const m = new THREE.Matrix4().fromArray(inverses, names.indexOf(name) * 16).invert();
     return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(modelToGame);
   };
-  if (def.outfit) def.outfit(parts, data);
   if (def.eyesClosed) closeEyes(parts);
 
   // Which bones actually move vertices, so only those are updated each frame.
@@ -595,14 +594,10 @@ function createAvatar(scene, skinId) {
   // Bones the skin weights never reach still need a valid matrix.
   bones.forEach((bone) => bone.matrixWorld.identity());
 
-  // Clothes fitted in a pose of their own (outfit.js) share the bones but not the bind pose.
-  const garmentSkeleton = data.garmentInverses
-    ? new THREE.Skeleton(bones, bones.map((_, i) => (data.garmentInverses[i] || new THREE.Matrix4()).clone()))
-    : null;
-  const meshes = data.parts.map(({ geometry, material, garment }) => {
+  const meshes = data.parts.map(({ geometry, material }) => {
     const mesh = new THREE.SkinnedMesh(geometry, material);
     mesh.bindMode = 'detached';
-    mesh.bind(garment ? garmentSkeleton : skeleton, new THREE.Matrix4());
+    mesh.bind(skeleton, new THREE.Matrix4());
     mesh.castShadow = true;
     mesh.frustumCulled = false;
     scene.add(mesh);
@@ -700,7 +695,6 @@ function createAvatar(scene, skinId) {
     scene.remove(rig.root);
     for (const mesh of meshes) scene.remove(mesh);
     skeleton.dispose();
-    if (garmentSkeleton) garmentSkeleton.dispose();
   };
 
   return avatar;
