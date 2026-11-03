@@ -1,0 +1,43 @@
+/* ---------- boss ---------- */
+/* Crimson Curls, the final fight in the balloon basket (src/boss.js). */
+
+/* Her health across the top, in the HUD's own bar style. */
+#boss-bar { position: absolute; top: 22px; left: 50%; width: min(520px, 64vw); transform: translateX(-50%); text-align: center; text-shadow: 0 1px 3px #0a0e22; animation: boss-in .6s ease-out both; }
+@keyframes boss-in { from { opacity: 0; transform: translate(-50%, -8px); } }
+.boss-name { margin-bottom: 5px; font-size: 19px; letter-spacing: .08em; color: #fff0f3; }
+.boss-kicker { margin-right: 10px; font-size: 11px; letter-spacing: .26em; text-transform: uppercase; color: #ffc2cc; opacity: .85; vertical-align: 2px; }
+.bar.boss-health { position: relative; height: 12px; border-color: rgba(255, 179, 191, .45); box-shadow: 0 0 14px rgba(210, 31, 63, .25); }
+.bar.boss-health i { position: absolute; left: 0; top: 0; }
+.boss-lag { background: #ffd6de; opacity: .75; transition: none; }
+.boss-fill { background: linear-gradient(90deg, #7a1230, #d0304f 70%, #ff6f8e); }
+.boss-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(10, 14, 34, .7); }
+#boss-bar.stage-up .bar.boss-health { animation: boss-stage 1s ease-out; }
+@keyframes boss-stage { 0%, 30% { box-shadow: 0 0 22px 4px rgba(255, 90, 120, .9); } }
+
+/* Her lines during the fight, under the bar: loud and pink, popping in. */
+#boss-taunt { position: absolute; top: 76px; left: 50%; max-width: 80vw; transform: translateX(-50%); text-align: center; white-space: nowrap;
+  font-size: clamp(20px, 2.4vw, 30px); font-weight: 700; letter-spacing: .02em; color: #fff4f6;
+  text-shadow: 0 0 2px #6b0018, 0 0 10px #ff2d6f, 0 0 22px #ff2d6f, 0 2px 0 #6b0018; opacity: 0; transition: opacity .3s; }
+#boss-taunt.on { opacity: 1; animation: boss-pop .28s cubic-bezier(.3, 1.9, .5, 1) both; }
+@keyframes boss-pop { from { scale: .5; rotate: -4deg; opacity: 0; } }
+
+/* Teetering on the rim: what to press, and how close she is to safety. */
+#boss-hint { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); padding: 9px 18px 11px; border-radius: 8px; background: rgba(10, 14, 34, .62); text-align: center; animation: boss-shake .12s steps(2) infinite; }
+#boss-hint p { margin-bottom: 7px; font-size: 18px; letter-spacing: .04em; white-space: nowrap; }
+.boss-mash { height: 8px; border: 1px solid rgba(238, 241, 255, .4); border-radius: 3px; background: rgba(10, 14, 34, .65); overflow: hidden; }
+.boss-mash i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #4f7fd6, #9fd0ff); transition: width .1s; }
+@keyframes boss-shake { 0% { translate: -2px 0; } 100% { translate: 2px 0; } }
+
+/* A fade for starting the fight over. */
+#boss-fade { position: fixed; inset: 0; pointer-events: none; background: #05060c; opacity: 0; transition: opacity .55s ease; }
+#boss-fade.on { opacity: 1; }
+
+/* Her voice from far below, after the fall. */
+#cine-caption.crimson.far { bottom: 34vh; font-size: clamp(15px, 1.7vw, 21px); opacity: .85; }
+
+/* The fight has its own goal; the tracker, compass and minimap step aside. */
+body.boss-fight #objective, body.boss-fight #compass, body.boss-fight #minimap { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  #boss-taunt.on, #boss-hint, #boss-bar.stage-up .bar.boss-health { animation: none; }
+}

@@ -50,39 +50,165 @@ function buildPlane() {
   return plane;
 }
 
-// Pooled sprites for smoke and fire, which drift, grow and fade over their lives.
+// Pooled puffs for smoke, fire and steam, which drift, grow and fade over their lives. Each
+// pool is a single draw: one quad instanced per puff, turned to face the camera in the vertex
+// shader the way a sprite is, with every puff's place, size and opacity in per-instance
+// attributes. It shades as a SpriteMaterial would (soft dot texture, colour, the height fog
+// when `fog` is set), so the look is the same as one sprite per puff.
 function buildPuffs(count, color, fog = false) {
   const group = new THREE.Group();
+  const geometry = new THREE.InstancedBufferGeometry();
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+  // xyz: the puff's place in the group; w: its size (0 while it's not alive).
+  const place = new THREE.InstancedBufferAttribute(new Float32Array(count * 4), 4).setUsage(THREE.DynamicDrawUsage);
+  const shade = new THREE.InstancedBufferAttribute(new Float32Array(count), 1).setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('puffPlace', place);
+  geometry.setAttribute('puffAlpha', shade);
+  geometry.instanceCount = count;
+  // The quad alone says nothing of where the puffs are (they rise hundreds of metres), so the
+  // bounds are kept round the live puffs each update, for culling. Their centre is also where
+  // the pool is sorted among the other see-through things: the puffs that show most (the
+  // opaque, the near and the big), so a column she stands in draws over steam beyond it.
+  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1);
+  const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { diffuse: { value: new THREE.Color() }, opacity: { value: 1 } }]);
+  uniforms.diffuse.value.set(color);
+  uniforms.map = { value: TEX.softDot };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    fog,
+    vertexShader: `
+      attribute vec4 puffPlace;
+      attribute float puffAlpha;
+      varying vec2 vPuffUv;
+      varying float vPuffAlpha;
+      #include <common>
+      #include <fog_pars_vertex>
+      #include <logdepthbuf_pars_vertex>
+      #include <clipping_planes_pars_vertex>
+      void main() {
+        vPuffUv = uv;
+        vPuffAlpha = puffAlpha;
+        vec4 mvPosition = modelViewMatrix * vec4(puffPlace.xyz, 1.0);
+        vec2 scale = puffPlace.w * vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz));
+        mvPosition.xy += position.xy * scale;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <logdepthbuf_vertex>
+        #include <clipping_planes_vertex>
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `
+      uniform vec3 diffuse;
+      uniform float opacity;
+      uniform sampler2D map;
+      varying vec2 vPuffUv;
+      varying float vPuffAlpha;
+      #include <common>
+      #include <fog_pars_fragment>
+      #include <logdepthbuf_pars_fragment>
+      #include <clipping_planes_pars_fragment>
+      void main() {
+        #include <clipping_planes_fragment>
+        vec4 diffuseColor = vec4(diffuse, opacity * vPuffAlpha);
+        #include <logdepthbuf_fragment>
+        diffuseColor *= texture2D(map, vPuffUv);
+        vec3 outgoingLight = diffuseColor.rgb;
+        #include <opaque_fragment>
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.visible = false;
+  mesh.raycast = () => {};
+  group.add(mesh);
+  const P = place.array, A = shade.array, bounds = geometry.boundingSphere;
+  const eye = new THREE.Vector3(), toLocal = new THREE.Matrix4();
+  let x0 = 0, y0 = 0, z0 = 0, x1 = 0, y1 = 0, z1 = 0, big = 0;
+  const reaim = () => {
+    eye.copy(camera.position).applyMatrix4(toLocal.copy(mesh.matrixWorld).invert());
+    let w = 0, kx = 0, ky = 0, kz = 0;
+    for (let i = 0; i < count; i++) {
+      const p = puffs[i];
+      if (p.life <= 0 || A[i] <= 0) continue;
+      const near = p.scale / Math.max(p.pos.distanceTo(eye), p.scale * 0.5);
+      const k = A[i] * near * near;
+      w += k; kx += k * p.pos.x; ky += k * p.pos.y; kz += k * p.pos.z;
+    }
+    const c = bounds.center;
+    if (w > 0) c.set(kx / w, ky / w, kz / w);
+    else c.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    bounds.radius = Math.hypot(Math.max(c.x - x0, x1 - c.x), Math.max(c.y - y0, y1 - c.y), Math.max(c.z - z0, z1 - c.z)) + big * 0.71;
+  };
   const puffs = [];
-  for (let i = 0; i < count; i++) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color, transparent: true, opacity: 0, depthWrite: false, fog }));
-    sprite.visible = false;
-    group.add(sprite);
-    puffs.push({ sprite, life: 0, max: 1, vel: new THREE.Vector3(), size: 1, grow: 1, alpha: 1 });
-  }
+  for (let i = 0; i < count; i++) puffs.push({ pos: new THREE.Vector3(), scale: 0, life: 0, max: 1, vel: new THREE.Vector3(), size: 1, grow: 1, alpha: 1 });
   let next = 0;
+  const changed = () => { place.needsUpdate = true; shade.needsUpdate = true; };
   return {
     group,
     emit(at, vel, { life = 2, size = 1, grow = 2, alpha = 0.6 } = {}) {
-      const p = puffs[next];
+      const i = next;
+      const p = puffs[i];
       next = (next + 1) % count;
-      p.sprite.position.copy(at);
+      p.pos.copy(at);
       p.vel.copy(vel);
-      Object.assign(p, { life, max: life, size, grow, alpha });
-      p.sprite.visible = true;
+      p.life = p.max = life;
+      p.size = p.scale = size;
+      p.grow = grow;
+      p.alpha = alpha;
+      // Born transparent; its first update fades it in.
+      P[i * 4] = at.x; P[i * 4 + 1] = at.y; P[i * 4 + 2] = at.z; P[i * 4 + 3] = size;
+      A[i] = 0;
+      changed();
+      mesh.visible = true;
     },
     update(dt) {
-      for (const p of puffs) {
+      let live = 0, any = false;
+      big = 0;
+      x0 = y0 = z0 = Infinity;
+      x1 = y1 = z1 = -Infinity;
+      for (let i = 0; i < count; i++) {
+        const p = puffs[i];
         if (p.life <= 0) continue;
+        any = true;
         p.life -= dt;
-        if (p.life <= 0) { p.sprite.visible = false; continue; }
+        if (p.life <= 0) { P[i * 4 + 3] = 0; A[i] = 0; continue; }
         const age = 1 - p.life / p.max;
-        p.sprite.position.addScaledVector(p.vel, dt);
-        p.sprite.scale.setScalar(p.size * (1 + age * p.grow));
-        p.sprite.material.opacity = p.alpha * Math.min(1, age * 6) * (1 - age * age);
+        p.pos.addScaledVector(p.vel, dt);
+        p.scale = p.size * (1 + age * p.grow);
+        P[i * 4] = p.pos.x; P[i * 4 + 1] = p.pos.y; P[i * 4 + 2] = p.pos.z; P[i * 4 + 3] = p.scale;
+        A[i] = p.alpha * Math.min(1, age * 6) * (1 - age * age);
+        live++;
+        const { x, y, z } = p.pos;
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (z < z0) z0 = z; if (z > z1) z1 = z;
+        if (p.scale > big) big = p.scale;
       }
+      if (any) changed();
+      if (live) reaim();
+      mesh.visible = live > 0;
     },
-    clear() { for (const p of puffs) { p.life = 0; p.sprite.visible = false; } },
+    // Scales each live puff's opacity this frame by fade(position in the group, size).
+    fade(fn) {
+      for (let i = 0; i < count; i++) {
+        const p = puffs[i];
+        if (p.life > 0) A[i] *= fn(p.pos, p.scale);
+      }
+      shade.needsUpdate = true;
+      if (mesh.visible) reaim();
+    },
+    clear() {
+      for (const p of puffs) p.life = 0;
+      P.fill(0);
+      A.fill(0);
+      changed();
+      mesh.visible = false;
+    },
   };
 }
 
@@ -93,6 +219,8 @@ const wreck = { group: null, x: 0, z: 0, smoke: null, fire: null, burning: false
 // broken plane, quiet until the cutscene (or a skip) sets it burning.
 function placeWreck() {
   if (wreck.group) scene.remove(wreck.group);
+  for (const geo of wreck.ownGeometry || []) geo.dispose();
+  if (wreck.scorchMaterial) wreck.scorchMaterial.dispose();
   if (wreck.clearing) CLEARINGS.splice(CLEARINGS.indexOf(wreck.clearing), 1);
   for (const c of wreck.colliders) LANDMARK_COLLIDERS.splice(LANDMARK_COLLIDERS.indexOf(c), 1);
   let x = 0, z = 0;
@@ -100,7 +228,8 @@ function placeWreck() {
     const a = Math.random() * Math.PI * 2, d = 260 + Math.random() * 340;
     x = LANDMARKS.start.x + Math.cos(a) * d;
     z = LANDMARKS.start.z + Math.sin(a) * d;
-    if (Math.hypot(x, z) < WORLD_RADIUS - 90 && Math.hypot(x - LANDMARKS.altar.x, z - LANDMARKS.altar.z) > 60) break;
+    if (Math.hypot(x, z) < WORLD_RADIUS - 90 && SITES.every((s) => Math.hypot(x - s.x, z - s.z) > s.clear + 45)
+      && POINTS_OF_INTEREST.every((p) => Math.hypot(x - p.x, z - p.z) > 40) && SITE_SHARDS.every(([sx, sz]) => Math.hypot(x - sx, z - sz) > 30)) break;
   }
   wreck.x = x;
   wreck.z = z;
@@ -137,8 +266,11 @@ function placeWreck() {
   for (let i = 0; i < sp.count; i++) sp.setY(i, groundHeight(x + sp.getX(i), z + sp.getZ(i)) - group.position.y + 0.06);
   const scorch = new THREE.Mesh(scorchGeo, new THREE.MeshBasicMaterial({ color: 0x1b1714, transparent: true, opacity: 0.7, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   group.add(scorch);
+  wreck.ownGeometry = [scorchGeo];
+  wreck.scorchMaterial = scorch.material;
   for (let i = 0; i < 14; i++) {
     const piece = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random(), 0.12, 0.4 + Math.random()), Math.random() < 0.5 ? planeMaterial(8) : getBurntMaterial());
+    wreck.ownGeometry.push(piece.geometry);
     const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 12;
     piece.position.set(Math.cos(a) * d, groundHeight(x + Math.cos(a) * d, z + Math.sin(a) * d) - group.position.y + 0.08, Math.sin(a) * d);
     piece.rotation.set(Math.random(), Math.random() * 3, Math.random());
@@ -213,7 +345,7 @@ function placeSurvivor() {
 }
 
 function updateSurvivor(dt) {
-  if (!survivor.avatar) return;
+  if (!survivor.avatar || !survivor.avatar.root.visible) return;
   // Her hair only needs to settle when someone's near enough to see it.
   if (Math.hypot(survivor.x - player.pos.x, survivor.z - player.pos.z) < 80) survivor.avatar.simulate(dt);
 }

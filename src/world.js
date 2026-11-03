@@ -591,6 +591,23 @@ function createTiles(scene) {
       return best;
     },
 
+    // Every standing tree whose trunk is within `reach` of (x, z), measured to its bark.
+    treesNear(x, z, reach) {
+      const found = [];
+      const span = Math.ceil(reach / TILE);
+      const tx = Math.floor(x / TILE), tz = Math.floor(z / TILE);
+      for (let i = -span; i <= span; i++) {
+        for (let j = -span; j <= span; j++) {
+          const tile = tiles.get(`${tx + i},${tz + j}`);
+          if (!tile) continue;
+          for (const tree of tile.trees) {
+            if (!tree.felled && Math.hypot(tree.placement.x - x, tree.placement.z - z) - tree.r < reach) found.push(tree);
+          }
+        }
+      }
+      return found;
+    },
+
     // Takes a tree out of the forest for good this run: hides its instance, drops its
     // collider and returns what's needed to draw it on its own as it falls.
     fellTree(tree) {
@@ -832,6 +849,7 @@ function buildWorld(renderer, scene) {
       tiles.stream(focus, budget, radius);
     },
     findTree: tiles.findTree,
+    treesNear: tiles.treesNear,
     fellTree: tiles.fellTree,
     // A fresh forest for a new run: felled trees grow back and the clearings are rebuilt.
     resetForest() {

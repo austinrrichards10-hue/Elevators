@@ -1,0 +1,123 @@
+/* ---------- story ---------- */
+/* The objective tracker, the site title cards, papers held up to read, and the journal. */
+
+/* ---------- Objective ---------- */
+#objective { position: absolute; top: 22px; left: 26px; max-width: min(360px, 44vw); padding: 8px 18px 9px 14px; border-left: 2px solid #ffb3bf; background: linear-gradient(90deg, rgba(10, 14, 34, .74), rgba(10, 14, 34, .3) 70%, rgba(10, 14, 34, 0)); text-shadow: 0 1px 3px #0a0e22; transition: opacity .4s; }
+#objective.empty { opacity: 0; }
+.objective-kicker { display: block; margin-bottom: 2px; font-size: 11px; letter-spacing: .26em; text-transform: uppercase; color: #ffc2cc; opacity: .85; }
+.objective-text { font-size: 16px; line-height: 1.35; }
+.objective-dist { display: inline-block; margin-left: 9px; font-size: 13px; font-variant-numeric: tabular-nums; color: #f3d9b0; opacity: .85; white-space: nowrap; }
+.objective-dist:empty { display: none; }
+#objective.fresh { animation: objective-fresh 1.6s ease-out; }
+@keyframes objective-fresh {
+  0% { border-left-color: #fff; background-color: rgba(210, 31, 63, .45); transform: translateX(6px); }
+  100% { background-color: transparent; transform: none; }
+}
+
+/* ---------- Site banner ---------- */
+#banner { position: fixed; top: 23%; left: 50%; z-index: 3; width: min(900px, 92vw); padding: 26px 0 30px; transform: translateX(-50%); text-align: center; background: radial-gradient(ellipse 50% 50% at center, rgba(10, 14, 34, .5), rgba(10, 14, 34, .22) 55%, transparent 100%); pointer-events: none; opacity: 0; transition: opacity 1.1s ease-in; }
+#banner.on { opacity: 1; transition: opacity .5s ease-out; }
+body.cinematic #banner { display: none; }
+.banner-kicker { display: inline-flex; align-items: center; gap: 14px; font-size: 13px; letter-spacing: .42em; text-transform: uppercase; color: #ffc2cc; text-shadow: 0 1px 3px #0a0e22, 0 0 12px rgba(10, 14, 34, .9); }
+.banner-kicker::before, .banner-kicker::after { content: ""; width: 46px; height: 1px; background: linear-gradient(90deg, transparent, #ffc2cc); }
+.banner-kicker::after { background: linear-gradient(270deg, transparent, #ffc2cc); }
+.banner-kicker:empty { display: none; }
+#banner .banner-title { margin: 6px 0 4px; font-size: clamp(40px, 6.4vw, 76px); font-weight: 400; line-height: 1.05; letter-spacing: .05em; }
+#banner.on .banner-title { animation: banner-title 4.8s ease-out both; }
+@keyframes banner-title { from { letter-spacing: .22em; filter: blur(6px); } 22% { filter: blur(0); } to { letter-spacing: .05em; } }
+.banner-sub { font-size: clamp(15px, 1.7vw, 19px); font-style: italic; opacity: .92; text-shadow: 0 1px 3px #0a0e22, 0 0 12px rgba(10, 14, 34, .9); }
+
+/* ---------- The reader ---------- */
+#reader { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 16px; cursor: pointer; background: radial-gradient(ellipse at center, rgba(8, 10, 26, .5), rgba(4, 6, 16, .86)); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+#reader .paper { position: relative; width: min(660px, 94vw); max-height: 90vh; overflow-y: auto; padding: 36px 48px 26px; border-radius: 3px; color: #2a211c; background-color: #ece2cb; background-image: radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, .45), transparent 60%), radial-gradient(ellipse at center, transparent 55%, rgba(120, 84, 48, .22) 100%); box-shadow: 0 30px 90px rgba(0, 0, 0, .65), 0 2px 0 rgba(255, 255, 255, .25) inset; transform: rotate(-.5deg); animation: paper-in .45s cubic-bezier(.2, .8, .3, 1) both; scrollbar-width: thin; scrollbar-color: rgba(90, 60, 40, .4) transparent; }
+@keyframes paper-in { from { opacity: 0; transform: translateY(40px) rotate(2deg) scale(.96); } }
+.reader-meta { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #7a5a48; }
+.reader-title { margin: 6px 0 16px; font-size: clamp(24px, 3vw, 31px); font-weight: 400; line-height: 1.15; color: #3a1d1c; }
+.reader-body p { margin-bottom: .75em; font-size: 16.5px; line-height: 1.6; text-wrap: pretty; }
+.reader-sign { text-align: right; font-style: italic; }
+.reader-reveal { margin-top: 16px; padding-top: 10px; border-top: 1px dashed rgba(90, 60, 40, .35); font-size: 14px !important; letter-spacing: .03em; color: #8e1b35; }
+.reader-reveal::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 9px 1px 2px; background: #c8304d; transform: rotate(45deg); }
+.reader-hint { margin-top: 18px; text-align: center; font-size: 12px; letter-spacing: .08em; opacity: .5; }
+
+/* Varga's journal: squared notebook paper in blue-black ink, with a red ribbon. */
+#reader .paper.varga { color: #1f2a44; background-color: #f0e7d1; background-image: repeating-linear-gradient(0deg, rgba(70, 100, 150, .11) 0 1px, transparent 1px 22px), repeating-linear-gradient(90deg, rgba(70, 100, 150, .11) 0 1px, transparent 1px 22px), radial-gradient(ellipse at center, transparent 55%, rgba(120, 84, 48, .2) 100%); }
+#reader .paper.varga::before { content: ""; position: absolute; top: 0; right: 44px; width: 20px; height: 84px; background: linear-gradient(90deg, #8e1b35, #b52445 55%, #8e1b35); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%); box-shadow: 0 2px 4px rgba(0, 0, 0, .3); }
+.paper.varga .reader-meta { padding-right: 40px; color: #6a5a6e; }
+.paper.varga .reader-title { font-style: italic; color: #1a2440; }
+
+/* Notes and letters: ruled paper. */
+#reader .paper.note { background-image: repeating-linear-gradient(180deg, transparent 0 25.5px, rgba(70, 90, 140, .15) 25.5px 26.5px), radial-gradient(ellipse at center, transparent 55%, rgba(120, 84, 48, .22) 100%); }
+
+/* Diaries: pink-tinged pages with a red margin. */
+#reader .paper.diary { color: #36203f; background-color: #f4e2de; background-image: linear-gradient(90deg, transparent 30px, rgba(200, 60, 80, .35) 30px 31px, transparent 31px), repeating-linear-gradient(180deg, transparent 0 25.5px, rgba(120, 90, 150, .14) 25.5px 26.5px); }
+.paper.diary .reader-title { font-style: italic; }
+
+/* The radio log: fanfold teletype paper with feed holes down both edges. */
+#reader .paper.radio { padding-left: 54px; padding-right: 54px; color: #232a22; background-color: #e5ead6; background-image: radial-gradient(circle at 18px 12px, rgba(30, 40, 30, .28) 3.5px, transparent 4.5px), radial-gradient(circle at calc(100% - 18px) 12px, rgba(30, 40, 30, .28) 3.5px, transparent 4.5px), repeating-linear-gradient(180deg, rgba(120, 160, 110, .14) 0 26px, transparent 26px 52px); background-size: 100% 24px, 100% 24px, auto; }
+.paper.radio .reader-body p { font: 14px/1.6 "Courier New", ui-monospace, Consolas, monospace; letter-spacing: .02em; }
+.paper.radio .reader-title { font-family: "Courier New", ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; font-size: 22px; }
+
+/* Signs: words painted on weathered boards. */
+#reader .paper.sign { color: #f1e6cf; background-color: #563a26; background-image: repeating-linear-gradient(180deg, transparent 0 62px, rgba(20, 10, 4, .55) 62px 64px), repeating-linear-gradient(90deg, rgba(255, 220, 170, .035) 0 3px, transparent 3px 11px), radial-gradient(ellipse at center, transparent 50%, rgba(10, 5, 2, .5) 100%); box-shadow: 0 30px 90px rgba(0, 0, 0, .7), 0 0 0 4px #2e1d12 inset; transform: rotate(.4deg); }
+.paper.sign .reader-meta { color: #d8b98f; }
+.paper.sign .reader-title { color: #ffd9a8; }
+.paper.sign .reader-body p:not(.reader-reveal) { font-weight: 700; text-transform: uppercase; letter-spacing: .07em; font-size: 15.5px; text-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
+.paper.sign .reader-hint { color: #f1e6cf; }
+.paper.sign .reader-reveal { color: #ffb3bf; border-top-color: rgba(255, 220, 170, .3); }
+
+/* The miners' tablet is carved stone, not painted wood. */
+#reader .paper.note-shrine-tablet { color: #1d2126; background-color: #8d939a; background-image: radial-gradient(ellipse at 30% 25%, rgba(255, 255, 255, .25), transparent 60%), radial-gradient(ellipse at center, transparent 50%, rgba(20, 24, 30, .45) 100%); box-shadow: 0 30px 90px rgba(0, 0, 0, .7), 0 0 0 4px #5d636a inset; }
+.paper.note-shrine-tablet .reader-meta { color: #2f353c; }
+.paper.note-shrine-tablet .reader-title { color: #15191d; }
+.paper.note-shrine-tablet .reader-body p { color: #1d2126; text-shadow: 0 1px 0 rgba(255, 255, 255, .35); }
+.paper.note-shrine-tablet .reader-hint { color: #1d2126; }
+.paper.note-shrine-tablet .reader-body .reader-reveal { color: #5a0f20; border-top-color: rgba(20, 24, 30, .35); text-shadow: none; }
+
+/* ---------- Journal ---------- */
+/* Drawn on its own page of the field book, so it reads the same whatever the book looks like. */
+#book-journal .journal { --ink: #2a211c; --faint: #7a5a48; --rule: rgba(90, 60, 40, .22); --accent: #8e1b35; height: 100%; max-height: 100%; overflow-y: auto; padding: 24px 30px 30px; border-radius: inherit; color: var(--ink); text-align: left; background-color: #ece2cb; background-image: radial-gradient(ellipse at 30% 10%, rgba(255, 255, 255, .4), transparent 55%), radial-gradient(ellipse at center, transparent 60%, rgba(120, 84, 48, .2) 100%); scrollbar-width: thin; scrollbar-color: rgba(90, 60, 40, .4) transparent; }
+.journal-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 18px; padding-bottom: 10px; margin-bottom: 16px; border-bottom: 2px solid var(--rule); }
+.journal-head h3 { font-size: 28px; font-weight: 400; font-style: italic; color: #3a1d1c; }
+.journal-head p { font-size: 14px; letter-spacing: .04em; color: var(--faint); }
+.journal-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 22px 32px; }
+@media (max-width: 760px) { .journal-grid { grid-template-columns: 1fr; } }
+.journal section { margin-bottom: 20px; }
+.journal h4 { display: flex; justify-content: space-between; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); font-size: 12px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+.journal h4 span { letter-spacing: .06em; font-variant-numeric: tabular-nums; color: var(--faint); }
+.journal ol, .journal ul { padding: 0; list-style: none; }
+.journal li b { display: block; font-weight: 400; font-size: 15.5px; line-height: 1.25; }
+.journal li small { display: block; font-size: 12.5px; line-height: 1.3; color: var(--faint); }
+
+.journal-entry { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 10px; width: 100%; padding: 5px 8px; border-radius: 6px; text-align: left; }
+#book-journal button.journal-entry { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 10px; width: 100%; padding: 5px 8px; border-radius: 6px; color: var(--ink); cursor: pointer; transition: background .15s; }
+#book-journal button.journal-entry:hover, #book-journal button.journal-entry:focus-visible { background: rgba(142, 27, 53, .1); }
+#book-journal button.journal-entry:focus-visible { outline: 1px solid var(--accent); }
+.journal-entry.unread { opacity: .55; }
+.journal-entry.unread b { font-style: italic; }
+.journal-num { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--accent); border-radius: 50%; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--accent); }
+.journal-entry.read .journal-num { background: var(--accent); color: #fff0f0; }
+.journal-entry.unread .journal-num { border-style: dashed; border-color: var(--faint); color: var(--faint); }
+.journal-pages .journal-entry.read b { color: #1f2a44; font-style: italic; }
+/* Other papers get a small swatch in their own paper's colour. */
+.journal-kind { justify-self: center; width: 16px; height: 20px; border: 1px solid rgba(60, 40, 30, .35); border-radius: 2px; background: #f4f0e6; box-shadow: 1px 1px 0 rgba(60, 40, 30, .15); }
+.paper-diary .journal-kind { background: #f4d8d4; }
+.paper-radio .journal-kind { background: #dfe8cf; }
+.paper-sign .journal-kind { background: #6b4a30; }
+.journal-empty { padding: 6px 8px; font-size: 14px; font-style: italic; color: var(--faint); }
+
+.journal-sites li, .journal-parts li { display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 10px; padding: 4px 8px; }
+.journal-mark { display: grid; place-items: center; justify-self: center; width: 13px; height: 13px; border: 1.5px solid var(--faint); font-size: 10px; font-style: normal; line-height: 1; color: var(--faint); }
+.journal-sites .journal-mark { transform: rotate(45deg); }
+.journal-sites .known .journal-mark { border-color: var(--accent); color: var(--accent); transform: none; border-radius: 50%; width: 15px; height: 15px; font-weight: 700; }
+.journal-sites .found .journal-mark { border-color: var(--accent); background: var(--accent); }
+.journal-sites .unknown { opacity: .5; }
+.journal-sites .breath { margin-top: 4px; padding-top: 7px; border-top: 1px dashed var(--rule); }
+.journal-parts .journal-mark { border-radius: 2px; }
+.journal-parts .found .journal-mark { position: relative; border-color: var(--accent); background: var(--accent); }
+.journal-parts .found .journal-mark::after { content: ""; width: 3px; height: 7px; margin-top: -2px; border: solid #fff0f0; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.journal-parts .unknown { opacity: .55; }
+
+.journal-tallies dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+.journal-tallies dl div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; border-bottom: 1px dotted var(--rule); }
+.journal-tallies dt { font-size: 13px; color: var(--faint); }
+.journal-tallies dd { margin: 0; font-size: 15px; font-variant-numeric: tabular-nums; }

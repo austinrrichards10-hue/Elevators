@@ -1,0 +1,64 @@
+/* ---------- Binoculars ---------- */
+/* Two round lenses cut out of the dark, a faint reticle, and a reading along the bottom. */
+#binoculars { position: absolute; inset: 0; pointer-events: none; animation: bino-in .22s ease-out both; }
+@keyframes bino-in { from { opacity: 0; transform: scale(1.06); } }
+.bino-lens { position: absolute; inset: 0; background: #05070d;
+  --r: min(36vh, 26vw); --dx: min(15vh, 11vw);
+  -webkit-mask: radial-gradient(circle var(--r) at calc(50% - var(--dx)) 50%, transparent 97%, #000 100%), radial-gradient(circle var(--r) at calc(50% + var(--dx)) 50%, transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask: radial-gradient(circle var(--r) at calc(50% - var(--dx)) 50%, transparent 97%, #000 100%), radial-gradient(circle var(--r) at calc(50% + var(--dx)) 50%, transparent 97%, #000 100%);
+  mask-composite: intersect; }
+/* Darkening towards the rims, and a cold tint in the glass. */
+#binoculars::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 52vh 40vh at 50% 50%, rgba(160, 200, 230, .05), rgba(5, 7, 13, .55) 100%); }
+.bino-reticle { position: absolute; top: 50%; left: 50%; width: 200px; height: 1px; transform: translate(-50%, -50%); background: linear-gradient(90deg, transparent, rgba(14, 22, 34, .7) 20%, transparent 44%, transparent 56%, rgba(14, 22, 34, .7) 80%, transparent); }
+.bino-reticle i { position: absolute; left: 50%; width: 1px; height: 60px; background: linear-gradient(transparent, rgba(14, 22, 34, .7)); }
+.bino-reticle i:first-child { bottom: 10px; }
+.bino-reticle i:last-child { top: 10px; transform: rotate(180deg); }
+.bino-read { position: absolute; left: 50%; top: calc(50% - min(36vh, 26vw) + 26px); transform: translateX(-50%); display: flex; gap: 18px; white-space: nowrap; font: 13px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .16em; text-transform: uppercase; color: rgba(225, 238, 255, .9); }
+.bino-read span { padding: 3px 10px; border-radius: 4px; background: rgba(5, 8, 16, .62); }
+.bino-read:empty { display: none; }
+.bino-spot { color: #ffe3b0; }
+.bino-spot.focusing { color: rgba(225, 238, 255, .55); animation: bino-blink 1s ease-in-out infinite; }
+@keyframes bino-blink { 50% { opacity: .35; } }
+body.binoculars-up #crosshair, body.binoculars-up #draw-ring { display: none; }
+/* Messages still show over the dark around the lenses. */
+body.binoculars-up #toast, body.binoculars-up #prompt, body.binoculars-up #note { z-index: 1; }
+
+/* ---------- The pack page ---------- */
+/* A page of the field book: cards on warm paper, with the balloon's parts and the shards. */
+#book-pack { overflow-y: auto; }
+.pack { min-height: 100%; padding: 22px 26px 30px; color: #2b2418; text-align: left; background: radial-gradient(ellipse at 20% 0%, rgba(255, 250, 235, .9), transparent 60%), linear-gradient(180deg, #ece2c9, #e1d4b4); border-radius: 6px; box-shadow: inset 0 0 40px rgba(110, 80, 40, .22); font-family: "Palatino Linotype", Palatino, Georgia, serif; }
+.pack h3, .pack h4 { color: #2b2418; text-shadow: none; font-weight: 400; }
+.pack-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(80, 55, 25, .3); }
+.pack-kicker { font-size: 11px; letter-spacing: .32em; text-transform: uppercase; color: #8e1b35; }
+.pack-head h3 { font-size: 26px; }
+.pack-vitals { display: flex; gap: 16px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #5b4a32; }
+.pack-vitals b { font-size: 18px; font-weight: 400; color: #2b2418; letter-spacing: 0; }
+.pack-worn { margin: 10px 0 4px; font-size: 14px; font-style: italic; color: #5b4a32; }
+.pack-worn span { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-style: normal; font-size: 12px; color: #fff4e6; background: #8e5a2a; }
+.pack-section { margin-top: 18px; }
+.pack-title { margin-bottom: 8px; font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #6b5636 !important; }
+.pack-title b { margin-left: 6px; font-weight: 400; letter-spacing: .06em; color: #8e1b35; }
+.pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.pack-card { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid rgba(80, 55, 25, .2); border-radius: 8px; background: rgba(255, 252, 242, .55); }
+.pack-card img, .pack-part img { width: 58px; height: 58px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(60, 40, 20, .35)); }
+.pack img.missing, .pack img[data-icon] { visibility: hidden; }
+.pack-card h4 { font-size: 16px; line-height: 1.2; }
+.pack-card h4 b { font-size: 14px; font-weight: 400; color: #8e1b35; }
+.pack-card p { margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: #4a3d2a; }
+.pack-card .pack-effect { font-size: 12px; font-style: italic; color: #7a4a1c; }
+.pack-card.kind-gear { background: rgba(240, 230, 205, .6); }
+.pack-card.kind-raw .pack-effect { color: #8e1b35; }
+.pack button { padding: 5px 13px; font-size: 14px; color: #fff4e6; background: #8e1b35; border: 1px solid #5e1022; border-radius: 6px; }
+.pack button:hover, .pack button:focus-visible { background: #b52445; }
+.pack-empty { margin-top: 16px; font-style: italic; color: #6b5636; }
+.pack-parts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.pack-part { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 104px; padding: 8px 6px; border: 1px dashed rgba(80, 55, 25, .35); border-radius: 8px; text-align: center; }
+.pack-part.got { border-style: solid; border-color: rgba(142, 27, 53, .45); background: rgba(255, 245, 235, .6); }
+.pack-part i { display: grid; place-items: center; width: 58px; height: 58px; font: italic 30px Georgia, serif; color: rgba(80, 55, 25, .35); }
+.pack-part b { font-size: 12.5px; font-weight: 400; line-height: 1.2; }
+.pack-part small { font-size: 11px; font-style: italic; color: #7a6646; }
+.pack-shards { display: flex; flex-wrap: wrap; gap: 9px; padding: 4px 2px; }
+.pack-shards i { width: 13px; height: 13px; transform: rotate(45deg); border: 1px solid rgba(40, 70, 110, .45); background: rgba(255, 255, 255, .3); }
+.pack-shards i.got { border-color: #2d6fb8; background: linear-gradient(135deg, #d6f0ff, #4aa3ff); box-shadow: 0 0 8px rgba(74, 163, 255, .8); }
+@media (max-width: 760px) { .pack-parts { grid-template-columns: repeat(3, minmax(0, 1fr)); } .pack { padding: 16px; } }

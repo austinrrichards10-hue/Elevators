@@ -1,6 +1,7 @@
 // Wolves that roam the forest around the player. They wander in small packs, rest, sit and
 // howl, watch her warily when she comes close and bolt if she gets too near. Rarely, one
-// charges and bites; an arrow or an axe blow sends it running.
+// charges and bites. Now and then one runs down a hare. Arrows and the axe wound them and
+// send them running; two or three good hits bring one down, and she can skin it.
 // "Wolf with Animations" by 3DHaupt (CC BY-NC-SA 4.0); see the README.
 
 /* ---------- Loading an animated model ---------- */
@@ -80,6 +81,13 @@ const WOLF = {
   bite: 18, // health lost to a bite
   attackChance: 0.12, // how often a wolf that starts watching her charges instead
   attackCooldown: [70, 150], // seconds before any wolf may attack again
+  health: 100,
+  arrowDamage: [26, 55], // from the lightest draw that fires to a full one
+  headshot: 1.6, // an arrow to the head does this much more
+  axeDamage: 40,
+  cornered: 0.3, // chance a badly hurt wolf turns on her instead of running
+  remains: 90, // seconds a dead wolf lies in the snow before it's cleared away
+  hunt: 0.3, // chance a wandering wolf that notices a hare goes after it
 };
 
 let wolfFile = null;
@@ -122,6 +130,10 @@ function buildWolfModel() {
 // The model faces -Z; this turns its nose to +Z, the game's forward.
 const WOLF_TURN = Math.PI;
 
+// Where a wolf can be struck, in its own frame (+Z forward, metres): the body is a capsule
+// from rump to shoulders, the head a ball out in front.
+const WOLF_BODY = { rump: -0.45, shoulders: 0.45, y: 0.5, r: 0.27, head: { z: 0.72, y: 0.7, r: 0.22 } };
+
 class Wolf {
   constructor(x, z) {
     const model = buildWolfModel();
@@ -138,6 +150,11 @@ class Wolf {
     this.timer = 1 + Math.random() * 3;
     this.target = new THREE.Vector3();
     this.anim = null;
+    this.health = WOLF.health;
+    this.dead = null; // { t, roll, slide, landed, skinned, bury } once it's been killed
+    this.prey = null; // the hare it's running down
+    this.huntCheck = 4 + Math.random() * 8;
+    this.arrows = []; // arrows it's carrying
     this.play('idle');
     this.mixer.update(Math.random() * 3);
     scene.add(this.holder);
@@ -158,6 +175,7 @@ class Wolf {
       const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * 25;
       this.target.set(this.pos.x + Math.cos(a) * d, 0, this.pos.z + Math.sin(a) * d);
     }
+    if (state !== 'hunt') this.prey = null;
   }
 
   update(dt) {
@@ -177,6 +195,11 @@ class Wolf {
     } else if (dist < WOLF.watch && (this.state === 'wander' || this.state === 'idle' || this.state === 'sit')) {
       if (wolfAttack.cooldown <= 0 && !wolves.some((w) => w.state === 'attack') && Math.random() < WOLF.attackChance) this.charge();
       else this.setState('watch', 3 + Math.random() * 4);
+    } else if (this.state === 'wander' && (this.huntCheck -= dt) <= 0) {
+      // A hare in the open catches its eye now and then, and it gives chase.
+      this.huntCheck = 6 + Math.random() * 8;
+      const prey = Math.random() < WOLF.hunt ? rabbitPrey(this.pos, 30) : null;
+      if (prey) { this.setState('hunt', 6 + Math.random() * 3); this.prey = prey; }
     }
     if (this.timer <= 0 && this.state !== 'attack') {
       if (this.state === 'flee' || this.state === 'watch') this.setState('wander', 8 + Math.random() * 6);
@@ -185,14 +208,34 @@ class Wolf {
     }
 
     let want = this.heading, speed = 0, anim = 'idle';
+    // Badly hurt, it can't run as fast.
+    const lame = this.health < WOLF.health * 0.5 ? 0.85 : 1;
     if (this.state === 'flee') {
       want = toPlayer + Math.PI;
-      speed = WOLF.run;
+      speed = WOLF.run * lame;
       anim = 'run';
     } else if (this.state === 'attack') {
       want = toPlayer;
-      speed = WOLF.charge;
+      speed = WOLF.charge * lame;
       anim = 'run';
+    } else if (this.state === 'hunt') {
+      const prey = this.prey;
+      if (!prey || !rabbitCatchable(prey)) {
+        this.setState('wander', 6 + Math.random() * 6);
+      } else {
+        const px = prey.pos.x - this.pos.x, pz = prey.pos.z - this.pos.z;
+        want = Math.atan2(px, pz);
+        // A short all-out sprint: faster than its usual run, and about as fast as a hare.
+        speed = WOLF.run * 1.3;
+        anim = 'run';
+        if (Math.hypot(px, pz) < 1.2) {
+          rabbitCaught(prey, this);
+          this.setState('feed', 7 + Math.random() * 6);
+        }
+      }
+    } else if (this.state === 'feed') {
+      // Crouched over what it caught.
+      anim = 'creep';
     } else if (this.state === 'watch') {
       want = toPlayer;
       // Edge away if she's a little close, otherwise hold still and stare.
@@ -205,8 +248,9 @@ class Wolf {
     } else if (this.state === 'sit') {
       anim = 'sit';
     }
+    const fast = this.state === 'flee' || this.state === 'attack' || this.state === 'hunt';
     const turn = Math.atan2(Math.sin(want - this.heading), Math.cos(want - this.heading));
-    this.heading += turn * (1 - Math.exp(-(this.state === 'flee' || this.state === 'attack' ? 6 : 3) * dt));
+    this.heading += turn * (1 - Math.exp(-(fast ? 6 : 3) * dt));
     this.speed += (speed - this.speed) * (1 - Math.exp(-5 * dt));
     this.pos.x += Math.sin(this.heading) * this.speed * dt;
     this.pos.z += Math.cos(this.heading) * this.speed * dt;
@@ -218,7 +262,7 @@ class Wolf {
 
     this.play(anim);
     if (anim === 'walk') this.actions.walk.timeScale = Math.max(0.4, Math.abs(this.speed) / WOLF.walk);
-    if (anim === 'creep') this.actions.creep.timeScale = Math.max(0.4, Math.abs(this.speed) / WOLF.creep);
+    if (anim === 'creep') this.actions.creep.timeScale = this.state === 'feed' ? 0.12 : Math.max(0.4, Math.abs(this.speed) / WOLF.creep);
     this.mixer.update(dt);
     this.holder.position.copy(this.pos);
     this.holder.rotation.y = this.heading;
@@ -238,20 +282,193 @@ class Wolf {
     this.setState('flee', 5 + Math.random() * 3);
   }
 
-  // Struck by an arrow or the axe: a yelp, and it bolts.
+  // Startled without being hurt: a yelp, and it bolts.
   scare() {
     Sfx.wolfYelp(1);
     this.setState('flee', 6 + Math.random() * 3);
   }
 
+  // Wounded by `by` ('arrow', 'axe' or 'katana'). It yelps and runs, and the pack scatters
+  // with it; badly hurt and cornered, it may turn on her instead. Returns true if it died.
+  hurt(amount, by) {
+    if (this.dead) return false;
+    this.health -= amount;
+    if (this.health <= 0) { this.die(by); return true; }
+    const dist = Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
+    if (this.health < WOLF.health * 0.5 && dist < 14 && this.state !== 'attack' && !wolves.some((w) => w.state === 'attack') && Math.random() < WOLF.cornered) {
+      Sfx.wolfYelp(1);
+      this.charge();
+    } else {
+      this.scare();
+    }
+    for (const wolf of wolves) {
+      if (wolf !== this && wolf.state !== 'attack' && wolf.state !== 'flee' && Math.hypot(wolf.pos.x - this.pos.x, wolf.pos.z - this.pos.z) < 25) wolf.setState('flee', 4 + Math.random() * 3);
+    }
+    return false;
+  }
+
+  // Brought down: it cries out, stumbles on a little through the snow and tips onto its
+  // side. `push` is an extra shove along the ground, from a blow.
+  die(by, push) {
+    if (this.dead) return;
+    const forward = this.speed * 0.7;
+    this.dead = {
+      t: 0,
+      roll: (Math.random() < 0.5 ? -1 : 1) * 1.42,
+      slide: new THREE.Vector3(Math.sin(this.heading) * forward, 0, Math.cos(this.heading) * forward),
+      skinned: false,
+      landed: false,
+      bury: null, // seconds since she started heaping snow over it
+    };
+    if (push) this.dead.slide.add(push);
+    this.health = 0;
+    this.state = 'dead';
+    this.prey = null;
+    const i = wolves.indexOf(this);
+    if (i >= 0) wolves.splice(i, 1);
+    wolfRemains.push(this);
+    const d = Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
+    Sfx.wolfDeath(Math.max(0.2, 1 - d / 80));
+    const centre = this.bodyCentre(new THREE.Vector3());
+    burst(centre.setY(this.pos.y + 0.4), 0xf2f5ff, 14, 2.4);
+    burst(centre, 0x8a7f74, 6, 1.4);
+    this.skinEntry = addInteractable({
+      x: this.pos.x, z: this.pos.z, r: 2.2,
+      label: 'Press E to skin the wolf',
+      active: () => this.dead && this.dead.landed && !this.dead.skinned,
+      use: () => this.skin(),
+    });
+    emitGame('creatureKilled', 'wolf', by);
+  }
+
+  // Which part of it a point is inside: 'head', 'body' or null. Only a standing wolf.
+  struck(p) {
+    const b = WOLF_BODY, s = Math.sin(this.heading), c = Math.cos(this.heading);
+    const dx = p.x - this.pos.x, dz = p.z - this.pos.z, dy = p.y - this.pos.y;
+    const along = dx * s + dz * c, side = dx * c - dz * s;
+    if (Math.hypot(along - b.head.z, dy - b.head.y, side) < b.head.r) return 'head';
+    const t = clamp(along, b.rump, b.shoulders);
+    if (Math.hypot(along - t, dy - b.y, side) < b.r) return 'body';
+    return null;
+  }
+
+  // How far (x, z) is from its body along the ground, from rump to nose.
+  distanceTo(x, z) {
+    const b = WOLF_BODY, s = Math.sin(this.heading), c = Math.cos(this.heading);
+    const dx = x - this.pos.x, dz = z - this.pos.z;
+    const along = dx * s + dz * c, side = dx * c - dz * s;
+    return Math.hypot(along - clamp(along, b.rump, b.head.z), side) - b.r;
+  }
+
+  // Where the middle of its body is, standing or lying on its side.
+  bodyCentre(out) {
+    const roll = this.dead ? this.dead.roll * smooth(this.dead.t / 0.65) : 0;
+    const side = -Math.sin(roll) * WOLF_BODY.y;
+    return out.set(this.pos.x + Math.cos(this.heading) * side, this.pos.y + Math.cos(roll) * WOLF_BODY.y, this.pos.z - Math.sin(this.heading) * side);
+  }
+
+  // A dead wolf: the legs slow and stop, it tips over, and after a while it's cleared away.
+  // A skinned one is covered over with snow.
+  updateDead(dt) {
+    const d = this.dead;
+    d.t += dt;
+    if (d.slide.lengthSq() > 1e-4) {
+      this.pos.addScaledVector(d.slide, dt);
+      d.slide.multiplyScalar(Math.exp(-3.5 * dt));
+      pushOutOfColliders(this.pos, 0.45);
+      this.pos.y = groundHeight(this.pos.x, this.pos.z);
+    }
+    const u = smooth(d.t / 0.65);
+    if (d.t < 0.8) {
+      this.actions[this.anim].timeScale = 1 - u;
+      this.mixer.update(dt);
+    }
+    if (!d.landed && u >= 1) {
+      d.landed = true;
+      const at = this.bodyCentre(new THREE.Vector3());
+      at.y = this.pos.y + 0.15;
+      burst(at, 0xf2f5ff, 18, 2.6);
+      if (Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z) < 40) Sfx.thud();
+    }
+    if (d.bury !== null) {
+      d.bury += dt;
+      if (d.bury > 1.2 && d.bury < 3.2 && Math.random() < dt * 8) burst(this.bodyCentre(wolfTmp), 0xf2f5ff, 4, 1.4);
+    }
+    // A small bounce as it lands, then it lies still.
+    const settle = d.landed ? Math.sin(Math.min(1, (d.t - 0.65) / 0.35) * Math.PI) * 0.06 * (1 - Math.min(1, (d.t - 0.65) / 0.35)) : 0;
+    const roll = d.roll * u - Math.sign(d.roll) * settle;
+    this.holder.position.copy(this.pos);
+    this.holder.position.y += 0.15 * Math.abs(Math.sin(roll)) - (d.bury === null ? 0 : smooth((d.bury - 1.2) / 2.2) * 0.8);
+    this.holder.rotation.set(0, this.heading, roll);
+    if (this.skinEntry) {
+      const centre = this.bodyCentre(wolfTmp);
+      this.skinEntry.x = centre.x;
+      this.skinEntry.z = centre.z;
+    }
+  }
+
+  // She takes the pelt and the meat, and heaps snow over what's left.
+  skin() {
+    if (!this.dead || this.dead.skinned) return;
+    this.dead.skinned = true;
+    packAdd('wolfpelt', 1, { quiet: true });
+    packAdd('wolf_raw', 1, { quiet: true });
+    Sfx.skinning();
+    const at = this.bodyCentre(new THREE.Vector3());
+    burst(at, 0x8a7f74, 10, 1.6);
+    this.bury();
+  }
+
+  // Whether it's done lying in the snow. A skinned wolf goes once it's buried. Any other
+  // is cleared away after a minute and a half, the moment she's far off or looking
+  // elsewhere; if she stands watching it for much longer, the snow buries it too.
+  spent() {
+    const d = this.dead;
+    if (d.bury !== null) return d.bury > 3.4;
+    if (d.t < WOLF.remains) return false;
+    const toX = this.pos.x - camera.position.x, toZ = this.pos.z - camera.position.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > 30) return true;
+    camera.getWorldDirection(wolfTmp);
+    if ((toX * wolfTmp.x + toZ * wolfTmp.z) / Math.max(0.01, dist) < 0.3) return true;
+    if (d.t > WOLF.remains * 2) this.bury();
+    return false;
+  }
+
+  // Snow heaped over it: it settles out of sight in a few puffs.
+  bury() {
+    if (this.dead.bury === null) this.dead.bury = 0;
+    if (this.skinEntry) { removeInteractable(this.skinEntry); this.skinEntry = null; }
+  }
+
   dispose() {
     scene.remove(this.holder);
+    this.holder.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.dispose(); });
     this.mixer.stopAllAction();
+    if (this.skinEntry) { removeInteractable(this.skinEntry); this.skinEntry = null; }
   }
 }
+const wolfTmp = new THREE.Vector3();
+
+Object.assign(Sfx, {
+  // A wolf's last cry: a yelp that breaks and falls away into a whimper.
+  wolfDeath(level = 1) {
+    this.glide([[0, 820], [0.08, 1240], [0.3, 640], [0.75, 420], [1.1, 360]], 0.075 * level, 'triangle', 22);
+    this.burst(0.35, 600, 0.8, 0.22 * level);
+  },
+  // A knife working through hide, in two long strokes.
+  skinning() {
+    this.burst(0.32, 2400, 2.2, 0.1, 'bandpass');
+    setTimeout(() => this.burst(0.26, 1700, 2.2, 0.09, 'bandpass'), 260);
+  },
+  // An arrow thumping into fur and muscle rather than wood.
+  arrowFlesh() { this.burst(0.07, 480, 1.1, 0.34); this.tone(130, 70, 0.07, 0.18, 'triangle'); },
+});
 
 /* ---------- The packs ---------- */
 const wolves = [];
+// The dead, lying where they fell until they're skinned or cleared away.
+const wolfRemains = [];
 let howlTimer = 20;
 // Attacks are rare: after one, no wolf charges again for a minute or two.
 const wolfAttack = { cooldown: 40 };
@@ -276,6 +493,13 @@ function updateWolves(dt) {
       wolf.update(dt);
     }
   }
+  for (const wolf of [...wolfRemains]) {
+    wolf.updateDead(dt);
+    if (wolf.spent() || Math.hypot(wolf.pos.x - player.pos.x, wolf.pos.z - player.pos.z) > WOLF.despawn) {
+      wolf.dispose();
+      wolfRemains.splice(wolfRemains.indexOf(wolf), 1);
+    }
+  }
   if (wolves.length < WOLF.count - 1) spawnPack();
   // Now and then one howls, and the sound carries.
   howlTimer -= dt;
@@ -287,9 +511,22 @@ function updateWolves(dt) {
   }
 }
 
+// The living wolves go; the dead stay where they lie, so waking by a fire after a death
+// doesn't take away a wolf she brought down.
 function clearWolves() {
   for (const wolf of wolves) wolf.dispose();
   wolves.length = 0;
   howlTimer = 20;
   wolfAttack.cooldown = 40;
+}
+
+// For a fresh run.
+function clearWolfRemains() {
+  for (const wolf of wolfRemains) wolf.dispose();
+  wolfRemains.length = 0;
+}
+
+// An item's name for a toast, with a fallback while the item list isn't loaded.
+function creatureItemName(id, fallback) {
+  return ITEMS[id] ? itemName(id, 1).toLowerCase() : fallback;
 }
