@@ -4,7 +4,7 @@ A third-person survival game in a vast frozen, fog-bound forest. Your plane goes
 
 The way out was left by Dr. Ilse Varga, a weather scientist stranded here in 1980. She worked out that the Breath, a column of warm air rising from the crater's centre, could carry a hot air balloon over the rim. She hid ten balloon parts at ten sites around the crater, each under a red flag with a page of her journal. Find all ten, bring them and 10 planks to her launch frame at the Breath, and fly out.
 
-Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. Pick Miku's look from the drop-down on the title screen, in the pause menu or in the Character room. The Character room on the title screen lets you orbit and zoom around the character to inspect it.
+Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it.
 
 | Input | Action |
 | --- | --- |
@@ -67,9 +67,7 @@ A ten-foot burning katana, hidden from the start. Enter the Konami code (up, up,
 index.html                 The page that runs the game
 models/
   characters/
-    miku.js                  Miku, the player, in her classic look
-    teto.js                  Teto, in her classic look
-    doomer-miku-and-teto.js  Both in their Doomer looks: Miku's is a skin, Teto's is kept for later
+    doomer-miku-and-teto.js  Miku, the player, and Teto, found at the wreck
   animals/
     wolf.js                  The wolf, with its run, walk, creep, idle and sit animations
   vehicles/
@@ -94,7 +92,6 @@ src/
   boss.js        The fight in the basket
   moderator.js   Moderator menu: flying, no cold, give items, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
-  characters.js  Gives the classic Miku and Teto models skeletons the rig can drive
   boots.js       Black tactical boots, shaped from the characters' own feet
   bow.js         The bow and arrow models, built in code
   world.js       The snow forest: terrain, trees and mountains, built in tiles around the player
@@ -109,11 +106,7 @@ Each file in `models/` is a `.glb` 3D model stored as text, because browsers won
 
 ## Credits
 
-Miku: ["Hatsune Miku ¡ESCENARIO COLORIDO!"](https://sketchfab.com/3d-models/hatsune-miku-escenario-colorido-435816bc6ee04bbab524db59a06b83d4) by [mega mix](https://sketchfab.com/oscar3dmodel), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Her own skeleton is mapped onto the game's, and her twin tails use the game's hair physics. The file is `models/characters/miku.js`.
-
-Teto: ["PDF Teto"](https://sketchfab.com/3d-models/pdf-teto-e91b13bff72e42fca88179ba7eac5743) by [雨宮レン](https://sketchfab.com/oscar3dmodel), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Her own skeleton is mapped onto the game's. The file is `models/characters/teto.js`.
-
-Doomer skins: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is `models/characters/doomer-miku-and-teto.js`.
+Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doomer-miku-and-teto-5d99f01932df476dbddfe8e34ace6bbe) by [0x00001337](https://sketchfab.com/0x00001337), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Rescaled, with the cigarette props removed and generated hair bones added for animation. The file is `models/characters/doomer-miku-and-teto.js`.
 
 Wolf: ["Wolf with Animations"](https://sketchfab.com/3d-models/wolf-with-animations-f3769a474a714ebbbaca0d97f9b0a5a0) by [3DHaupt](https://sketchfab.com/dennish2010), licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). Textures scaled down and unused ones removed. The file is `models/animals/wolf.js`. Its licence doesn't allow commercial use, so the game can't be sold while it includes this model.
 

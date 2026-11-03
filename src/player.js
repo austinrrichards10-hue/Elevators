@@ -1,18 +1,13 @@
 // Player avatar: the imported character models, driven by the game's own rig.
-// "Hatsune Miku ¡Escenario colorido!" by mega mix, "PDF Teto" by 雨宮レン and "Doomer Miku and Teto" by
-// 0x00001337. See the README for the full credits.
+// "Doomer Miku and Teto" by 0x00001337 (CC-BY-4.0). See the README for the full credit.
 const SKINS = {
-  miku: { name: 'Miku', note: 'Her classic look', rig: 'miku', file: 'MIKU_GLB', height: 1.56, hair: [2], tailBones: /_BS_hair/, attach: 'head.x', tails: { top: 1.13, arms: 0.1, lean: [0.12, 0.2], leanLinks: 3 } },
-  teal: { name: 'Doomer Miku', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14, tails: { top: 1.13 } },
-  teto: { name: 'Teto', note: 'Her classic look', rig: 'teto', file: 'TETO_GLB', height: 1.5, hair: [4, 8, 9, 10], pieces: { 0: 'White', 1: 'Gray', 2: 'Black' } },
-  crimson: { name: 'Doomer Teto', note: 'Black sweatshirt, tactical boots', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
+  teal: { name: 'Miku', note: 'Blue-haired, long twin tails', file: 'CHARACTER_GLB', skin: 0, hair: { k: 0.000317, x: 0.0088, y: -0.102, z: 0.071, sharedNode: 31, pieces: { 'Hair_004.001_Gradient_0': { scale: 0.706, offset: [0.0126, 0.457, -0.497] } } }, scalpTrim: 0.14 },
+  crimson: { name: 'Teto', note: 'Red-haired, twin ringlets', file: 'CHARACTER_GLB', skin: 1, hair: { k: 0.000197, x: 0.004, y: 0.0, z: 0.015 }, scalpTrim: 0.2 },
 };
-// Teto as she's found by the wreck: out cold, with her eyes closed.
-SKINS.tetoAsleep = { ...SKINS.teto, eyesClosed: true };
-// The skins Miku can wear. Teto's are her own; she's another survivor, found at the crash
-// site. Her Doomer look is kept for unlocking later.
-const SKIN_ORDER = ['miku', 'teal'];
-const TETO_SKIN = 'teto';
+// Teto as she's found by the wreck: the same model, out cold with her eyes closed.
+SKINS.tetoAsleep = { ...SKINS.crimson, eyesClosed: true };
+// The skins you can play as. Teto isn't one: she's another survivor, found at the crash site.
+const SKIN_ORDER = ['teal'];
 
 // The model's bind pose to game space: feet on the ground, centred, facing +Z.
 const MODEL_SCALE = 0.9375;
@@ -346,24 +341,6 @@ function makeMaterial(file, index) {
 function loadSkinData(skinId) {
   if (skinCache.has(skinId)) return skinCache.get(skinId);
   const def = SKINS[skinId];
-  // The newer models bring skeletons of their own making (characters.js).
-  const data = def.rig ? loadRiggedSkin(def) : loadModelSkin(def);
-  if (def.eyesClosed) closeEyes(data.parts);
-
-  // Which bones actually move vertices, so only those are updated each frame.
-  const usedBones = new Set();
-  for (const { geometry } of data.parts) {
-    const joints = geometry.attributes.skinIndex.array, weights = geometry.attributes.skinWeight;
-    for (let i = 0; i < joints.length; i++) if (weights.array[i] > 0) usedBones.add(joints[i]);
-  }
-  data.usedBones = [...usedBones];
-  if (def.tails) data.tails = buildTailBones(data, def.tails.top);
-  skinCache.set(skinId, data);
-  return data;
-}
-
-// A skin from the original "Doomer Miku and Teto" file, which holds both characters.
-function loadModelSkin(def) {
   if (!modelFiles.has(def.file)) modelFiles.set(def.file, readGlb(window[def.file]));
   const file = modelFiles.get(def.file);
   const { json } = file;
@@ -404,32 +381,41 @@ function loadModelSkin(def) {
     const m = new THREE.Matrix4().fromArray(inverses, names.indexOf(name) * 16).invert();
     return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(modelToGame);
   };
+  if (def.eyesClosed) closeEyes(parts);
+
+  // Which bones actually move vertices, so only those are updated each frame.
+  const usedBones = new Set();
+  for (const { geometry } of parts) {
+    const joints = geometry.attributes.skinIndex.array, weights = geometry.attributes.skinWeight;
+    for (let i = 0; i < joints.length; i++) if (weights.array[i] > 0) usedBones.add(joints[i]);
+  }
+  data.usedBones = [...usedBones];
+  if (skinId === 'teal') data.tails = buildTailBones(data);
+  skinCache.set(skinId, data);
   return data;
 }
 
-// The hair has no bones of its own. Long tails get generated ones: vertices below `top`
-// (about the shoulders) are weighted along a chain per side, blending into the head higher up.
-// A part with a `tailMask` keeps its own weights except where the mask is set.
-function buildTailBones(data, top = 1.13) {
+// The hair has no bones of its own. Long tails get generated ones: vertices below the
+// shoulders are weighted along a chain per side, blending into the head higher up.
+function buildTailBones(data) {
   const hair = data.parts.filter((p) => p.isHair);
   const point = new THREE.Vector3();
   const count = 10;
+  const top = 1.13;
   const toGame = (attr, i) => point.fromBufferAttribute(attr, i).applyMatrix4(modelToGame);
-  const inTail = (part, i) => !part.tailMask || part.tailMask[i];
   let low = top;
-  for (const part of hair) {
-    const pos = part.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) if (inTail(part, i)) low = Math.min(low, toGame(pos, i).y);
+  for (const { geometry } of hair) {
+    const pos = geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) low = Math.min(low, toGame(pos, i).y);
   }
   const span = (top - low) / (count - 1);
 
   // The rest path of each tail follows the centre of its vertices, band by band.
   const paths = [-1, 1].map((side) => {
     const sums = Array.from({ length: count }, () => ({ x: 0, z: 0, n: 0 }));
-    for (const part of hair) {
-      const pos = part.geometry.attributes.position;
+    for (const { geometry } of hair) {
+      const pos = geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
-        if (!inTail(part, i)) continue;
         const p = toGame(pos, i);
         if (Math.sign(p.x) !== side || p.y > top) continue;
         const band = sums[Math.min(count - 1, Math.round((top - p.y) / span))];
@@ -449,12 +435,7 @@ function buildTailBones(data, top = 1.13) {
     const pos = geometry.attributes.position;
     const indices = new Uint16Array(pos.count * 4), weights = new Float32Array(pos.count * 4);
     const headBone = data.names.indexOf('head.x');
-    const own = geometry.attributes.skinIndex, ownW = geometry.attributes.skinWeight;
     for (let i = 0; i < pos.count; i++) {
-      if (!inTail(part, i)) {
-        for (let c = 0; c < 4; c++) { indices[i * 4 + c] = own.array[i * 4 + c]; weights[i * 4 + c] = ownW.array[i * 4 + c]; }
-        continue;
-      }
       const p = toGame(pos, i);
       const fade = THREE.MathUtils.smoothstep(top + 0.12 - p.y, 0, 0.18);
       indices[i * 4] = headBone;
@@ -623,23 +604,9 @@ function createAvatar(scene, skinId) {
     return mesh;
   });
 
-  // Physics for the long twin tails. Where they hang down past her arms, the arms push
-  // them aside too, and they settle a little behind and outside them.
+  // Physics for the long twin tails.
   const colliders = rig.proxies;
   const tails = [];
-  const tailFit = SKINS[skinId].tails || {};
-  if (data.tails && tailFit.arms) {
-    for (const arm of [rig.armL, rig.armR]) {
-      for (const [group, length] of [[arm.upper, arm.a], [arm.fore, arm.b]]) {
-        for (const along of [0.3, 0.75]) {
-          const o = new THREE.Object3D();
-          o.position.set(0, -length * along, 0);
-          group.add(o);
-          colliders.push({ o, r: tailFit.arms, p: new THREE.Vector3() });
-        }
-      }
-    }
-  }
   if (data.tails) {
     const headWorldRest = rig.head.position.clone().add(rig.chest.position).add(rig.hips.position);
     data.tails.paths.forEach((path, sideIndex) => {
@@ -648,14 +615,8 @@ function createAvatar(scene, skinId) {
       for (let i = 1; i < path.length; i++) length += path[i].distanceTo(path[i - 1]);
       const segment = length / (path.length - 1);
       const directions = path.map((p, i) => (i ? p.clone().sub(path[i - 1]).normalize() : new THREE.Vector3(0, -1, 0)));
-      // The shape the tail springs back to. Where it passes her arms (its top few links) it's
-      // swung back and out by `lean`, as the skin asks; below them it hangs straight down.
-      const lean = tailFit.lean || [0, 0];
-      const pull = directions.map((d, i) => (i >= 1 && i <= (tailFit.leanLinks || 0)
-        ? d.clone().add(new THREE.Vector3(side * lean[0], 0, -lean[1])).normalize()
-        : d.clone()));
       const chain = new Chain(rig.head, path[0].clone().sub(headWorldRest), {
-        count: path.length, segment, rest: (i) => pull[i], stiffness: (i) => [0, 0.7, 0.55, 0.42, 0.3, 0.22][i] || 0.15, pad: 0.03, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
+        count: path.length, segment, rest: (i) => directions[i], stiffness: (i) => [0, 0.7, 0.55, 0.42, 0.3, 0.22][i] || 0.15, pad: 0.03, damping: 0.92, gravity: -6, wind: 0.2, keepSide: side,
       });
       path.forEach((p, i) => inverses[data.tails.firstBone + sideIndex * data.tails.count + i].copy(
         new THREE.Matrix4().makeTranslation(-p.x, -p.y, -p.z).multiply(modelToGame),

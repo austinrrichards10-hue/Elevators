@@ -89,13 +89,12 @@ const MOD_DEFAULTS = {
 };
 const mod = { ...MOD_DEFAULTS };
 for (const key in MOD_DEFAULTS) if (saved.mod && key in saved.mod) mod[key] = saved.mod[key];
-// Saved under `look` since the classic models arrived, so everyone starts in Miku's classic look.
-let skinId = SKIN_ORDER.includes(saved.look) ? saved.look : SKIN_ORDER[0];
+let skinId = SKIN_ORDER.includes(saved.skin) ? saved.skin : 'teal';
 let avatar = null;
 const bowModel = buildBowModel();
 
 function saveLoadout() {
-  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ look: skinId, muted: Sfx.muted, mod: mod })); } catch { /* storage is optional */ }
+  try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, muted: Sfx.muted, mod: mod })); } catch { /* storage is optional */ }
 }
 
 // The character room has its own track; the forest has only its wind.
@@ -127,19 +126,16 @@ function setSkin(id) {
   avatar.reset();
 }
 
-// The skin picker: a drop-down of Miku's looks, with a line about the one picked.
 function renderLoadout() {
-  const options = SKIN_ORDER.map((id) => `<option value="${id}"${id === skinId ? ' selected' : ''}>${SKINS[id].name}</option>`).join('');
-  const html = `<div><h3>Skin</h3><label class="skin-pick"><select class="skin-select" aria-label="Skin">${options}</select></label><p class="skin-note">${SKINS[skinId].note}</p></div>`;
+  const option = (id, entry) => `<button class="option" data-skin="${id}" aria-pressed="${id === skinId}">${entry.name}<span>${entry.note}</span></button>`;
+  const html = `<div><h3>Skin</h3>${SKIN_ORDER.map((id) => option(id, SKINS[id])).join('')}</div>`;
   document.querySelectorAll('.loadout').forEach((el) => { el.innerHTML = html; });
 }
 
 document.addEventListener('click', (e) => {
-  if (e.target.closest('.mute-toggle')) toggleMute();
-});
-document.addEventListener('change', (e) => {
-  const select = e.target.closest('.skin-select');
-  if (select && select.value !== skinId && SKIN_ORDER.includes(select.value)) { setSkin(select.value); saveLoadout(); renderLoadout(); }
+  if (e.target.closest('.mute-toggle')) { toggleMute(); return; }
+  const button = e.target.closest('.option');
+  if (button && button.dataset.skin && button.dataset.skin !== skinId) { setSkin(button.dataset.skin); saveLoadout(); renderLoadout(); }
 });
 
 /* ---------- Input ---------- */

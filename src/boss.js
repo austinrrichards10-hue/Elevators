@@ -273,7 +273,7 @@ function buildBossJet() {
 }
 
 function buildBossKit() {
-  const avatar = createAvatar(scene, TETO_SKIN);
+  const avatar = createAvatar(scene, 'crimson');
   avatar.setVisible(false);
   const additive = (map, color, opacity = 1) => new THREE.SpriteMaterial({ map, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   // The glint in her eye, and the stars she sees when she's open.

@@ -617,7 +617,7 @@ function startCutscene() {
     // Fire glows through the bloom.
     for (const pool of [cutscene.blast, cutscene.debris]) pool.group.children[0].material.uniforms.diffuse.value.multiplyScalar(2.2);
     scene.add(cutscene.plane, cutscene.trail.group, cutscene.debris.group, cutscene.dust.group, cutscene.blast.group);
-    cutscene.teto = createAvatar(scene, TETO_SKIN);
+    cutscene.teto = createAvatar(scene, 'crimson');
     // Her phone, in a glittery lilac case, the screen lit.
     const phone = new THREE.Group();
     phone.add(new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.15, 0.011), new THREE.MeshBasicMaterial({ color: 0xc9b6ff })));
