@@ -76,3 +76,8 @@ body.aftermath::before { content: ''; position: fixed; inset: 0; z-index: 1; poi
 .pop-text.perfect { font-size: 22px; letter-spacing: .14em; color: #d8f2ff; text-shadow: 0 0 10px #7fc4ff, 0 0 22px #3d8bff; }
 /* The beat of slow motion after a perfect dodge. */
 body.bullet-time #view { filter: saturate(.55) contrast(1.15) brightness(1.05); }
+
+/* Her mega laser coming: where to go. */
+#boss-warn { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); font-size: clamp(26px, 3.4vw, 44px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #fff0f3; text-shadow: 0 0 4px #6b0018, 0 0 18px #ff2d6f, 0 0 36px #ff2d6f; animation: warn-pulse .5s ease-in-out infinite alternate; pointer-events: none; }
+@keyframes warn-pulse { from { opacity: .55; scale: .96; } to { opacity: 1; scale: 1.04; } }
+@media (prefers-reduced-motion: reduce) { #boss-warn { animation: none; } }
