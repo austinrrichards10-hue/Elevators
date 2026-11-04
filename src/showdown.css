@@ -10,7 +10,6 @@
 .bar.boss-health i { position: absolute; left: 0; top: 0; }
 .boss-lag { background: #ffd6de; opacity: .75; transition: none; }
 .boss-fill { background: linear-gradient(90deg, #7a1230, #d0304f 70%, #ff6f8e); }
-.boss-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(10, 14, 34, .7); }
 #boss-bar.stage-up .bar.boss-health { animation: boss-stage 1s ease-out; }
 @keyframes boss-stage { 0%, 30% { box-shadow: 0 0 22px 4px rgba(255, 90, 120, .9); } }
 
@@ -68,3 +67,12 @@ body.aftermath::before { content: ''; position: fixed; inset: 0; z-index: 1; poi
 #view.kb { transform: scale(1.07); transition: transform .95s linear; }
 #cine-caption.thought { left: 50%; transform: translateX(-50%); white-space: nowrap; font-style: italic; letter-spacing: .12em; color: #dfe8ff; text-shadow: 0 0 10px rgba(0, 0, 0, .8); }
 @media (prefers-reduced-motion: reduce) { #view.kb { transform: none; transition: none; } }
+
+/* Damage numbers, and PERFECT DODGE, floating up off whoever they belong to. */
+.pop-text { position: fixed; left: 0; top: 0; pointer-events: none; font-weight: 700; white-space: nowrap; will-change: transform; }
+.pop-text.dmg { font-size: 18px; color: #e8f6ff; text-shadow: 0 0 6px #3d8bff, 0 2px 0 #0a1a40; }
+.pop-text.big { font-size: 26px; color: #bfe6ff; }
+.pop-text.crit { font-size: 30px; color: #fff3a0; text-shadow: 0 0 8px #ff9a3d, 0 2px 0 #4a1a00; }
+.pop-text.perfect { font-size: 22px; letter-spacing: .14em; color: #d8f2ff; text-shadow: 0 0 10px #7fc4ff, 0 0 22px #3d8bff; }
+/* The beat of slow motion after a perfect dodge. */
+body.bullet-time #view { filter: saturate(.55) contrast(1.15) brightness(1.05); }
