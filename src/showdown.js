@@ -672,6 +672,115 @@ function buildFinaleKit() {
   return { rings, bolts, target };
 }
 
+// A summoning circle: rings, ticks, a ring of glyphs, a six-pointed star, a burning heart.
+function runeTexture() {
+  const size = 512, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const rand = seededRandom(31);
+  g.translate(size / 2, size / 2);
+  g.strokeStyle = g.fillStyle = 'white';
+  g.shadowColor = 'white';
+  g.shadowBlur = 10;
+  const ring = (r, w) => { g.lineWidth = w; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); };
+  ring(248, 6); ring(230, 3); ring(176, 4); ring(92, 3); ring(62, 2);
+  for (let i = 0; i < 72; i++) {
+    const a = i / 72 * Math.PI * 2, l = i % 6 === 0 ? 16 : 7;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(Math.cos(a) * (230 - l), Math.sin(a) * (230 - l));
+    g.lineTo(Math.cos(a) * 230, Math.sin(a) * 230);
+    g.stroke();
+  }
+  for (let i = 0; i < 24; i++) {
+    g.save();
+    g.rotate(i / 24 * Math.PI * 2);
+    g.translate(0, -203);
+    g.lineWidth = 3;
+    g.beginPath();
+    for (let j = 0; j < 3; j++) { g.moveTo((rand() - 0.5) * 20, (rand() - 0.5) * 24); g.lineTo((rand() - 0.5) * 20, (rand() - 0.5) * 24); }
+    g.stroke();
+    g.restore();
+  }
+  g.lineWidth = 4;
+  for (const off of [0, Math.PI]) {
+    g.beginPath();
+    for (let i = 0; i <= 3; i++) { const a = off + i / 3 * Math.PI * 2 - Math.PI / 2; g.lineTo(Math.cos(a) * 176, Math.sin(a) * 176); }
+    g.stroke();
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(Math.cos(a) * 62, Math.sin(a) * 62);
+    g.lineTo(Math.cos(a) * 92, Math.sin(a) * 92);
+    g.stroke();
+  }
+  g.beginPath();
+  g.arc(0, 0, 24, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// The mega laser's own pieces: a solid wall of light, streaming, to fill the clearing from
+// side to side and as high as the trees (lit from inside too, so there's no seeing out of
+// it); the summoning circles she charges it through; pillars of light out of the cracks.
+function buildMegaKit() {
+  const tex = runeTexture();
+  const runeMat = () => new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0xff5a80).multiplyScalar(5), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const circles = [new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.PlaneGeometry(1, 1), new THREE.PlaneGeometry(1, 1), new THREE.PlaneGeometry(1, 1)].map((geo) => {
+    const m = new THREE.Mesh(geo, runeMat());
+    m.visible = false;
+    m.frustumCulled = false;
+    scene.add(m);
+    return m;
+  });
+  const fillMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    vertexShader: `
+      varying vec3 vW;
+      void main() {
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform float uOpacity;
+      varying vec3 vW;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main() {
+        vec2 cell = floor(vec2(vW.x * 4.0, vW.y * 4.0));
+        float h = hash(cell);
+        float s = fract(vW.z * (0.05 + h * 0.06) + uTime * (3.0 + h * 4.0) + h * 7.0);
+        float streak = smoothstep(0.0, 0.08, s) * smoothstep(0.55, 0.08, s);
+        float wave = 0.5 + 0.5 * sin(vW.z * 0.4 + uTime * 30.0);
+        float flick = 0.88 + 0.12 * sin(uTime * 73.0);
+        vec3 col = mix(vec3(1.4, 0.3, 0.55), vec3(2.6, 2.3, 2.4), 0.35 + 0.5 * streak + 0.15 * wave);
+        gl_FragColor = vec4(col, uOpacity * (0.4 + 0.45 * streak + 0.1 * wave) * flick);
+      }`,
+  });
+  // A box with its front face at the origin, running back along -z.
+  const fill = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, -0.5), fillMat);
+  fill.visible = false;
+  fill.frustumCulled = false;
+  fill.renderOrder = 5;
+  scene.add(fill);
+  const pillarGeo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true).translate(0, 0.5, 0);
+  const pillars = Array.from({ length: 8 }, () => {
+    const mat = beamMaterial(0xff4d86, 1, 30);
+    mat.uniforms.uLen.value = 26;
+    const m = new THREE.Mesh(pillarGeo, mat);
+    m.visible = false;
+    m.frustumCulled = false;
+    scene.add(m);
+    return m;
+  });
+  return { circles, fill, pillars, spin: 0, lastGlare: 0 };
+}
+
 // A jagged bolt of lightning between two points.
 function strikeBolt(line, a, b, jag = 1.2) {
   const arr = line.geometry.attributes.position.array;
@@ -774,6 +883,9 @@ function buildShowdownDom() {
   skills.className = 'hidden';
   skills.innerHTML = '<span class="skill" id="skill-wave"><kbd>RMB</kbd> Scythe throw<i></i></span><span class="skill" id="skill-beam"><kbd>Q</kbd> Light beam<i></i></span>';
   hud.append(bar, taunt, hint, skills, warn);
+  const glare = document.createElement('div');
+  glare.id = 'mega-glare';
+  document.body.insertBefore(glare, hud);
   const fade = document.createElement('div');
   fade.id = 'boss-fade';
   document.body.insertBefore(fade, $('cine'));
@@ -862,6 +974,7 @@ function buildShowdownKit() {
     beamLights,
     disks: buildJetDisks(60),
     finale: buildFinaleKit(),
+    mega: buildMegaKit(),
     streaks: [glowOrb(0xbfe6ff, 1), glowOrb(0xbfe6ff, 1)],
     cracks: [buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0x4da0ff)],
     orbs: [glowOrb(0xff4d7a, 0.4), glowOrb(0xff4d7a, 0.4)],
@@ -1709,6 +1822,11 @@ function clearFightFx() {
   fight.fovKick = 0;
   const F = k.finale;
   for (const m of [...F.rings, ...F.bolts, F.target]) m.visible = false;
+  for (const m of [...k.mega.circles, ...k.mega.pillars, k.mega.fill]) m.visible = false;
+  fight.megaGlare = 0;
+  k.mega.lastGlare = 0;
+  $('mega-glare').style.opacity = 0;
+  document.body.classList.remove('mega-burn', 'mega-hush');
 }
 
 function leaveArena() {
@@ -1764,6 +1882,15 @@ function updateShowdownFx(dt) {
     if (u >= 1) d.group.visible = false;
   }
   fight.fovKick *= Math.exp(-dt * 6);
+  // The mega laser's glare: the screen whited out while you're in it.
+  if (!fight.teto || fight.teto.state !== 'megaFire') fight.megaGlare = (fight.megaGlare || 0) * Math.exp(-dt * 5);
+  const glare = fight.megaGlare > 0.004 ? fight.megaGlare * (0.94 + Math.random() * 0.06) : 0;
+  if (glare !== k.mega.lastGlare) {
+    k.mega.lastGlare = glare;
+    $('mega-glare').style.opacity = glare.toFixed(3);
+    document.body.classList.toggle('mega-burn', glare > 0);
+    document.body.style.setProperty('--burn', glare.toFixed(3));
+  }
   for (const f of k.muzzleFlash) if (f.visible && (f.userData.t = (f.userData.t || 0) - dt) <= 0) f.visible = false;
   for (const beam of [...k.rails, k.giant, k.mikuBeam, ...k.sights]) animateBeam(beam, game.time);
   if (k.snow.visible) k.snow.userData.update(dt, game.time, camera.position);
@@ -2453,21 +2580,28 @@ function updateSweep(dt, t, toMiku) {
 }
 
 // The mega laser. She leaps to the far end of the clearing, in front of the balloon, and
-// slams down so hard that boulders are thrown up out of the ground all down the clearing. Then
-// she charges for a long time, and fires a beam as wide as the clearing straight down it. The
+// slams down so hard that boulders are thrown up out of the ground all down the clearing and
+// pillars of light burst out of the cracks. Then she rises, and charges: a summoning circle
+// burning into the snow under her, a barrel of circles wheeling open in front of her, the
+// snow and the light of the whole clearing sucked into the orb at her drills, lightning
+// lashing out of it, the sky going red, her heart and yours pounding faster. A breath of
+// silence, everything going dark. Then a wall of light the full width and height of the
+// clearing, straight down it. Out in the open you can't see a thing, and it burns. The
 // boulders are the only cover, and the beam boils them away as it goes: by the time it ends,
 // there's nothing left of them.
 function updateMega(dt, t) {
-  const M = SHOWDOWN.moves.mega, k = showdownKit, A = SHOWDOWN.arena, K = k.finale;
+  const M = SHOWDOWN.moves.mega, k = showdownKit, A = SHOWDOWN.arena, K = k.finale, G = k.mega;
   const front = new THREE.Vector3(0, A.y, A.length / 2 - 1.5);
   if (t.state === 'megaLeap') {
-    if (t.t < dt * 1.5) { t.leapFrom = t.pos.clone(); Sfx.whoosh(1); tetoSays('Let\'s see you dodge THIS!', 2); }
+    if (t.t < dt * 1.5) { t.leapFrom = t.pos.clone(); Sfx.whoosh(1); Sfx.stinger(); tetoSays('Let\'s see you dodge THIS!', 2); fight.fovKick = -5; }
     const u = clamp(t.t / t.dur, 0, 1);
     t.pos.lerpVectors(t.leapFrom, front, smooth(u));
-    t.lift = Math.sin(u * Math.PI) * 10;
+    t.lift = Math.sin(u * Math.PI) * 12;
     t.airborne = true;
     t.yaw = Math.PI;
-    tetoJets(1);
+    tetoJets(1.6);
+    // A smear of red ghosts behind her through the air.
+    for (const bone of [k.teto.hips, k.teto.chest, k.teto.head]) k.jets.emit(bone.getWorldPosition(sdV), sdW.set(0, 0, 0), { life: 0.5, size: 0.9, grow: 0.4, alpha: 0.7 });
     if (t.t >= t.dur) { Object.assign(t, { state: 'megaSlam', t: 0, dur: M.slam }); megaSlam(t); }
     return { mode: 'fly' };
   }
@@ -2475,83 +2609,151 @@ function updateMega(dt, t) {
   t.yaw = Math.PI;
   if (t.state === 'megaSlam') {
     t.crouch = 1 - smooth(clamp(t.t / t.dur, 0, 1));
+    megaPillars(t.t, 1);
     if (t.t >= t.dur) {
-      Object.assign(t, { state: 'megaCharge', t: 0, dur: M.charge });
+      Object.assign(t, { state: 'megaCharge', t: 0, dur: M.charge, beat: 0, hushed: false, recharged: false });
       Sfx.railCharge();
       Sfx.stinger();
+      Sfx.glide([[0, 60], [M.charge * 0.85, 520], [M.charge, 40]], 0.08, 'sawtooth', 7);
+      t.hum = Sfx.loop({ noise: 0.6, filter: 300, hum: 1, humFreq: 41 });
+      t.hum.set(0.5, 1);
+      tetoSays('Every last drop of it... for YOU!', 2.4);
     }
     return { mode: 'idle' };
   }
-  tetoMuzzle(0, sdV); tetoMuzzle(1, sdW);
-  const orb = new THREE.Vector3().lerpVectors(sdV, sdW, 0.5).add(sdU.set(0, -0.4, -0.6));
-  t.lift = 1.4;
   t.airborne = true;
   if (t.state === 'megaCharge') {
-    // Everything she has, gathering: the sky reddening, light streaming in, rings wheeling.
-    const u = smooth(t.t / t.dur);
+    const u = smooth(t.t / t.dur), left = t.dur - t.t;
+    t.lift = 1.4 + u * 2.2 + Math.sin(game.time * 3) * 0.1;
+    tetoJets(1 + u);
+    const orb = megaOrb();
+    const hush = left < 0.55;
+    // The orb: swelling, boiling, and in the last breath crushed down small and white-hot.
     k.bigOrb.position.copy(orb);
-    k.bigOrb.scale.setScalar(0.5 + u * 6 + Math.random() * 0.4);
+    k.bigOrb.scale.setScalar(hush ? lerp(1.5, 7.5, left / 0.55) * (0.8 + Math.random() * 0.5) : 0.5 + u * 7.5 + Math.random() * (0.4 + u));
     k.bigOrb.visible = true;
     K.rings.forEach((ring, i) => {
       ring.visible = true;
       ring.position.copy(orb);
-      ring.rotation.set(game.time * (1.5 + i), game.time * (2.2 - i * 0.6), i * 1.1);
-      ring.scale.setScalar(0.3 + u * (1.4 - i * 0.2));
+      ring.rotation.set(game.time * (1.5 + i) * (1 + u * 2), game.time * (2.2 - i * 0.6) * (1 + u * 2), i * 1.1);
+      ring.scale.setScalar((0.3 + u * (1.6 - i * 0.2)) * (hush ? 0.4 : 1));
       ring.material.opacity = 0.9 * u;
     });
-    for (let i = 0; i < 4; i++) {
-      const from = sdW.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize().multiplyScalar(10 + Math.random() * 8);
-      k.trails.emit(sdU.copy(orb).add(from), from.multiplyScalar(-1 / 0.5), { life: 0.5, size: 0.35, grow: 0.2, alpha: 0.9 });
+    megaCircles(t.t / t.dur, orb, hush ? 2.5 : 1);
+    megaPillars(t.t + M.slam, 1 - clamp((t.t - t.dur + 1.2) / 0.6, 0, 1));
+    // The whole clearing pulled into it: snow, light, streaming in from all round, from right by you.
+    for (let i = 0; i < 3 + u * 9; i++) {
+      const near = Math.random() < 0.45;
+      const from = near ? sdU.copy(player.pos).add(sdW.set((Math.random() - 0.5) * 10, Math.random() * 4, (Math.random() - 0.5) * 10))
+        : sdU.set((Math.random() - 0.5) * A.half * 2.4, A.y + Math.random() * 10, lerp(-A.length / 2, front.z, Math.random()));
+      const life = 0.5 + Math.random() * 0.6;
+      const pool = Math.random() < 0.5 ? k.trails : k.debris;
+      pool.emit(from, sdW.subVectors(orb, from).multiplyScalar(1 / life), { life, size: near ? 0.07 : pool === k.trails ? 0.28 : 0.14, grow: 0.2, alpha: 0.95 });
     }
-    fight.redFog = Math.max(fight.redFog || 0, u * 0.7);
-    k.tetoLight.intensity = 6 + u * 14;
-    player.shake = Math.max(player.shake, u * 0.1);
-    if (Math.random() < dt * 4) Sfx.burst(0.3, 120 + u * 200, 0.5, 0.3);
-    if (t.t > t.dur - 1.6 && !t.recharged) { t.recharged = true; Sfx.railCharge(); }
-    megaWarn(t.t < t.dur - 1 ? 'Get behind a rock!' : 'HIDE!');
+    // Lightning, out of the orb into the snow, into the boulders.
+    K.bolts.forEach((bolt) => {
+      if (Math.random() < 0.08 + u * 0.35) {
+        const rocks = k.rocks.filter((r) => r.landed);
+        const to = Math.random() < 0.4 && rocks.length ? rocks[Math.floor(Math.random() * rocks.length)].mesh.position.clone().add(sdU.set(0, 1.2, 0))
+          : sdV.set(front.x + (Math.random() - 0.5) * 16, A.y, front.z - Math.random() * 14).clone();
+        strikeBolt(bolt, orb, to, 2.5);
+        if (Math.random() < 0.3) k.sparks.emit(to, sdW.set(0, 3, 0), { life: 0.3, size: 0.5, grow: 1, alpha: 1 });
+      } else bolt.visible = false;
+    });
+    if (Math.random() < dt * (2 + u * 8)) Sfx.crackle(1.5);
+    fight.redFog = Math.max(fight.redFog || 0, u * 0.85);
+    k.tetoLight.intensity = hush ? 30 : 6 + u * 18;
+    player.shake = Math.max(player.shake, hush ? 0.25 : u * 0.14);
+    // Heartbeat, faster and faster.
+    t.beat -= dt;
+    if (t.beat <= 0 && !hush) { t.beat = lerp(0.75, 0.22, u); Sfx.tone(62, 30, 0.18, 0.6); fight.fovKick = Math.min(fight.fovKick, -1.2 - u * 2.5); }
+    if (left < 1.6 && !t.recharged) { t.recharged = true; Sfx.railCharge(); }
+    if (hush && !t.hushed) {
+      // The breath before: the light all drains into her, dead quiet.
+      t.hushed = true;
+      document.body.classList.add('mega-hush');
+      if (t.hum) t.hum.set(0.05, 0.2);
+      Sfx.tone(1400, 90, 0.5, 0.1, 'triangle');
+      Sfx.burst(0.5, 3000, 0.7, 0.25, 'highpass');
+      fight.fovKick = -9;
+    }
+    megaWarn(left > 1.2 ? 'Get behind a rock!' : 'HIDE!');
     if (t.t >= t.dur) {
       Object.assign(t, { state: 'megaFire', t: 0, dur: M.fire, tick: 0 });
       for (const ring of K.rings) ring.visible = false;
-      Sfx.railFire(); Sfx.boom(1.3); Sfx.explosion(1.3);
-      impact('white', 90);
-      fight.fovKick = 8;
-      t.hum = Sfx.loop({ noise: 1, filter: 900, hum: 1, humFreq: 55 });
-      t.hum.set(0.9, 0.2);
+      for (const bolt of K.bolts) bolt.visible = false;
+      document.body.classList.remove('mega-hush');
+      Sfx.railFire(); Sfx.boom(1.6); Sfx.explosion(1.5); Sfx.quake();
+      impact('white', 140);
+      explode(orb, 0xff4d86, 2.4);
+      shockwave(front, 22, 0xffd0dc, 0.9);
+      shockwave(front, 12, 0xff2d55, 0.6);
+      fight.fovKick = 14;
+      fight.megaGlare = 1;
+      if (t.hum) t.hum.stop();
+      t.hum = Sfx.loop({ noise: 1, filter: 1400, hum: 1, humFreq: 49 });
+      t.hum.set(1, 0.1);
     }
     return { mode: 'rail' };
   }
-  // Firing: the whole clearing filled with light, down its full length.
+  // Firing: the whole clearing filled with light, down its full length, from side to side and
+  // as high as the trees.
+  const orb = megaOrb();
   const u = t.t / t.dur;
-  const width = Math.min(1, t.t / 0.25) * (1 - clamp((t.t - t.dur + 0.3) / 0.3, 0, 1));
+  const width = Math.min(1, t.t / 0.18) * (1 - clamp((t.t - t.dur + 0.35) / 0.35, 0, 1));
+  t.lift = 3.6 - u * 0.6 + (Math.random() - 0.5) * 0.08;
+  tetoJets(2);
   k.bigOrb.position.copy(orb);
-  k.bigOrb.scale.setScalar(7 + Math.random());
-  aimBeam(k.giant, orb, orb.clone().add(sdU.set(0, -0.8, -95)), 3.3 * width * (0.95 + Math.random() * 0.1));
-  player.shake = Math.max(player.shake, 0.35);
+  k.bigOrb.scale.setScalar((9 + Math.random() * 2) * Math.max(width, 0.3));
+  aimBeam(k.giant, orb, orb.clone().add(sdU.set(0, -1.6, -95)), 3.6 * width * (0.94 + Math.random() * 0.12));
+  G.fill.visible = width > 0.01;
+  G.fill.position.set(0, A.y - 1, front.z - 0.5);
+  G.fill.scale.set(A.half * 2 + 10, 16 * (0.6 + 0.4 * width), 100);
+  G.fill.material.uniforms.uOpacity.value = width;
+  G.fill.material.uniforms.uTime.value = game.time;
+  megaCircles(1, orb, 4, width);
+  megaPillars(9, 0);
+  player.shake = Math.max(player.shake, 0.4 * width);
+  if (Math.random() < 0.5) fight.fovKick = Math.max(fight.fovKick, 2 + Math.random() * 3);
+  // Light tearing past you down the clearing, and the snow blasted off the ground with it.
+  for (let i = 0; i < 14 * width; i++) {
+    const at = sdU.set((Math.random() - 0.5) * A.half * 2.2, A.y + Math.random() * 9, player.pos.z + 4 + Math.random() * 18);
+    k.trails.emit(at, sdW.set((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, -60 - Math.random() * 30), { life: 0.35, size: 0.4 + Math.random() * 0.5, grow: 0.3, alpha: 1 });
+  }
+  for (let i = 0; i < 4 * width; i++) {
+    const at = sdU.set((Math.random() - 0.5) * A.half * 2, A.y + 0.1, lerp(-A.length / 2, front.z, Math.random()));
+    k.debris.emit(at, sdW.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, -14 - Math.random() * 10), { life: 0.7, size: 0.3, grow: 1.5, alpha: 0.8 });
+  }
   megaWarn('Stay behind cover!');
   // The rocks boil away, glowing, smoking, shedding sparks off their lit faces.
   for (const r of k.rocks) {
     if (!r.landed) continue;
     const left = Math.max(0, 1 - u);
-    r.mesh.scale.copy(r.size).multiplyScalar(left);
+    r.mesh.scale.copy(r.size).multiplyScalar(left * (0.97 + Math.random() * 0.06));
     r.mesh.visible = left > 0.01;
-    r.mesh.material.emissive.setRGB(1.6 * u, 0.4 * u, 0.25 * u);
-    if (left > 0.05 && Math.random() < 0.6) {
+    r.mesh.material.emissive.setRGB(1.6 * u + 0.4, 0.4 * u + 0.1, 0.25 * u + 0.1);
+    if (left > 0.05 && Math.random() < 0.8) {
       const face = r.mesh.position.clone().add(sdU.set((Math.random() - 0.5) * r.size.x * left, Math.random() * r.size.y * left, r.size.z * left * 0.8));
-      k.jets.emit(face, sdW.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, -3), { life: 0.4, size: 0.5, grow: 1.5, alpha: 0.9 });
-      if (Math.random() < 0.3) k.smoke.emit(face, sdW.set(0, 1.2, -1), { life: 1.4, size: 0.6, grow: 2, alpha: 0.4 });
+      k.jets.emit(face, sdW.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, -6), { life: 0.4, size: 0.6, grow: 1.5, alpha: 0.9 });
+      if (Math.random() < 0.4) k.smoke.emit(face, sdW.set(0, 1.2, -3), { life: 1.4, size: 0.7, grow: 2, alpha: 0.45 });
     }
   }
-  // Out in the open, it burns.
+  // Out in the open you can't see a thing, and it burns. Behind a rock it's only blinding.
+  const exposed = player.pos.z < t.pos.z + 1.5 && !megaShelter();
+  const want = width * (exposed ? 0.95 : 0.4);
+  fight.megaGlare = lerp(fight.megaGlare || 0, want, 1 - Math.exp(-dt * (want > (fight.megaGlare || 0) ? 14 : 5)));
   t.tick -= dt;
   if (t.tick <= 0 && width > 0.5) {
     t.tick = 0.2;
-    if (player.pos.z < t.pos.z + 1.5 && !megaShelter()) {
+    if (exposed) {
       hurtPlayer(M.dps * 0.2, 'teto');
-      impact('white', 40);
       burst(mikuChest(new THREE.Vector3()), 0xff86b0, 10, 4);
     }
   }
   if (t.t >= t.dur) {
+    // Gone: the clearing steaming, the circles shattering, her spent.
+    for (let i = 0; i < 40; i++) k.smoke.emit(sdU.set((Math.random() - 0.5) * A.half * 2, A.y + Math.random() * 2, lerp(-A.length / 2, front.z, Math.random())), sdW.set(0, 0.8 + Math.random(), 0), { life: 2.5, size: 1.2, grow: 2.5, alpha: 0.35 });
+    for (const c of G.circles) if (c.visible) burst(c.position.clone(), 0xff6a90, 14, 6);
     endMega();
     Object.assign(t, { state: 'cool', t: 0, dur: 2.8 });
     tetoSays('Haah... haah... still standing?!', 2);
@@ -2559,19 +2761,76 @@ function updateMega(dt, t) {
   return { mode: 'rail' };
 }
 
+// Where the mega laser gathers: between her drills, a little out in front of her.
+function megaOrb() {
+  tetoMuzzle(0, sdV); tetoMuzzle(1, sdW);
+  return new THREE.Vector3().lerpVectors(sdV, sdW, 0.5).add(sdU.set(0, -0.4, -0.9));
+}
+
+// The summoning circles: one burning into the snow under her, and a barrel of three in front of
+// the orb, opening one after another, each bigger than the last, wheeling opposite ways.
+// `p` is how far through the charge she is, `spin` how fast they turn, `glow` how bright.
+function megaCircles(p, orb, spin = 1, glow = 1) {
+  const G = showdownKit.mega, A = SHOWDOWN.arena;
+  G.spin = (G.spin || 0) + spin * 0.016;
+  const ground = G.circles[0];
+  const g = smooth(clamp(p / 0.3, 0, 1));
+  ground.visible = g > 0;
+  ground.position.set(fight.teto.pos.x, A.y + 0.05, fight.teto.pos.z);
+  ground.scale.setScalar(2 + g * 11);
+  ground.rotation.y = G.spin * 0.6;
+  ground.material.opacity = g * glow * (0.75 + Math.random() * 0.25);
+  for (let i = 1; i < G.circles.length; i++) {
+    const c = G.circles[i];
+    const a = smooth(clamp((p - 0.2 - i * 0.16) / 0.18, 0, 1));
+    c.visible = a > 0;
+    c.position.copy(orb).add(sdU.set(0, -0.15 * i, -1.6 - i * 2.6));
+    c.scale.setScalar((2.4 + i * 1.8) * (0.2 + a * 0.8) * (1 + (p >= 1 ? 0.15 * Math.sin(game.time * 30 + i) : 0)));
+    c.rotation.set(0, 0, G.spin * (i % 2 ? 1.6 : -1.2) * (1 + i * 0.3));
+    c.material.opacity = a * glow * (0.85 + Math.random() * 0.15);
+  }
+}
+
+// Pillars of light out of the cracks round her, shooting up at the slam and fading before she fires.
+function megaPillars(time, fade) {
+  const G = showdownKit.mega, A = SHOWDOWN.arena, t = fight.teto;
+  G.pillars.forEach((p, i) => {
+    const rise = smooth(clamp((time - i * 0.06) / 0.35, 0, 1));
+    p.visible = fade > 0.01 && rise > 0;
+    if (!p.visible) return;
+    // In a fan behind her and out to the sides, so they frame her rather than hide her.
+    const side = i % 2 ? 1 : -1, n = Math.floor(i / 2);
+    p.position.set(t.pos.x + side * (3.2 + n * 1.7), A.y, t.pos.z + 0.5 + n * 0.9 - (n === 0 ? 1.5 : 0));
+    const w = (0.2 + 0.08 * Math.sin(game.time * 20 + i)) * fade;
+    p.scale.set(w, 26 * rise, w);
+    p.material.uniforms.uTime.value = game.time;
+    p.material.uniforms.uOpacity.value = fade;
+  });
+}
+
 // The slam that brings the boulders up: each thrown out to its own spot down the clearing.
 function megaSlam(t) {
   const M = SHOWDOWN.moves.mega, k = showdownKit, A = SHOWDOWN.arena;
-  explode(t.pos.clone().add(sdU.set(0, 0.4, 0)), 0xff2d55, 1.6);
+  explode(t.pos.clone().add(sdU.set(0, 0.4, 0)), 0xff2d55, 2.4);
   Sfx.quake();
-  shockwave(t.pos, 16, 0xff4d86, 1);
+  Sfx.boom(1.2);
+  Sfx.snowSlam();
+  impact('invert', 80);
+  shockwave(t.pos, 20, 0xff4d86, 1);
+  shockwave(t.pos, 9, 0xffffff, 0.5);
+  fight.fovKick = 9;
   const crack = k.cracks[0];
   crack.position.copy(t.pos).setY(A.y + 0.03);
-  crack.scale.setScalar(10);
+  crack.scale.setScalar(18);
   crack.material.opacity = 1;
   crack.visible = true;
-  crack.userData.fade = 0.2;
-  player.shake = 0.8;
+  crack.userData.fade = 0.12;
+  player.shake = 1;
+  // Snow and rock thrown up all round her.
+  for (let i = 0; i < 60; i++) {
+    const a = Math.random() * Math.PI * 2, s = 4 + Math.random() * 8;
+    k.debris.emit(t.pos.clone().add(sdU.set(Math.cos(a) * 1.5, 0.3, Math.sin(a) * 1.5)), sdW.set(Math.cos(a) * s, 4 + Math.random() * 8, Math.sin(a) * s), { life: 1.2, size: 0.4 + Math.random() * 0.4, grow: 1.5, alpha: 0.9, fall: 12 });
+  }
   const spots = [];
   for (const r of k.rocks.slice(0, M.rocks)) {
     let x = 0, z = 0;
@@ -2642,6 +2901,9 @@ function endMega() {
   k.giant.visible = false;
   k.bigOrb.visible = false;
   for (const ring of k.finale.rings) ring.visible = false;
+  for (const bolt of k.finale.bolts) bolt.visible = false;
+  for (const m of [...k.mega.circles, ...k.mega.pillars, k.mega.fill]) m.visible = false;
+  document.body.classList.remove('mega-hush');
   fight.megaCd = SHOWDOWN.moves.mega.cooldown;
   if (fight.megaFog !== undefined) { fight.redFog = fight.megaFog; fight.megaFog = undefined; }
 }
