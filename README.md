@@ -63,7 +63,7 @@ Bring all ten parts and 10 planks to Varga's launch frame at the Breath and pres
 - **Her rages.** At two thirds and one third of her health she goes up on her jets, screams, blasts you back across the snow, and turns the sky redder. The music gets harder each time.
 - **If you lose**, you go back to your last save (or, with no save yet, the fight starts again from the top).
 
-At the end she flies up and burns the clearing from the sky. You wake under the snow, hurt, and have to limp all the way back down the clearing to the balloon on your own. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in and fly away, and that's the end of part one.
+At the end she goes up on her jets and rains bullets down while you leap clear, then the two of you lock beams in the air. Hers wins. You wake under the snow, hurt, and have to limp all the way back down the clearing to the balloon on your own. You can't climb in until you've built a fire and sat by it. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in and fly away, and that's the end of part one.
 
 ## The Ember Blade
 
