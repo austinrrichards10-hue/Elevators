@@ -85,11 +85,12 @@ function buildCity() {
   const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
   const add = (geo, mat, x, y, z, rect) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.receiveShadow = true; m.castShadow = true; G.add(m); return m; };
   // The ground: asphalt, the beach, and the sea beyond.
-  const asphalt = add(new THREE.PlaneGeometry(600, 400).rotateX(-Math.PI / 2), std(0x34363c), 0, 0, 40);
+  // The land runs on to the horizon behind the city; the beach runs along the whole coast.
+  const asphalt = add(new THREE.PlaneGeometry(3200, 1800).rotateX(-Math.PI / 2), std(0x34363c), 0, 0, 778);
   asphalt.castShadow = false;
-  const sand = add(new THREE.PlaneGeometry(600, 60).rotateX(-Math.PI / 2), std(0xe6d3a8, { roughness: 1 }), 0, 0.02, -146);
+  const sand = add(new THREE.PlaneGeometry(3200, 60).rotateX(-Math.PI / 2), std(0xe6d3a8, { roughness: 1 }), 0, 0.02, -146);
   sand.castShadow = false;
-  city.sea = new THREE.Mesh(new THREE.PlaneGeometry(2400, 900, 120, 40).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+  city.sea = new THREE.Mesh(new THREE.PlaneGeometry(3200, 1400, 140, 50).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uDay: { value: 1 } }]), fog: true, transparent: true,
     vertexShader: `uniform float uTime; varying float vH; varying vec3 vW;
       #include <fog_pars_vertex>
@@ -106,7 +107,7 @@ function buildCity() {
         #include <fog_fragment>
       }`,
   }));
-  city.sea.position.set(0, -0.15, -620);
+  city.sea.position.set(0, -0.15, -870);
   G.add(city.sea);
   // Pavements: a raised kerb round every block.
   const pave = std(0x8e9098);

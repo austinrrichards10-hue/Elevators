@@ -328,6 +328,9 @@ function startVoyage() {
   city.group.visible = true;
   world.setGroundHidden(true);
   const balloon = balloonModel.group.clone(true);
+  // The original is hidden as it leaves the crater; this copy is the one that crosses the sea.
+  balloon.visible = true;
+  balloon.position.set(0, 0, 0);
   city.group.add(balloon);
   const V = { t: 0, balloon, fired: {} };
   // The city keeps the time of day from here on.
@@ -349,6 +352,8 @@ function startVoyage() {
       const alt = lerp(70, 0, smooth(clamp((t - VOYAGE.descend) / (VOYAGE.land - VOYAGE.descend), 0, 1)));
       balloon.position.set(lerp(-60, CITY.landing.x, smooth(u)), alt, z);
       balloon.rotation.y = Math.sin(t * 0.2) * 0.2;
+      // Clear air over the sea, so the skyline shows from far out.
+      scene.fog.density = lerp(0.0009, 0.003, smooth(u));
       // Dawn coming up over the water as they go.
       dayNight.t = Math.floor(dayNight.t) + lerp(6.2, 8.5, u) / 24;
       updateSky(dt);

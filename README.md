@@ -35,13 +35,17 @@ On the map: click to set a waypoint, scroll to zoom, drag to pan, C to centre on
 - **Warmth** drains away from a fire, over about three and a half minutes. Frost creeps across the screen as it falls, and once it's gone the cold eats your health.
 - **The axe** is buried in a tree stump near where you land; it catches the light now and then.
 - **Trees** take a few chops to fell and topple away from you. Chop the fallen log to split it into planks.
-- **A campfire** costs 5 planks. Stand within a few metres of it to warm up, or sit by it (C) to heal quickly and save the game. You can't sit down in a fight: not for a few seconds after a blow either way, with a wolf charging or close by, or with a hare you're hunting still bolting nearby.
+- **A campfire** costs 5 planks. Pick it from the crafting list (Tab) and a ghost of it follows you, green where it fits and red where it doesn't; click to set it down, R to turn it, right click to cancel. Stand within a few metres of it to warm up, or sit by it (C) to heal quickly and save the game. You can't sit down in a fight: not for a few seconds after a blow either way, with a wolf charging or close by, or with a hare you're hunting still bolting nearby.
 - **Wolves** wander in packs. They'll stop and watch you if you come near, and bolt if you get too close. Once in a long while one charges with a growl; dodge, or hit it with an arrow or the axe to send it running.
 - **Wolves** have health now: two arrows or three axe blows. A wounded wolf can only limp, so it's easy to finish off. Skin a dead one for a pelt and meat.
 - **Wolves move like wolves**: their legs keep pace with the ground at any speed, they lean into turns and slow for tight ones instead of spinning on the spot, follow the slope they're on, steer round trees, and turn and slink off rather than backing away.
 - **Snow hares** are everywhere, still in their brown coats so they stand out on the snow. They freeze, then bolt in zig-zags, and they're easier to get close to if you creep or stand still with the bow up. A full draw drops one; a light shot wounds it and it limps away slowly. Take a hare for meat and a pelt, and cook raw meat at a fire.
 - **Gear** cuts how fast the cold gets to you: a parka, fur mittens and a hood crafted from hare pelts, and a wolf-pelt cloak. Snowshoes make you faster.
 - **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops. Teto is off its nose, still strapped into her torn-off seat and out cold. Nothing you do wakes her, but light a fire beside her and, once you've found another site or two, she'll come round and wander off on her own.
+- **Day and night.** A day lasts twelve minutes. The sun rises and sets, dusk glows gold, and the night is dark and full of stars. Nights are colder, and the wolves are bolder.
+- **Hunger and thirst** run down over time. Eat what you hunt and find (F picks the best thing). Sit by a fire to melt snow and drink. Let either run out and it hurts.
+- **A tent** (8 planks, 2 hare pelts) is somewhere to sleep through the night: press E by it. It keeps the wind off too.
+- **A log cabin** (40 planks) is a home of your own, with a stone hearth to warm up and save by. Inside, the top of the walls is cut away so you can see. Press B to decorate it with a bed (to sleep in), fur rugs, a table and chairs, lanterns, a bookshelf, a potted pine, a painting, a teal banner, a pile of furs, crates and stools; X picks the nearest thing up again. It all saves.
 - **If you die** a death screen lets you respawn at your last save (or, with no save yet, by your last campfire) or go back to the main menu.
 
 ## Finding your way
@@ -69,7 +73,18 @@ Bring all ten parts and 10 planks to Varga's launch frame at the Breath and pres
 - **Her rages.** At two thirds and one third of her health she goes up on her jets, screams, blasts you back across the snow, and turns the sky redder. The music gets harder each time.
 - **If you lose**, she gets her victory laugh, then the death screen lets you respawn at your last save or exit to the main menu (with no save yet, you can fight her again from the top).
 
-At the end she goes up on her jets and rains bullets down while you flip and cartwheel clear, then the two of you lock beams in the air. Hers wins. You wake under the snow, hurt, and have to limp all the way back down the clearing to the balloon on your own. You can't climb in until you've built a fire and sat by it. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in and fly away, and that's the end of part one.
+At the end she goes up on her jets and rains bullets down while you flip and cartwheel clear, then the two of you lock beams in the air. Hers wins. You wake under the snow, hurt, and have to limp all the way back down the clearing to the balloon on your own. You can't climb in until you've built a fire and sat by it. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in and fly away.
+
+## Part two: Tokyo
+
+The balloon carries her over the clouds and out across the sea for a long while, until a coastline appears: a city without end. She comes down on a beach at its edge with nothing, not even a single yen.
+
+- **The city**: a seaside promenade under cherry trees, a grid of streets under towers lit window by window at night, a station square with a giant screen, a shopping arcade hung with lanterns, live houses, the agency's office, and on the skyline to the north, the Tokyo Dome. People walk the pavements. Anyone with a star over their head has something to say (E to talk).
+- **Fame** is how far she's come, from Nobody to Superstar. It grows by helping people (a lost cat, a stuck kite, ramen deliveries, lost bouquets, a honeymoon photo), by busking in the square in the evening (three times a day), and above all on stage.
+- **The stage** is a rhythm game: notes fall down four lanes, charted from the song's own melody, and you hit D F J K as they cross the line. Your accuracy, combo and the crowd's hype decide the fame and pay. The songs are original, synthesized J-pop in the classic idol style (a sung-sounding lead stands in for a voice until Miku's own is added).
+- **The story**: Old Gen the fisherman, Haru the busker, Mrs. Ishida's capsule hotel. A scout from Starlight Production, an audition, and three girls who need a fourth: Aoi, Kotone and Mirai. You name the group. Stages from an 80-person basement to a TV show, a beach festival and a 10,000-seat arena, one show a day. And on every screen, another rookie climbing just as fast: Teto. You meet her backstage, and again on the beach the night before the Idol Summit at the Tokyo Dome.
+- **The Tokyo Dome**: the searchlights outside, the countdown, rising up through the stage into 55,000 penlights, lasers, fire and confetti, the song written for that one night. Then the lights go red. That's the end of part two: Miku and Teto face to face, the rematch about to begin.
+- **J** opens her phone in the city: fame, the next goal, and every stage with when its doors open. Rest in your capsule (later your apartment) to sleep until morning or until the evening.
 
 ## The Ember Blade
 
@@ -105,7 +120,15 @@ src/
   katana.js      The Ember Blade
   crimson.js     Teto by the wreck: checking on her, warming her, and her wandering off
   balloon.js     Varga's balloon: the launch frame, assembly, the launch and the ending
-  showdown.js    Teto's ambush at the balloon, the fight in the clearing, and the end of part one
+  showdown.js    Teto's ambush at the balloon and the fight in the clearing
+  daynight.js    Day and night, hunger and thirst, sleep
+  build.js       Placing campfires, tents and the log cabin, and decorating it
+  wolfmodel.js   The wolf, built in code, and its gaits
+  city.js        Tokyo: its streets, people and talking
+  idol.js        Part two's story: fame, quests, the group, Teto
+  stage.js       Busking and the stages, the voyage over the sea, the Tokyo Dome
+  songs.js       The idol songs, synthesized
+  rhythm.js      The rhythm game on stage
   save.js        Saving at campfires, and loading from the title screen
   moderator.js   Moderator menu: flying, no cold, give items, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig

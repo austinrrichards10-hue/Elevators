@@ -10,7 +10,7 @@
 // people. This is the road there.
 
 const FAME = {
-  levels: [0, 100, 300, 700, 1400, 2600, 4500, 7500, 12000],
+  levels: [0, 100, 300, 700, 1500, 3000, 5500, 9000, 15000],
   titles: ['Nobody', 'Street Singer', 'Local Face', 'Rising Busker', 'Indie Idol', 'Idol', 'Popular Idol', 'Star', 'Superstar'],
   buskPerDay: 3,
 };
@@ -21,9 +21,9 @@ const VENUES = {
   loft: { name: 'Shimokita Loft', kind: 'Live house', cap: 150, level: 4, fame: 400, song: 'sakura', difficulty: 0.45, door: { x: -66, z: 72 }, open: [17, 23.5], style: 'club' },
   rooftop: { name: 'Harbor Rooftop Stage', kind: 'Rooftop', cap: 320, level: 5, fame: 680, song: 'paperplane', difficulty: 0.5, door: { x: 96, z: -104 }, open: [16, 22], style: 'roof' },
   mall: { name: 'Sunshine Mall Stage', kind: 'Mall event', cap: 800, level: 5, fame: 920, song: 'sakura', difficulty: 0.55, door: { x: 2, z: 94 }, open: [11, 20], style: 'hall' },
-  tv: { name: 'Prime Beat (TV)', kind: 'Live TV', cap: 400, level: 6, fame: 1500, song: 'runway', difficulty: 0.6, door: { x: 64, z: -38 }, open: [18, 23], style: 'studio', once: true },
-  fest: { name: 'Harbor Summer Fest', kind: 'Festival', cap: 3000, level: 7, fame: 2600, song: 'runway', difficulty: 0.65, door: { x: 70, z: -140 }, open: [18, 23.5], style: 'fest' },
-  arena: { name: 'Ocean Arena', kind: 'Arena', cap: 10000, level: 8, fame: 3900, song: 'runway', difficulty: 0.72, door: { x: 118, z: 40 }, open: [17, 23], style: 'arena' },
+  tv: { name: 'Prime Beat (TV)', kind: 'Live TV', cap: 400, level: 6, fame: 1200, song: 'runway', difficulty: 0.6, door: { x: 64, z: -38 }, open: [18, 23], style: 'studio', once: true },
+  fest: { name: 'Harbor Summer Fest', kind: 'Festival', cap: 3000, level: 7, fame: 1700, song: 'runway', difficulty: 0.65, door: { x: 70, z: -140 }, open: [18, 23.5], style: 'fest' },
+  arena: { name: 'Ocean Arena', kind: 'Arena', cap: 10000, level: 8, fame: 2400, song: 'runway', difficulty: 0.72, door: { x: 118, z: 40 }, open: [17, 23], style: 'arena' },
 };
 
 const idol = {
@@ -740,7 +740,7 @@ function venueLabel(id) {
   const v = VENUES[id];
   if (fameLevel() < v.level) return `${v.name} · needs fame level ${v.level + 1}`;
   if (v.once && idol.gigs[id]) return `${v.name} · done`;
-  if (idol.gigDay[id] === dayNight.day) return `${v.name} · you've played here today`;
+  if (idol.gigDay[id] === dayNight.day || idol.lastShowDay === dayNight.day) return `${v.name} · one show a day: come back tomorrow`;
   const h = dayNight.hour();
   if (h < v.open[0] || h > v.open[1]) return `${v.name} · doors open ${String(v.open[0]).padStart(2, '0')}:00`;
   return `Press E to play ${v.name} (${v.kind}, ${v.cap.toLocaleString()} people)`;
@@ -751,9 +751,13 @@ function tryGig(id) {
   if (fameLevel() < v.level) { showNote(`They won't book us there yet. We need more fans.`); return; }
   if (v.once && idol.gigs[id]) return;
   if (idol.gigDay[id] === dayNight.day) { showNote('We already played here today. Tomorrow.'); return; }
+  // One show a day: the girls need to rehearse, travel, sleep.
+  if (idol.lastShowDay === dayNight.day) { showNote('We already did a show today. Kanade would kill us. Tomorrow.'); return; }
   const h = dayNight.hour();
   if (h < v.open[0] || h > v.open[1]) { showNote(`Doors open at ${v.open[0]}:00. I could rest until then.`); return; }
-  const go = () => startGig({ venue: id, ...v }, (res) => afterGig(id, res));
+  // A crowd that's seen you three times already cheers a little less: new stages pay better.
+  const fresh = 1 / (1 + 0.3 * Math.min(4, idol.gigs[id] || 0));
+  const go = () => startGig({ venue: id, ...v, fame: Math.round(v.fame * fresh) }, (res) => afterGig(id, res));
   if (id === 'tv') tetoBackstage(go);
   else go();
 }
@@ -762,6 +766,7 @@ function afterGig(id, res) {
   const v = VENUES[id];
   idol.gigs[id] = (idol.gigs[id] || 0) + 1;
   idol.gigDay[id] = dayNight.day;
+  idol.lastShowDay = dayNight.day;
   const lines = [];
   if (id === 'echo' && idol.gigs.echo === 1) lines.push(['Kotone', 'Eighty people! EIGHTY! I counted twice!'], ['Aoi', 'Seventy-nine. One was the barman.'], ['Mirai', 'They were singing along at the end. Did you hear?']);
   if (id === 'tv') lines.push(['Teto', 'Not bad, snowflake. Not bad at all.'], ['Teto', 'Now watch how it\'s done.'], ['(Miku)', 'Teto took the stage after us. The studio went red. Half the audience was on its feet before she sang a note.'], ['Kanade', 'Our single just went to number two. Behind hers.'], ['(Miku)', 'Number two. Behind Teto.']);
@@ -817,16 +822,13 @@ function currentObjective() {
   if (!has('room')) return 'Find Mrs. Ishida\'s capsule hotel by the shopping arcade';
   if (idol.flags.ramen !== undefined && idol.flags.ramen < 3) return `Deliver Taisho's ramen (${idol.flags.ramen}/3): Mr. Sato, Mrs. Kimura, Yuto`;
   if (idol.flags.ramen === 3 && !has('ramenDone')) return 'Go back to Taisho\'s ramen shop';
-  if (has('kite') && !idol.items.kite) return 'Get Kenta\'s kite out of a cherry tree on the promenade';
+  if (has('kite') && !idol.items.kite && !has('kentaDone')) return 'Get Kenta\'s kite out of a cherry tree on the promenade';
   if (idol.items.kite && !has('kentaDone')) return 'Give Kenta his kite, by the fountain';
   if (has('flowers') && !has('flowersDone')) return flowersHeld() >= 4 ? 'Take the bouquets back to Sakura\'s flower stall' : `Find Sakura's bouquets in blue paper (${flowersHeld()}/4)`;
   if (has('scoutSoon') && !has('scouted')) return 'Talk to the woman in the dark suit in the square';
   if (has('scouted') && !has('auditioned')) return 'Audition at Starlight Production, east of the square, in the evening';
   if (has('auditioned') && !has('joined')) return 'Talk to President Hoshino';
   if (!has('joined')) return fameLevel() < 3 ? `Busk in the square in the evening, help people around town (fame level ${fameLevel() + 1}/4)` : 'Busk in the square in the evening';
-  if (has('charm') && !idol.items.charm) return 'Find Kotone\'s little cat charm in the shopping arcade';
-  if (idol.items.charm && !has('charmDone')) return 'Give Kotone her charm';
-  if (has('lyrics') && !has('lyricsDone')) return inspirationHeld() >= 3 ? 'Tell Mirai what you found' : `Find three places that feel like something, for Mirai's lyrics (${inspirationHeld()}/3)`;
   if (has('tvBooked') && !idol.gigs.tv) return 'Perform on Prime Beat (TV studio, east of the square, 18:00-23:00)';
   if (has('domeReady')) return 'Take the train to the Tokyo Dome from the station square';
   if (has('domeAnnounced')) {
@@ -835,10 +837,16 @@ function currentObjective() {
     if (!has('tetoBeach')) return has('beachCall') ? 'Walk down to the beach, to the old balloon' : 'Rest until the evening. Tomorrow is the Dome.';
     return 'Go and see President Hoshino';
   }
+  if (has('charm') && !idol.items.charm && !has('charmDone')) return 'Find Kotone\'s little cat charm in the shopping arcade';
+  if (idol.items.charm && !has('charmDone')) return 'Give Kotone her charm';
+  if (has('lyrics') && !has('lyricsDone')) return inspirationHeld() >= 3 ? 'Tell Mirai what you found' : `Find three places that feel like something, for Mirai's lyrics (${inspirationHeld()}/3)`;
   if (fameLevel() >= 8 && idol.gigs.arena) return 'Go and see President Hoshino';
-  const next = Object.entries(VENUES).find(([id, v]) => fameLevel() >= v.level && !(v.once && idol.gigs[id]) && id !== 'tv');
-  return `Grow ${G()}'s fame: play stages (J for the schedule), busk, help people (fame level ${fameLevel() + 1})`;
-  void next;
+  // What's next to aim for: the next stage that's still out of reach.
+  const locked = Object.entries(VENUES).find(([id, v]) => fameLevel() < v.level && id !== 'tv');
+  const needFor = (v) => FAME.levels[v.level].toLocaleString();
+  if (locked) return `One show a day (J for the schedule). Reach ${needFor(locked[1])} fame to play ${locked[1].name}`;
+  if (!idol.gigs.arena) return 'Play the Ocean Arena (J for the schedule)';
+  return `Grow ${G()}'s fame: one show a day, busk, help people (${idol.fame.toLocaleString()} fame)`;
 }
 
 function setObjective() {
@@ -886,7 +894,7 @@ function idolScreen() {
 }
 
 /* ---------- Saving ---------- */
-function saveIdol() { return { fame: idol.fame, yen: idol.yen, flags: idol.flags, groupName: idol.groupName, gigs: idol.gigs, gigDay: idol.gigDay, items: idol.items, buskDay: idol.buskDay, buskCount: idol.buskCount }; }
+function saveIdol() { return { fame: idol.fame, yen: idol.yen, flags: idol.flags, groupName: idol.groupName, gigs: idol.gigs, gigDay: idol.gigDay, items: idol.items, buskDay: idol.buskDay, buskCount: idol.buskCount, lastShowDay: idol.lastShowDay }; }
 function loadIdol(d) { if (!d) return; Object.assign(idol, d); idol.objective = ''; }
 function resetIdol() {
   Object.assign(idol, { fame: 0, yen: 0, chapter: 'arrival', flags: {}, groupName: 'SNOWDROP', gigs: {}, gigDay: {}, buskDay: 0, buskCount: 0, items: {}, objective: '', logOpen: false });

@@ -42,6 +42,10 @@ const MOD_ACTIONS = {
   balloon: ['Give balloon parts and planks', () => giveBalloonParts()],
   pelts: ['Give 5 wolf and 10 hare pelts', () => { packAdd('wolfpelt', 5); packAdd('pelt', 10); }],
   boss: ['Jump to Teto\'s ambush', () => { closeMod(); if (game.state === 'paused') setPaused(false); showdownJumpTo(); }],
+  voyage: ['Fly to Tokyo (part two)', () => { closeMod(); if (game.state === 'paused') setPaused(false); if (!cityActive()) { showdown.stage = 'leaving'; startVoyage(); } }],
+  fame: ['+1,000 fame', () => { if (cityActive()) addFame(1000, 'moderator'); }],
+  evening: ['Skip to the evening', () => { dayNight.t = Math.floor(dayNight.t) + (dayNight.hour() < 18 ? 18.5 : 42.5) / 24; dayNight.day = Math.floor(dayNight.t) + 1; }],
+  dome: ['Jump to the Tokyo Dome', () => { closeMod(); if (game.state === 'paused') setPaused(false); if (cityActive()) { flag('joined'); goToDome(); } }],
 };
 
 let modReturn = null;
@@ -68,6 +72,7 @@ function renderMod() {
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>
     ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['stamina', 'arrows']))}
     ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire', 'items', 'reveal', 'katana', 'crimson', 'balloon', 'pelts', 'boss']))}
+    ${section('Part two', modButtons(['voyage', 'fame', 'evening', 'dome']))}
     ${section('Move speed', chips('speed', MOD_SPEEDS, mod.speed, (v) => `${v}×`))}
     ${section('Game speed', chips('time', MOD_TIMES, mod.timeScale, (v) => `${v}×`))}
     ${section('Teleport', `<div class="chips">${Object.keys(MOD_TELEPORTS).map((name) => `<button data-teleport="${name}">${name}</button>`).join('')}</div>`)}
