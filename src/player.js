@@ -640,7 +640,12 @@ function createAvatar(scene, skinId) {
         v2.copy(directions[Math.min(chain.count - 1, i + 1)]).applyQuaternion(q2);
         q1.setFromUnitVectors(v2, v1).multiply(q2);
         // Cut off (showdown.js), the tails shrink away to their roots and leave her hair short.
-        if (avatar.tailsCut) bones[firstBone + i].matrixWorld.compose(chain.pos[0], q1, v3.set(0.001, 0.001, 0.001));
+        // Growing back (idol.js), only the first part of each tail is there: the bones past
+        // its length fold up onto the last one that is.
+        const length = avatar.tailsCut ? 0 : avatar.tailLength === undefined ? 1 : avatar.tailLength;
+        const keep = length * (chain.count - 1);
+        if (length <= 0.001) bones[firstBone + i].matrixWorld.compose(chain.pos[0], q1, v3.set(0.001, 0.001, 0.001));
+        else if (i > keep + 0.001) bones[firstBone + i].matrixWorld.compose(chain.pos[Math.floor(keep)], q1, v3.set(0.001, 0.001, 0.001));
         else bones[firstBone + i].matrixWorld.compose(here, q1, v3.set(1, 1, 1));
       }
     }

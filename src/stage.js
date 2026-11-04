@@ -121,6 +121,7 @@ function buildCrowdIn(parent, n) {
 // Singing out in the city: a crowd gathers round her, Haru plays (once she's met him).
 function startBusk(opts) {
   if (opts.choose && !opts.chosen) { chooseSong({ name: opts.title }, (song) => startBusk({ ...opts, song, chosen: true, difficulty: (opts.difficulty || 0.3) + SONGS[song].stars * 0.05 })); return; }
+  if (idol.buffs && idol.buffs.crowd) { opts = { ...opts, crowd: Math.round(opts.crowd * 1.6), fame: Math.round((opts.fame || 0) * 1.3) }; idol.buffs.crowd = false; }
   const at = opts.where === 'beach' ? { x: -26, z: -142 } : opts.where === 'park' ? { x: -6, z: 64 } : { x: 2, z: -20 };
   const set = { g: new THREE.Group(), crowd: null, beams: [], lights: null, open: true, busk: true };
   city.group.add(set.g);
@@ -128,7 +129,8 @@ function startBusk(opts) {
   for (let i = 0; i < opts.crowd; i++) {
     const p = addPerson(set.crowd, randomLook());
     const a = Math.PI + (i / opts.crowd - 0.5) * 2.2, r = 3.2 + (i % 3) * 0.9 + Math.random() * 0.4;
-    p.x = at.x + Math.sin(a) * r; p.z = at.z + Math.cos(a) * r + 2;
+    // A ring in front of her, leaving her a little stage of pavement.
+    p.x = at.x + Math.sin(a) * r; p.z = at.z + Math.cos(a) * r - 0.6;
     p.yaw = Math.atan2(at.x - p.x, at.z - p.z);
     p.scale = 0.0001; p.arrive = i * 0.35;
   }
@@ -151,11 +153,14 @@ function runPerformance(opts, after) {
   const back = { x: player.pos.x, z: player.pos.z, yaw: player.yaw };
   const set = opts.set;
   player.pos.set(opts.at.x, CITY.y + (set.busk ? 0 : 1.0), opts.at.z);
-  player.bodyYaw = player.yaw = opts.at.yaw + Math.PI;
+  // Facing the crowd (yaw 0 faces +z; the crowd is always on the -z side of her).
+  player.bodyYaw = player.yaw = opts.at.yaw;
   Sfx.playMusic(null);
   const P = { t: 0, phase: 'intro', res: null, shot: 0, beat: 0, flash: 0, hype: 0.5, set, opts, after, back, energy: 0 };
   show.active = P;
   show.lastSong = opts.song;
+  // On an indoor stage the city outside needn't be drawn.
+  if (set.S && !set.S.open) setStreetVisible(false);
   document.body.classList.add('on-stage');
   caption(`${opts.name}${opts.kind === 'gig' ? ` · ${(opts.cap || 0).toLocaleString()} people` : ''}`, 'place');
   Sfx.cheer(set.busk ? 0.4 : 1);
@@ -269,9 +274,9 @@ function mikuDance(dt, beat, energy, bow = false) {
 function stageCamera(dt, P) {
   const at = player.pos, cut = Math.floor(P.beat / 8) % 5, set = P.set;
   const look = cityP.set(at.x, at.y + 1.3, at.z);
-  if (P.phase === 'intro') camera.position.set(at.x + Math.sin(P.t * 0.3) * 2, at.y + 1.6, at.z - 8 + P.t * 1.2);
+  if (P.phase === 'intro') camera.position.set(at.x + Math.sin(P.t * 0.3) * 2, at.y + (set.busk ? 2.9 : 1.6), at.z - 8 + P.t * 1.2);
   else if (P.phase === 'outro') camera.position.set(at.x, at.y + 1.5, at.z - 4.5);
-  else if (cut === 0) camera.position.set(at.x, at.y + 2, at.z - (set.busk ? 6 : 10));
+  else if (cut === 0) camera.position.set(at.x + (set.busk ? 1.4 : 0), at.y + (set.busk ? 3.4 : 2), at.z - (set.busk ? 7.5 : 10));
   else if (cut === 1) { camera.position.set(at.x + 0.8, at.y + 1.1, at.z - 2.4); look.y -= 0.1; }
   else if (cut === 2) camera.position.set(at.x + 6, at.y + 1.6, at.z - 2);
   else if (cut === 3) camera.position.set(at.x + Math.sin(P.beat * 0.1) * 8, at.y + 7, at.z - 9);
@@ -319,6 +324,7 @@ function finishPerformance() {
   avatar.simulate(1 / 60);
   endScene();
   Sfx.playMusic(cityMusic());
+  setStreetVisible(!city.inside);
   if (P.fame) { addFame(P.fame, P.opts.kind === 'gig' ? P.opts.name : 'busking'); addYen(P.yen); }
   idol.played = idol.played || {};
   idol.played[P.opts.song] = (idol.played[P.opts.song] || 0) + 1;
@@ -412,7 +418,7 @@ function goToDome() {
   $('sleep-fade').classList.add('on');
   setTimeout(() => $('sleep-fade').classList.remove('on'), 900);
   player.pos.set(DOME_AT.x, CITY.y + 1.2, DOME_AT.z + set.stageZ);
-  player.yaw = player.bodyYaw = 0;
+  player.yaw = player.bodyYaw = Math.PI; // facing the fifty-five thousand
   playScene({ update: (dt) => updateDome(dt) });
 }
 

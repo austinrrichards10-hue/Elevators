@@ -60,7 +60,11 @@ function startRhythm(opts) {
   const board = el.querySelector('.rh-board');
   for (const old of board.querySelectorAll('.rh-note')) old.remove();
   const music = playSong(opts.song, { level: opts.level || 0.85 });
-  rhythm.active = { ...opts, notes, music, next: 0, score: 0, combo: 0, maxCombo: 0, counts: { perfect: 0, great: 0, good: 0, miss: 0 }, hype: 0.5, board, el, judgeT: 0, held: [false, false, false, false], ended: false };
+  const B = (typeof idol !== "undefined" && idol.buffs) || {};
+  rhythm.active = { win: B.window ? 1.3 : 1, ...opts, notes, music, next: 0, score: 0, combo: 0, maxCombo: 0, counts: { perfect: 0, great: 0, good: 0, miss: 0 }, hype: 0.5, board, el, judgeT: 0, held: [false, false, false, false], ended: false };
+  // Shop treats: lozenges warm the crowd up, an energy drink makes the timing kinder.
+  if (B.hype) rhythm.active.hype = 0.68;
+  B.hype = false; B.window = false;
   return rhythm.active;
 }
 
@@ -75,17 +79,18 @@ function stopRhythm() {
 
 function rhythmJudge(r, lane) {
   const now = r.music.time();
-  let best = null, bestD = RHYTHM.window.good;
+  const w = r.win || 1;
+  let best = null, bestD = RHYTHM.window.good * w;
   for (let i = r.next; i < r.notes.length; i++) {
     const n = r.notes[i];
-    if (n.t - now > RHYTHM.window.good) break;
+    if (n.t - now > RHYTHM.window.good * w) break;
     if (n.hit || n.lane !== lane) continue;
     const d = Math.abs(n.t - now);
     if (d < bestD) { best = n; bestD = d; }
   }
   if (!best) return;
   const W = RHYTHM.window;
-  const j = bestD < W.perfect ? 'perfect' : bestD < W.great ? 'great' : 'good';
+  const j = bestD < W.perfect * w ? 'perfect' : bestD < W.great * w ? 'great' : 'good';
   scoreNote(r, best, j);
 }
 
@@ -117,7 +122,7 @@ function updateRhythm() {
   const r = rhythm.active;
   if (!r || r.ended) return;
   const now = r.music.time();
-  const h = r.board.clientHeight, lineY = h - 70;
+  const h = r.board.clientHeight, lineY = h - 61.5;
   // Notes come into view, fall, and are missed if they pass the line unhit.
   for (let i = r.next; i < r.notes.length; i++) {
     const n = r.notes[i];
@@ -129,8 +134,8 @@ function updateRhythm() {
       n.el.className = `rh-note lane${n.lane}`;
       r.board.querySelector(`[data-lane="${n.lane}"]`).appendChild(n.el);
     }
-    n.el.style.transform = `translateY(${lineY * (1 - ahead / RHYTHM.travel) - 10}px)`;
-    if (ahead < -RHYTHM.window.good) scoreNote(r, n, 'miss');
+    n.el.style.transform = `translateY(${lineY * (1 - ahead / RHYTHM.travel) - 9}px)`;
+    if (ahead < -RHYTHM.window.good * (r.win || 1)) scoreNote(r, n, 'miss');
   }
   while (r.next < r.notes.length && r.notes[r.next].hit) r.next++;
   const S = r.el;

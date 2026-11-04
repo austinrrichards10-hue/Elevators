@@ -107,6 +107,7 @@ function buildCityDecor(G, rand, rect) {
     if (streets.some((sz) => Math.abs(zz - sz) < 7)) continue;
     if (Math.abs(ax + 60) < 1 && zz > -46 && zz < 96) continue; // the arcade has lanterns instead
     if (Math.abs(x) < 28 && zz > -48 && zz < -4) continue; // the square
+    if (lotTaken(x - 0.6, x + 0.6, zz - 0.6, zz + 0.6)) continue;
     (ax === 0 && zz > 0 ? sakuraTrees : greenTrees).push([x, 0.14, zz, rand() * 6, 0.7 + rand() * 0.25]);
     rect(x - 0.25, x + 0.25, zz - 0.25, zz + 0.25);
   }
@@ -179,7 +180,7 @@ function buildCityDecor(G, rand, rect) {
   const vendFront = new THREE.MeshStandardMaterial({ map: vendTex, emissiveMap: vendTex, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.5 });
   const vendBody = std(0xe4e8ee, { roughness: 0.5, metalness: 0.2 });
   decor.vendFront = vendFront;
-  for (const [x, z, r] of [[-6, -48.4, 0], [24.4, -8, -Math.PI / 2], [-66.4, 40, Math.PI / 2], [64, -60.4, 0], [6, 52.4, 0], [-24, 98.4, 0]]) {
+  for (const [x, z, r] of [[-6, -48.4, 0], [24.4, -8, -Math.PI / 2], [-66.4, 40, Math.PI / 2], [88, -55, 0], [6, 52.4, 0], [-24, 98.4, 0]]) {
     const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = r; G.add(g);
     const body = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.85, 0.75).translate(0, 0.93, 0), [vendBody, vendBody, vendBody, vendBody, vendFront, vendBody]);
     body.castShadow = true; g.add(body);

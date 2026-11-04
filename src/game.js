@@ -643,7 +643,7 @@ function startDodge() {
   // Down in the fight, Space scrambles her clear instead (showdown.js).
   if (showdownMash()) return;
   if (survival.sitting) { standUp(); return; }
-  if (player.dodge || player.stamina < 25) return;
+  if (player.dodge || (player.stamina < 25 && !cityActive())) return;
   player.stamina -= 25;
   cancelDraw();
   const dir = moveInput();
@@ -687,7 +687,7 @@ function updatePlayer(dt) {
   const sprinting = (keys.ShiftLeft || keys.ShiftRight) && moving && player.stamina > 1 && !ads && !player.dodge && !mod.fly;
   player.sprinting = sprinting;
   player.runBlend += ((sprinting ? 1 : 0) - player.runBlend) * (1 - Math.exp(-(sprinting ? 7 : 10) * dt));
-  player.stamina = mod.infiniteStamina ? 100 : clamp(player.stamina + (sprinting ? -24 : 16) * dt, 0, 100);
+  player.stamina = mod.infiniteStamina || cityActive() ? 100 : clamp(player.stamina + (sprinting ? -24 : 16) * dt, 0, 100);
 
   if (mod.fly) {
     flyPlayer(dt, move, moving);
@@ -727,7 +727,7 @@ function updatePlayer(dt) {
   if (!mod.noclip && !arenaActive() && !cityActive()) pushOutOfColliders(player.pos, 0.34);
 
   const r = Math.hypot(player.pos.x, player.pos.z);
-  if (r > WORLD_RADIUS) {
+  if (r > WORLD_RADIUS && !(cityActive() && city.inside)) {
     player.pos.x *= WORLD_RADIUS / r;
     player.pos.z *= WORLD_RADIUS / r;
   }
@@ -1021,6 +1021,7 @@ function updateCamera(dt) {
     camera.position.y += (Math.random() - 0.5) * player.shake * 0.7;
   }
   camera.lookAt(camera.position.x + s * cp, camera.position.y + sp, camera.position.z + c * cp);
+  if (city.active && city.inside) interiorCamera();
 
   // Right click zooms in further than drawing alone, and binoculars much further.
   const fov = binocularsUp() ? 13 : aiming ? 42 : lerp(58, 50, a);

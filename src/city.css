@@ -92,13 +92,7 @@ body:not(.in-city) #nav-arrow { display: none; }
 .city-legend i.star { background: #f0b020; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); border-radius: 0; }
 
 /* The stage, upgraded: a highway leaning away, bursts on every hit, karaoke words. */
-#rhythm .rh-board { transform: translateX(-50%) perspective(700px) rotateX(28deg); transform-origin: 50% 100%; border-radius: 14px 14px 0 0; box-shadow: 0 0 40px rgba(57, 213, 200, .15) inset; }
-#rhythm .rh-board.fever { box-shadow: 0 0 50px rgba(255, 138, 184, .5) inset, 0 0 30px rgba(57, 213, 200, .5); animation: fever 0.5s ease-in-out infinite alternate; }
 @keyframes fever { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(40deg); } }
-#rhythm .rh-lane:nth-child(odd) { background: linear-gradient(180deg, transparent, rgba(57, 213, 200, .06)); }
-#rhythm .rh-lane:nth-child(even) { background: linear-gradient(180deg, transparent, rgba(255, 138, 184, .06)); }
-#rhythm .rh-note { height: 22px; border-radius: 11px; box-shadow: 0 0 14px #39d5c8, 0 0 4px #fff inset; }
-#rhythm .rh-note::after { content: ''; position: absolute; left: 20%; right: 20%; top: 4px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .8); }
 #rhythm .rh-burst { position: absolute; left: 50%; bottom: 50px; width: 90px; height: 90px; margin-left: -45px; border-radius: 50%; pointer-events: none; animation: burst .4s ease-out forwards; background: radial-gradient(circle, rgba(255, 255, 255, .95), rgba(57, 213, 200, .6) 35%, transparent 70%); }
 #rhythm .rh-burst.great { background: radial-gradient(circle, rgba(255, 255, 255, .9), rgba(255, 211, 106, .55) 35%, transparent 70%); }
 #rhythm .rh-burst.good { background: radial-gradient(circle, rgba(255, 255, 255, .6), rgba(200, 200, 220, .4) 35%, transparent 70%); }
@@ -120,3 +114,32 @@ body:not(.in-city) #nav-arrow { display: none; }
 #setlist li .new { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #ff8ab8; color: #2a0a18; font-size: 10px; font-weight: 700; vertical-align: 2px; }
 #setlist .hint { margin: 12px 0 0; font-size: 12px; opacity: .65; }
 body.in-city #book-map .map-tools {display:none !important}
+
+/* ---------- The stage board: flat, clear, a lane colour each ---------- */
+#rhythm .rh-board { bottom: 18px; height: 64vh; width: min(380px, 82vw); gap: 0; padding: 0 8px; border-radius: 18px; transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(6, 10, 24, 0) 0%, rgba(6, 10, 24, .55) 30%, rgba(6, 10, 24, .78) 100%);
+  border: 1px solid rgba(180, 255, 242, .14); box-shadow: 0 10px 40px rgba(0, 0, 0, .45); transition: box-shadow .3s, border-color .3s; }
+#rhythm .rh-board.fever { border-color: rgba(255, 138, 184, .7); box-shadow: 0 0 0 2px rgba(255, 138, 184, .25), 0 0 40px rgba(255, 138, 184, .45), 0 10px 40px rgba(0, 0, 0, .45); }
+#rhythm .rh-lane { border: 0; margin: 0 3px; border-radius: 10px; background: linear-gradient(180deg, transparent, var(--lane-dim) 85%); }
+#rhythm .rh-lane[data-lane="0"] { --lane: #39d5c8; --lane-dim: rgba(57, 213, 200, .1); }
+#rhythm .rh-lane[data-lane="1"] { --lane: #ff8ab8; --lane-dim: rgba(255, 138, 184, .1); }
+#rhythm .rh-lane[data-lane="2"] { --lane: #ffd36a; --lane-dim: rgba(255, 211, 106, .1); }
+#rhythm .rh-lane[data-lane="3"] { --lane: #b48aff; --lane-dim: rgba(180, 138, 255, .1); }
+#rhythm .rh-key { bottom: 14px; height: 40px; left: 4%; right: 4%; border-radius: 12px; border: 2px solid var(--lane); background: rgba(10, 14, 30, .6); color: var(--lane); font-size: 15px; transition: transform .06s, background .06s; }
+#rhythm .rh-key.down { background: var(--lane); color: #0a0e1e; transform: scale(.92); box-shadow: 0 0 18px var(--lane); }
+#rhythm .rh-line { bottom: 60px; height: 3px; left: 6px; right: 6px; border-radius: 2px; background: linear-gradient(90deg, #39d5c8, #ff8ab8, #ffd36a, #b48aff); box-shadow: 0 0 14px rgba(255, 255, 255, .5); }
+#rhythm .rh-note, #rhythm .rh-note.lane1, #rhythm .rh-note.lane2 { left: 6%; right: 6%; height: 18px; border-radius: 9px; background: linear-gradient(180deg, #ffffff 0%, var(--lane) 55%); box-shadow: 0 0 12px var(--lane), inset 0 -2px 0 rgba(0, 0, 0, .2); }
+#rhythm .rh-burst { bottom: 26px; width: 80px; height: 80px; margin-left: -40px; background: radial-gradient(circle, #fff, var(--lane) 35%, transparent 70%); }
+#rhythm .rh-burst.great { background: radial-gradient(circle, #fff, var(--lane) 30%, transparent 62%); }
+#rhythm .rh-burst.good { background: radial-gradient(circle, rgba(255, 255, 255, .7), transparent 55%); }
+#rhythm .rh-judge { bottom: calc(18px + 64vh * .42); font-size: 34px; font-style: italic; }
+#rhythm .rh-combo { bottom: calc(18px + 64vh * .42 - 34px); font-size: 22px; font-weight: 800; color: #fff; }
+#rhythm .rh-head { top: 14px; padding: 8px 20px; border-radius: 999px; background: rgba(6, 10, 24, .6); border: 1px solid rgba(180, 255, 242, .2); }
+#rhythm .rh-progress { top: 60px; height: 5px; }
+#rhythm .rh-progress i { background: linear-gradient(90deg, #39d5c8, #ff8ab8); }
+#rhythm .rh-hype { left: calc(50% - min(190px, 41vw) - 46px); top: auto; bottom: 30px; transform: none; }
+#rhythm .rh-hype div { height: 220px; width: 12px; border: 1px solid rgba(255, 255, 255, .2); }
+#rhythm .rh-lyrics { top: 84px; padding: 12px 22px; border-radius: 18px; background: rgba(6, 10, 24, .45); width: min(860px, 92vw); }
+#rhythm .rh-jp:empty, #rhythm .rh-lyrics:has(.rh-jp:empty) { display: none; }
+#rhythm .rh-jp { font-size: clamp(22px, 2.8vw, 34px); color: rgba(255, 255, 255, .5); }
+#rhythm .rh-jp span.sung { color: #fff; text-shadow: 0 0 14px #39d5c8, 0 0 4px #39d5c8, 0 2px 6px #000; }

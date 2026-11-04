@@ -84,11 +84,32 @@ The balloon carries her over the clouds and out across the sea for a long while,
 - **Fame** is how far she's come, from Nobody to Superstar. It grows by helping people (a lost cat, a stuck kite, ramen deliveries, lost bouquets, a honeymoon photo), by busking in the square in the evening (three times a day), and above all on stage.
 - **The buildings** are drawn by a shader rather than textures: glass curtain-wall towers that reflect the sky, offices with ribbon windows, apartment blocks with balconies, curtains and air-conditioner units, tiled mid-rises with framed windows. They have cornices, soft shadows at the street and the corners, shopfronts with striped awnings at street level, and at night windows lit one by one (warm lamps, cool lights, the odd television). The streets are textured asphalt and paving, the parks are grass, and the cherry trees are built branch by branch with clusters of blossom and petals on the ground beneath them.
 - **Finding your way**: wherever the story wants you next has a column of light over it, and an arrow at the top of the screen shows the way and how far it is. In the city, **M** opens a map of Tokyo with the stages (pink when you can play them), the parks, everyone with something to say (gold stars), the next goal and you. The journal and the balloon parts leave her pack once she's in the city.
-- **The stage** is a rhythm game: notes fall down four lanes, charted from the song's own melody, and you hit D F J K as they cross the line. Your accuracy, combo and the crowd's hype decide the fame and pay. Before every busk and gig you choose the song from a setlist (1-9, or Enter for the one you've played least). There are eight songs to unlock as she grows (Snowdrop Heart, Summer Ramune, Paper Plane Promise, Neon Sakura Drive, Pastel Rain, Harajuku Heartbeat, Midnight Train Home, Starlight Runway), plus one for the Dome. Each has real Japanese lyrics, shown karaoke-style with the English under them. Miku sings them in a synthesized vocaloid-style voice built from vowel formants, with consonants, a little scoop into each note, vibrato and an echo. When the crowd's hype is high the board goes into fever.
+- **The stage** is a rhythm game: notes fall down four lanes, charted from the song's own melody, and you hit D F J K as they cross the line. Your accuracy, combo and the crowd's hype decide the fame and pay. Before every busk and gig you choose the song from a setlist (1-9, or Enter for the one you've played least). There are eight songs to unlock as she grows (Snowdrop Heart, Summer Ramune, Paper Plane Promise, Neon Sakura Drive, Pastel Rain, Harajuku Heartbeat, Midnight Train Home, Starlight Runway), plus one for the Dome. Every song has its own sound, chords and melodies:
+  - Snowdrop Heart: classic idol pop.
+  - Summer Ramune: ska with offbeat guitars, horns and marimba.
+  - Paper Plane Promise: a piano ballad.
+  - Neon Sakura Drive: synthwave.
+  - Pastel Rain: swung city pop on electric piano.
+  - Harajuku Heartbeat: chiptune denpa.
+  - Midnight Train Home: lo-fi.
+  - Starlight Runway: arena rock.
+  - Crown of Light: an orchestral epic with choir.
+  - Teto's Crimson Drill Parade: trap-metal.
+
+  Each song has Japanese lyrics, sung and shown karaoke-style with the English under them. Every lyric line is fitted to the melody so each syllable gets its own note.
+
+  Miku's voice is synthesized harmonic by harmonic from the formants of each vowel, in a real singing range. Consonants are placed just ahead of the beat: hiss for s and sh, bursts for k, t and p, a hum for m and n, glides for y and w. Notes glide into each other with vibrato, Vocaloid-style. The group sings harmony, and there are choir "aah"s and chopped vocal riffs. The mix keeps the voice on top of the band.
+
+  The note board is flat, with a colour for each lane, and glows pink in fever. Miku faces her audience.
+- **Buildings you can go into**: Mrs. Ishida's capsule hotel (the front desk, rows of capsules, capsule eleven to rest in), Starlight Production (reception, President Hoshino's desk, a mirrored practice corner), Miku's apartment (a bed to rest in, a laptop for StarTube, a window on the city), and a gas station with a 24-hour konbini.
+  - **The konbini** sells snacks and things for the stage: throat lozenges warm the crowd up, an energy drink makes the timing kinder, a pack of penlights brings a bigger busking crowd, and Idol Weekly gives a little fame once a day.
+  - **Finding people indoors**: the guide arrow, the map and the phone send you to the right door when the person you need is inside.
+- **In the city** Miku has no bow or axe, sprinting costs no stamina, and nobody stands about in the road.
+- **Her hair**, cut short in the fight with Teto, grows back as you play and as she rises, and it's full again by the rematch.
 - **The music in the city** follows the clock: bright pop in the daytime, a late-night piano after dark.
 - **The story**: Old Gen the fisherman, Haru the busker, Mrs. Ishida's capsule hotel. A scout from Starlight Production, an audition, and three girls who need a fourth: Aoi, Kotone and Mirai. You name the group. Stages from an 80-person basement to a TV show, a beach festival and a 10,000-seat arena, one show a day. And on every screen, another rookie climbing just as fast: Teto. You meet her backstage, and again on the beach the night before the Idol Summit at the Tokyo Dome.
 - **The Tokyo Dome**: the searchlights outside, the countdown, rising up through the stage under the white cable-net roof. Around 12,000 fans fill the field and the tiers of the stands, each one jumping on the beat with a penlight that sways in the verses, pumps in the choruses and rolls round the bowl in a wave. The colours follow the song: teal for her, a rainbow running round the stands, white sparkles in the bridge, gold for the last chorus. Above them a ring of moving lights and a lighting truss, laser fans off the stage, followspots from the back of the bowl, an LED ribbon round the upper deck. A giant LED wall shows the words she's singing, and screens either side show her live from a camera on stage. There are flame cannons on every chorus, a waterfall of sparks and confetti for the finale, and a camera down among the crowd. Then the lights go red and half the Dome turns Teto's colour. That's the end of part two: Miku and Teto face to face, the rematch about to begin.
-- **The phone (P in the city)**, with seven apps:
+- **The phone (P in the city)**: Old Gen gives it to her when they first meet, an old one of his grandson's. It has seven apps:
   - **Messages**: everyone she's met texts her as the story moves (a banner pops up when someone does), and you can reply. "Where do I go?" tells you where to go and sets the guide arrow there.
   - **Quests**: every quest she's on and every new lead, with its progress, its reward and a live arrow and distance as you walk, and **Track** to make the guide follow it.
   - **Map**: the city map.
@@ -143,6 +164,7 @@ src/
   citynav.js     The guiding beacon and arrow, and the city map
   phone.js       The phone (P): messages, quests, map, StarTube, Chirp, wallpapers; fans; interface scale
   dome.js        Inside the Tokyo Dome: the crowd and their penlights, the lights, lasers and screens
+  interiors.js   The buildings she can go into: capsule hotel, agency, apartment, gas station and konbini
   idol.js        Part two's story: fame, quests, the group, Teto
   stage.js       Busking and the stages, the voyage over the sea, the Tokyo Dome
   songs.js       The idol songs, their lyrics and the synthesized voice

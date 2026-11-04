@@ -46,7 +46,7 @@ const QUESTS = [
   { id: 'photo', title: 'Honeymoon Photo', who: 'tourist', start: () => false, done: () => has('photoDone'), step: () => 'Talk to the tourist on the promenade', to: () => npcAt('tourist'), reward: '60 fame', lead: () => fameLevel() >= 1 },
   { id: 'genSong', title: 'A Song for Old Gen', who: 'gen', start: () => !!idol.flags.genSong, done: () => has('genSongDone'), step: () => 'Sing for Old Gen on the beach', to: () => npcAt('gen'), reward: '90 fame', lead: () => fameLevel() >= 2 },
   { id: 'scout', title: 'The Woman in the Dark Suit', who: 'kanade', start: () => has('scoutSoon'), done: () => has('scouted'), step: () => 'Talk to her in the square', to: () => npcAt('kanade'), reward: 'a chance' },
-  { id: 'audition', title: 'The Audition', who: 'hoshino', start: () => has('scouted'), done: () => has('joined'), step: () => (has('auditioned') ? 'Talk to President Hoshino' : 'Audition at Starlight Production, any evening'), to: () => ({ x: 64, z: -36, label: 'Starlight Production' }), reward: 'a group' },
+  { id: 'audition', title: 'The Audition', who: 'hoshino', start: () => has('scouted'), done: () => has('joined'), step: () => (has('auditioned') ? 'Talk to President Hoshino' : 'Audition at Starlight Production, any evening'), to: () => npcAt('hoshino') || ({ x: ROOMS.agency.door.x, z: ROOMS.agency.door.z, label: 'Starlight Production' }), reward: 'a group' },
   { id: 'aoi', title: 'Dance Practice', who: 'aoi', start: () => has('joined'), done: () => has('aoiDone'), step: () => 'Practise with Aoi', to: () => npcAt('aoi'), reward: '100 fame' },
   { id: 'charm', title: 'Kotone\'s Lucky Charm', who: 'kotone', start: () => has('charm'), done: () => has('charmDone'), step: () => (idol.items.charm ? 'Give Kotone her charm' : 'Find the little cat charm in the shopping arcade'), to: () => (idol.items.charm ? npcAt('kotone') : findAt('charm', 'The charm')), reward: '80 fame', lead: () => has('joined') },
   { id: 'lyrics', title: 'Words for Mirai', who: 'mirai', start: () => has('lyrics'), done: () => has('lyricsDone'), step: () => (inspirationHeld() >= 3 ? 'Tell Mirai what you found' : `Find three places that feel like something (${inspirationHeld()}/3)`), to: () => (inspirationHeld() >= 3 ? npcAt('mirai') : nearestOf(['insp1', 'insp2', 'insp3'])), reward: '100 fame, a new song', lead: () => has('joined') },
@@ -247,7 +247,7 @@ function makePost(i) {
 const fans = { t: 40, active: false, since: 0 };
 const FAN_LOOKS = [0xff8ab8, 0x39d5c8, 0xffd36a, 0xb47aff, 0x7affc0];
 function updateFans(dt) {
-  if (fameLevel() < 1 || city.talking || show.active || show.dome) return;
+  if (fameLevel() < 1 || city.talking || show.active || show.dome || city.inside) return;
   if (fans.active) {
     fans.since += dt;
     const n = city.named.fan;
@@ -266,6 +266,7 @@ function updateFans(dt) {
     const x = player.pos.x + Math.sin(a) * r, z = player.pos.z + Math.cos(a) * r;
     const B = CITY.bounds;
     if (x < B.x0 + 2 || x > B.x1 - 2 || z < B.z0 + 2 || z > B.z1 - 2) continue;
+    if (cityOnRoad(x, z)) continue;
     if (city.rects.some((q) => x > q.x0 - 0.8 && x < q.x1 + 0.8 && z > q.z0 - 0.8 && z < q.z1 + 0.8)) continue;
     const look = { ...randomLook(), top: FAN_LOOKS[Math.floor(Math.random() * FAN_LOOKS.length)] };
     if (!city.named.fan) cityNpc('fan', { name: 'Fan', x, z, look, talk: talkFan });
@@ -386,6 +387,7 @@ function buildPhone() {
 
 function openPhone(app = 'home') {
   if (!city.active || city.talking || show.active || show.dome || game.state !== 'playing') return;
+  if (!has('phone')) { showNote("I don't have a phone. I don't have anything."); return; }
   buildPhone();
   probeWallpapers();
   phone.open = true;
@@ -421,8 +423,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : `${n}`);
 function header(title, back = 'home') { return `<header class="ph-head"><button data-go="${back}">‹</button><h3>${title}</h3><span></span></header>`; }
 function totalUnread() { return Object.keys(CONTACTS).filter((id) => CONTACTS[id].met()).reduce((s, id) => s + unreadCount(id), 0); }
-function distTo(t) { return Math.round(Math.hypot(t.x - player.pos.x, t.z - player.pos.z)); }
-function arrowTo(t) { return Math.atan2(t.x - player.pos.x, t.z - player.pos.z) - player.yaw; }
+function distTo(t0) { const t = routeTarget(t0); return Math.round(Math.hypot(t.x - player.pos.x, t.z - player.pos.z)); }
+function arrowTo(t0) { const t = routeTarget(t0); return Math.atan2(t.x - player.pos.x, t.z - player.pos.z) - player.yaw; }
 
 function renderPhone() {
   if (!phone.el || !phone.open) return;
@@ -557,7 +559,7 @@ function updatePhone(dt) {
     phone.notify = 2;
     const unread = Object.keys(CONTACTS).filter((id) => CONTACTS[id].met() && unreadCount(id) > 0);
     const n = unread.reduce((s, id) => s + unreadCount(id), 0);
-    if (phone.lastUnread >= 0 && n > phone.lastUnread && unread.length) {
+    if (has('phone') && phone.lastUnread >= 0 && n > phone.lastUnread && unread.length) {
       const id = unread[unread.length - 1], lines = contactLines(id);
       phoneBanner(`💬 ${CONTACTS[id].name}`, `${lines[lines.length - 1]}  (P to read)`);
       Sfx.talkBlip(1.5);

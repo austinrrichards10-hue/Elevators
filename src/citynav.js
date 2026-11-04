@@ -22,7 +22,7 @@ function idolTarget(untracked) {
   if (idol.items.kite && !f('kentaDone')) return npc('kenta');
   if (f('flowers') && !f('flowersDone')) return flowersHeld() >= 4 ? npc('sakura') : nextFind(['bouquet1', 'bouquet2', 'bouquet3', 'bouquet4']);
   if (f('scoutSoon') && !f('scouted')) return npc('kanade');
-  if (f('scouted') && !f('joined')) return { x: 64, z: -36, label: 'Starlight Production' };
+  if (f('scouted') && !f('joined')) return npc('hoshino') || { x: ROOMS.agency.door.x, z: ROOMS.agency.door.z, label: 'Starlight Production' };
   if (!f('joined')) return { x: 2, z: -22, label: 'Busk here' };
   if (f('tvBooked') && !idol.gigs.tv) return { ...venue('tv'), z: VENUES.tv.door.z - 4 };
   if (f('domeReady')) return { x: -2, z: -6, label: 'Train to the Dome' };
@@ -30,7 +30,7 @@ function idolTarget(untracked) {
     for (const id of ['aoi', 'kotone', 'mirai']) if (!f(`${id}Heart`)) return npc(id);
     if (!f('genPin')) return npc('gen');
     if (!f('haruFarewell')) return npc('haru');
-    if (!f('tetoBeach')) return f('beachCall') ? npc('teto') : { x: 72, z: -58, label: 'Your apartment' };
+    if (!f('tetoBeach')) return f('beachCall') ? npc('teto') : { x: ROOMS.apartment.door.x, z: ROOMS.apartment.door.z, label: 'Your apartment' };
     return npc('hoshino');
   }
   if (f('charm') && !idol.items.charm && !f('charmDone')) return find('charm');
@@ -61,7 +61,7 @@ function buildNav() {
 }
 
 function updateNav() {
-  const N = buildNav(), t = city.active && !city.talking && !show.active ? idolTarget() : null;
+  const N = buildNav(), t = city.active && !city.talking && !show.active ? routeTarget(idolTarget()) : null;
   N.g.visible = !!t;
   N.el.classList.toggle('hidden', !t);
   if (!t) return;
@@ -122,22 +122,23 @@ function drawCityMap(canvas, legend) {
     g.fillStyle = '#22222a'; g.fillText(text, a + 8, ty);
   };
   for (const [id, v] of Object.entries(VENUES)) { const open = fameLevel() >= v.level; pin(v.door.x, v.door.z, open ? '#d8306a' : '#9a9aa4', v.name); }
-  pin(64, -36, '#3a6ad8', 'Starlight Production');
-  if (idol.flags.room) pin(-46, -58, '#8a5a3a', 'Capsule hotel');
-  if (idol.flags.apartment) pin(72, -58, '#8a5a3a', 'Apartment');
+  pin(ROOMS.agency.door.x, ROOMS.agency.door.z, '#3a6ad8', 'Starlight Production');
+  pin(ROOMS.konbini.door.x, ROOMS.konbini.door.z, '#1e8a4a', 'Gas station & konbini');
+  pin(ROOMS.hotel.door.x, ROOMS.hotel.door.z, '#8a5a3a', 'Capsule hotel');
+  if (idol.flags.apartment) pin(ROOMS.apartment.door.x, ROOMS.apartment.door.z, '#8a5a3a', 'Apartment');
   pin(2, -22, '#39a898', 'Busking spot');
   // Everyone with something to say: a gold star.
   for (const n of Object.values(city.named)) {
     if (n.hidden || !idolHasNews(n.id)) continue;
-    const [a, b] = P(n.person.x, n.person.z);
+    const mp = mapPos(n.person.x, n.person.z), [a, b] = P(mp.x, mp.z);
     g.fillStyle = '#f0b020'; g.strokeStyle = '#7a5010'; g.lineWidth = 1;
     g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 3 : 7, an = -Math.PI / 2 + i * Math.PI / 5; g.lineTo(a + Math.cos(an) * r, b + Math.sin(an) * r); } g.closePath(); g.fill(); g.stroke();
     g.fillStyle = '#5a3a08'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.fillText(n.name, a, b - 10);
   }
   // The goal, and her.
-  const t = idolTarget();
+  const t = routeTarget(idolTarget());
   if (t) { const [a, b] = P(t.x, t.z); g.strokeStyle = '#18a898'; g.lineWidth = 3; g.beginPath(); g.arc(a, b, 11 + Math.sin(performance.now() / 200) * 2, 0, Math.PI * 2); g.stroke(); }
-  const [px, pz] = P(player.pos.x, player.pos.z);
+  const sp = streetPos(), [px, pz] = P(sp.x, sp.z);
   g.save(); g.translate(px, pz); g.rotate(player.yaw);
   g.fillStyle = '#18c8b8'; g.strokeStyle = '#fff'; g.lineWidth = 2;
   g.beginPath(); g.moveTo(0, -9); g.lineTo(6, 7); g.lineTo(0, 3); g.lineTo(-6, 7); g.closePath(); g.fill(); g.stroke();

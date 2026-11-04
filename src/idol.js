@@ -21,7 +21,7 @@ const VENUES = {
   loft: { name: 'Shimokita Loft', kind: 'Live house', cap: 150, level: 4, fame: 400, song: 'sakura', difficulty: 0.45, door: { x: -66, z: 72 }, open: [17, 23.5], style: 'club' },
   rooftop: { name: 'Harbor Rooftop Stage', kind: 'Rooftop', cap: 320, level: 5, fame: 680, song: 'paperplane', difficulty: 0.5, door: { x: 96, z: -104 }, open: [16, 22], style: 'roof' },
   mall: { name: 'Sunshine Mall Stage', kind: 'Mall event', cap: 800, level: 5, fame: 920, song: 'sakura', difficulty: 0.55, door: { x: 2, z: 94 }, open: [11, 20], style: 'hall' },
-  tv: { name: 'Prime Beat (TV)', kind: 'Live TV', cap: 400, level: 6, fame: 1200, song: 'runway', difficulty: 0.6, door: { x: 64, z: -38 }, open: [18, 23], style: 'studio', once: true },
+  tv: { name: 'Prime Beat (TV)', kind: 'Live TV', cap: 400, level: 6, fame: 1200, song: 'runway', difficulty: 0.6, door: { x: 63.5, z: -20 }, open: [18, 23], style: 'studio', once: true },
   fest: { name: 'Harbor Summer Fest', kind: 'Festival', cap: 3000, level: 7, fame: 1700, song: 'runway', difficulty: 0.65, door: { x: 70, z: -140 }, open: [18, 23.5], style: 'fest' },
   arena: { name: 'Ocean Arena', kind: 'Arena', cap: 10000, level: 8, fame: 2400, song: 'runway', difficulty: 0.72, door: { x: 118, z: 40 }, open: [17, 23], style: 'arena' },
 };
@@ -97,6 +97,7 @@ const LOOKS = {
   mirai: { skin: 0xf2d2b8, hair: 0xffa030, top: 0xffffff, legs: 0x5a7ab8, scale: 0.95 },
   rina: { skin: 0xe8c09e, hair: 0xb47aff, top: 0x2a2a3a, legs: 0x22242c, scale: 0.97 },
   sato: { skin: 0xf2d2b8, hair: 0x14141a, top: 0x2b3a5a, legs: 0x2b3a5a, scale: 1.02 },
+  clerk: { skin: 0xf2d2b8, hair: 0x3a2a1e, top: 0x39c878, legs: 0x2a2c34, scale: 1 },
   kimura: { skin: 0xf5dcc8, hair: 0x8a8a92, top: 0x6a4a8a, legs: 0x3a3e4a, scale: 0.9 },
   yuto: { skin: 0xf2d2b8, hair: 0x1a1412, top: 0x1a1a1a, legs: 0x1a1a1a, scale: 0.98 },
 };
@@ -114,19 +115,23 @@ function idolSetup() {
   const npc = (id, name, x, z, yaw, talkFn) => cityNpc(id, { name, x, z, yaw, look: LOOKS[id], talk: talkFn });
   npc('gen', 'Old Gen', -24, -146, Math.PI * 0.8, talkGen);
   npc('haru', 'Haru', 8, -18, Math.PI, talkHaru);
-  npc('ishida', 'Mrs. Ishida', -50, -52, Math.PI, talkIshida);
+  buildInteriors();
+  setupInteriorDoors();
+  const inR = (id, x, z) => roomPoint(id, x, z);
+  npc('ishida', 'Mrs. Ishida', inR('hotel', -4, 3.6).x, inR('hotel', -4, 3.6).z, Math.PI, talkIshida);
   npc('taisho', 'Taisho', -63.5, 12, Math.PI / 2, talkTaisho);
   npc('kenta', 'Kenta', 6, -34, 0.6, talkKenta);
   npc('sakura', 'Sakura', -56.5, 58, -Math.PI / 2, talkSakura);
   npc('tourist', 'Tourist', 22, -128, Math.PI, talkTourist);
-  npc('sato', 'Mr. Sato', 64, -58, Math.PI, talkSato);
-  npc('kimura', 'Mrs. Kimura', -94, 54, Math.PI / 2, talkKimura);
+  npc('sato', 'Mr. Sato', 92, -55, Math.PI, talkSato);
+  npc('kimura', 'Mrs. Kimura', -94, 56.5, Math.PI / 2, talkKimura);
   npc('yuto', 'Yuto', 30, 96, Math.PI, talkYuto);
   npc('kanade', 'Kanade', 14, -22, Math.PI, talkKanade);
-  npc('hoshino', 'President Hoshino', 62, -40, Math.PI, talkHoshino);
-  npc('aoi', 'Aoi', 58, -41, Math.PI, talkAoi);
-  npc('kotone', 'Kotone', 66, -41, Math.PI, talkKotone);
-  npc('mirai', 'Mirai', 70, -40, Math.PI, talkMirai);
+  npc('hoshino', 'President Hoshino', inR('agency', 2.7, 4.4).x, inR('agency', 2.7, 4.4).z, Math.PI, talkHoshino);
+  npc('aoi', 'Aoi', inR('agency', 1.6, -1.4).x, inR('agency', 1.6, -1.4).z, -Math.PI / 2, talkAoi);
+  npc('kotone', 'Kotone', inR('agency', 2.2, 0.9).x, inR('agency', 2.2, 0.9).z, -Math.PI * 0.75, talkKotone);
+  npc('mirai', 'Mirai', inR('agency', 0.4, 1.6).x, inR('agency', 0.4, 1.6).z, Math.PI, talkMirai);
+  npc('clerk', 'Clerk', inR('konbini', 4.4, -2.3).x, inR('konbini', 4.4, -2.3).z, Math.PI, () => talk([['Clerk', 'Irasshaimase! Anything you need?']], { with: 'clerk', then: openShop }));
   npc('rina', 'DJ Rina', 26, -42, -Math.PI / 2, talkRina);
   // The lost cat, and the other things to find.
   idol.cat = buildCat();
@@ -134,9 +139,6 @@ function idolSetup() {
   city.group.add(idol.cat);
   // The places.
   citySpot({ x: 2, z: -22, r: 3, label: () => buskLabel(), use: busk, active: () => has('metHaru') });
-  citySpot({ x: -46, z: -58, r: 2.2, label: () => 'Press E to rest in your capsule', use: restMenu, active: () => has('room') && !has('apartment') });
-  citySpot({ x: 72, z: -58, r: 2.2, label: () => 'Press E to rest in your apartment', use: restMenu, active: () => has('apartment') });
-  citySpot({ x: 64, z: -36, r: 2.6, label: () => 'Starlight Production', use: () => talkHoshino(N('hoshino')), active: () => has('scouted') && !N('hoshino').hidden });
   for (const [id, v] of Object.entries(VENUES)) citySpot({ x: v.door.x, z: v.door.z, r: 3, label: () => venueLabel(id), use: () => tryGig(id), active: () => has('joined') && id !== 'tv' });
   citySpot({ x: VENUES.tv.door.x, z: VENUES.tv.door.z - 4, r: 3, label: () => venueLabel('tv'), use: () => tryGig('tv'), active: () => has('tvBooked') && !idol.gigs.tv });
   citySpot({ x: -2, z: -6, r: 3, label: () => 'Press E to take the train to the Tokyo Dome', use: goToDome, active: () => has('domeReady') });
@@ -155,11 +157,11 @@ function idolSetup() {
 function refreshIdolWorld() {
   const after = (f) => has(f);
   hideNpc('kanade', !(has('scoutSoon') && !has('scouted')) && !(has('joined') && !has('domeReady')));
-  if (has('joined')) moveNpc('kanade', 60, -44, Math.PI);
+  if (has('joined')) { const k = roomPoint('agency', -4, -1.3); moveNpc('kanade', k.x, k.z, Math.PI); }
   hideNpc('hoshino', !after('scouted'));
   for (const m of ['aoi', 'kotone', 'mirai']) hideNpc(m, !after('auditioned'));
   // Once she's with the group, the girls hang about the city when they're not at the office.
-  if (has('joined')) { moveNpc('aoi', -8, 60, 0); moveNpc('kotone', -56, 20, 0); moveNpc('mirai', 30, -110, Math.PI); }
+  if (has('joined')) { moveNpc('aoi', -8, 60, 0); moveNpc('kotone', -56, 20, 0); moveNpc('mirai', 30, -105.5, Math.PI); }
   hideNpc('rina', !has('joined'));
   hideNpc('kenta', has('kentaDone') && fameLevel() > 4);
   if (idol.cat) idol.cat.visible = has('catQuest') && !has('catFound');
@@ -197,7 +199,9 @@ function talkGen(n) {
       ['Old Gen', 'Where? You\'re in Tokyo. The whole of it, right up there past the sea wall. Ten million people and every one of them in a hurry.'],
       ['(Miku)', 'Tokyo. I made it out of the crater, over the mountains, across the sea... and I don\'t have a single yen.'],
       ['Old Gen', 'Here. It isn\'t much. Get yourself something warm. Go on up into the city, the station square\'s straight ahead. Somebody there will point you right.'],
-    ], { with: 'gen', then: () => { flag('metGen'); addYen(500); addFame(5, 'met Old Gen'); setObjective(); } });
+      ['Old Gen', 'And take this. My grandson keeps sending me fancy phones and I never touch them. Anyone you meet, their number goes in it. You\'ll want people to be able to find you, girl.'],
+      ['Miku', 'A phone? Thank you. Really.'],
+    ], { with: 'gen', then: () => { flag('metGen'); flag('phone'); addYen(500); addFame(5, 'met Old Gen'); setObjective(); setTimeout(() => toast('Got Old Gen\'s phone: press P to use it'), 600); } });
     return;
   }
   if (has('domeAnnounced') && !has('genPin')) {
@@ -416,7 +420,7 @@ function talkKanade(n) {
     return;
   }
   const lines = [
-    `The schedule's on your phone (J). Every stage you can book, and when the doors open.`,
+    `The schedule's on your phone (P). Every stage you can book, and when the doors open.`,
     'Small stages first. The crowds talk. The crowds always talk.',
     'You\'re doing wonderfully. Drink some water.',
   ];
@@ -499,7 +503,7 @@ function namedGroup(name) {
   refreshIdolWorld();
   talk([
     ['Aoi', `${name}. ...Yeah. That works.`],
-    ['Kanade', 'Welcome to Starlight Production. The agency has a small apartment for you next door. And here, your phone. The schedule\'s in it. Press J any time.'],
+    ['Kanade', 'Welcome to Starlight Production. The agency has a small apartment for you next door. I\'ve put the schedule on your phone. Press P any time.'],
     ['Kanade', 'Your first stage is tomorrow night if you want it: Basement Echo, east of the square. Eighty people, if we\'re lucky.'],
     ['(Miku)', 'Eighty people. In the crater I sang to the wind.'],
   ], { with: 'kanade', then: setObjective });
@@ -851,8 +855,8 @@ function currentObjective() {
   // What's next to aim for: the next stage that's still out of reach.
   const locked = Object.entries(VENUES).find(([id, v]) => fameLevel() < v.level && id !== 'tv');
   const needFor = (v) => FAME.levels[v.level].toLocaleString();
-  if (locked) return `One show a day (J for the schedule). Reach ${needFor(locked[1])} fame to play ${locked[1].name}`;
-  if (!idol.gigs.arena) return 'Play the Ocean Arena (J for the schedule)';
+  if (locked) return `One show a day (P for the schedule). Reach ${needFor(locked[1])} fame to play ${locked[1].name}`;
+  if (!idol.gigs.arena) return 'Play the Ocean Arena (P for the schedule)';
   return `Grow ${G()}'s fame: one show a day, busk, help people (${idol.fame.toLocaleString()} fame)`;
 }
 
@@ -892,6 +896,16 @@ function updateIdol(dt) {
   for (const f of FINDS) if (f.glint) { const on = f.active() && !idol.items[f.id]; f.glint.visible = on; if (on) f.glint.scale.setScalar(0.6 + Math.abs(Math.sin(game.time * 3 + f.x)) * 0.6); }
   // Kanade's message after the scout, the ramen and so on, all keep the objective current.
   idol.announced -= dt;
+  // Her hair, cut short in the fight, growing back: a little with every hour she plays, and
+  // with how far she's come, and all the way by the time she faces Teto again.
+  if (showdown.shortHair && avatar) {
+    const story = has('domeAnnounced') ? 1 : 0.12 + 0.78 * Math.min(1, idol.fame / FAME.levels[8]);
+    idol.hair = Math.min(1, (idol.hair || 0.12) + dt / 5400);
+    const target = Math.max(idol.hair, story);
+    idol.hairShown = idol.hairShown === undefined ? target : idol.hairShown + (target - idol.hairShown) * Math.min(1, dt * 0.4);
+    avatar.tailsCut = false;
+    avatar.tailLength = idol.hairShown;
+  }
 }
 
 // What the big screen shows.
@@ -902,8 +916,8 @@ function idolScreen() {
 }
 
 /* ---------- Saving ---------- */
-function saveIdol() { return { fame: idol.fame, yen: idol.yen, flags: idol.flags, groupName: idol.groupName, gigs: idol.gigs, gigDay: idol.gigDay, items: idol.items, buskDay: idol.buskDay, buskCount: idol.buskCount, lastShowDay: idol.lastShowDay, played: idol.played, videos: idol.videos, chat: idol.chat, seen: idol.seen, tracked: idol.tracked, posts: idol.posts, postDay: idol.postDay, lastPost: idol.lastPost, uploadDay: idol.uploadDay, uploads: idol.uploads, viewFame: idol.viewFame, fanDay: idol.fanDay, fanCount: idol.fanCount }; }
-function loadIdol(d) { if (!d) return; Object.assign(idol, d); idol.objective = ''; }
+function saveIdol() { return { fame: idol.fame, yen: idol.yen, flags: idol.flags, groupName: idol.groupName, gigs: idol.gigs, gigDay: idol.gigDay, items: idol.items, buskDay: idol.buskDay, buskCount: idol.buskCount, lastShowDay: idol.lastShowDay, played: idol.played, videos: idol.videos, chat: idol.chat, seen: idol.seen, tracked: idol.tracked, posts: idol.posts, postDay: idol.postDay, lastPost: idol.lastPost, uploadDay: idol.uploadDay, uploads: idol.uploads, viewFame: idol.viewFame, fanDay: idol.fanDay, fanCount: idol.fanCount, buffs: idol.buffs, magDay: idol.magDay, hair: idol.hair }; }
+function loadIdol(d) { if (!d) return; Object.assign(idol, d); idol.objective = ''; if (idol.flags.metGen) idol.flags.phone = true; }
 function resetIdol() {
   Object.assign(idol, { fame: 0, yen: 0, chapter: 'arrival', flags: {}, groupName: 'SNOWDROP', gigs: {}, gigDay: {}, buskDay: 0, buskCount: 0, items: {}, objective: '', logOpen: false, played: {}, videos: [], chat: {}, seen: {}, tracked: null, posts: 0, postDay: 0, lastPost: null, uploadDay: 0, uploads: 0, viewFame: 0, fanDay: 0, fanCount: 0 });
   if (city.named) for (const id of Object.keys(city.named)) hideNpc(id, false);

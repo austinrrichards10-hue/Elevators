@@ -37,7 +37,8 @@ function buildingMaterial() {
         vLocal = position;
         vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
         vBase = instanceMatrix[3].y;
-        vSeed = fract(sin(dot(instanceMatrix[3].xz, vec2(12.9898, 78.233))) * 43758.5453);
+        // A whole number per building, so every pixel of it agrees on the same random choices.
+        vSeed = floor(mod(abs(instanceMatrix[3].x) * 7.0 + abs(instanceMatrix[3].z) * 13.0 + instanceMatrix[3].y * 3.0, 997.0));
         vN = normalize(mat3(modelMatrix * instanceMatrix) * normal);
         vec4 mvPosition = viewMatrix * w;
         gl_Position = projectionMatrix * mvPosition;
@@ -47,8 +48,9 @@ function buildingMaterial() {
       uniform vec3 uSun; uniform float uDay; uniform float uTime; uniform vec3 uSky;
       varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec3 vLocal; varying vec3 vSize; varying float vSeed; varying float vBase;
       #include <fog_pars_fragment>
-      float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
-      float hash2(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 23758.5453); }
+      // Hashes without sin(): stable on every GPU, no speckle.
+      float hash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+      float hash2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
       void main() {
         vec3 n = normalize(vN);
         vec3 V = normalize(cameraPosition - vW);
@@ -63,8 +65,9 @@ function buildingMaterial() {
         float u = side ? (vLocal.z + 0.5) * vSize.z : (vLocal.x + 0.5) * vSize.x;
         float faceW = side ? vSize.z : vSize.x;
         float y = vLocal.y * vSize.y + vBase;
-        float type = floor(vSeed * 4.0); // 0 glass tower, 1 office ribbons, 2 apartments, 3 tiled mid-rise
-        if (vSize.y > 55.0 && vSeed < 0.7) type = 0.0;
+        float seed = floor(vSeed + 0.5), rnd = hash(vec3(seed, 1.0, 7.0));
+        float type = floor(rnd * 4.0); // 0 glass tower, 1 office ribbons, 2 apartments, 3 tiled mid-rise
+        if (vSize.y > 55.0 && rnd < 0.7) type = 0.0;
         vec3 base = vCol;
         vec3 col;
         if (abs(n.y) > 0.5) {
@@ -76,10 +79,10 @@ function buildingMaterial() {
           float fy = fract(y / floorH), floorN = floor(y / floorH);
           float bay = type == 0.0 ? 1.6 : type == 1.0 ? 2.4 : type == 2.0 ? 3.2 : 2.6;
           float fx = fract(u / bay), bayN = floor(u / bay);
-          float lit = step(0.45, hash(vec3(bayN, floorN, vSeed * 91.0)));
-          float flick = 0.85 + 0.15 * hash(vec3(bayN, floorN, 7.0));
-          vec3 warm = mix(vec3(1.0, 0.8, 0.52), vec3(0.78, 0.9, 1.0), step(0.7, hash(vec3(floorN, bayN, 3.0))));
-          if (hash(vec3(bayN, floorN, 11.0)) > 0.96) warm = vec3(0.5, 0.6, 1.0); // a television
+          float lit = step(0.45, hash(vec3(bayN + seed * 3.0, floorN, seed)));
+          float flick = 0.85 + 0.15 * hash(vec3(bayN + seed * 3.0, floorN, 7.0));
+          vec3 warm = mix(vec3(1.0, 0.8, 0.52), vec3(0.78, 0.9, 1.0), step(0.7, hash(vec3(floorN, bayN + seed, 3.0))));
+          if (hash(vec3(bayN + seed * 3.0, floorN, 11.0)) > 0.96) warm = vec3(0.5, 0.6, 1.0); // a television
           vec3 night = warm * lit * flick * (1.0 - uDay) * 1.7;
           // Glass: the sky reflected in it, brighter at a glancing angle.
           float fres = pow(1.0 - max(dot(V, n), 0.0), 2.5);
@@ -99,11 +102,11 @@ function buildingMaterial() {
             // Apartments: a balcony slab each floor, windows with curtains, the odd AC unit.
             float slab = step(fy, 0.12);
             float win = step(0.15, fx) * step(fx, 0.85) * step(0.28, fy) * step(fy, 0.9);
-            vec3 curtain = mix(vec3(0.95, 0.9, 0.8), vec3(0.6, 0.75, 0.9), hash(vec3(bayN, floorN, 5.0)));
-            vec3 glass = mix(vec3(0.15, 0.18, 0.24) * light + refl * 0.4, curtain * light * 0.6, step(0.6, hash(vec3(bayN, floorN, 9.0))) * step(0.55, fy)) + night;
+            vec3 curtain = mix(vec3(0.95, 0.9, 0.8), vec3(0.6, 0.75, 0.9), hash(vec3(bayN + seed * 3.0, floorN, 5.0)));
+            vec3 glass = mix(vec3(0.15, 0.18, 0.24) * light + refl * 0.4, curtain * light * 0.6, step(0.6, hash(vec3(bayN + seed * 3.0, floorN, 9.0))) * step(0.55, fy)) + night;
             col = mix(base * light, glass, win);
             col = mix(col, vec3(0.86, 0.86, 0.84) * light, slab);
-            float ac = step(0.86, fx) * step(fx, 0.97) * step(0.3, fy) * step(fy, 0.48) * step(0.5, hash(vec3(bayN, floorN, 2.0)));
+            float ac = step(0.86, fx) * step(fx, 0.97) * step(0.3, fy) * step(fy, 0.48) * step(0.5, hash(vec3(bayN + seed * 3.0, floorN, 2.0)));
             col = mix(col, vec3(0.85, 0.86, 0.88) * light, ac);
           } else {
             // Tiled mid-rise: punched windows with pale frames and sills.
@@ -123,7 +126,7 @@ function buildingMaterial() {
           col *= ao;
           // At street level on the ground boxes: shopfronts, lit inside, an awning over them.
           if (vBase < 0.5 && y < 4.6) {
-            float shop = hash(vec3(floor(u / 7.0), 7.0, vSeed * 13.0));
+            float shop = hash(vec3(floor(u / 7.0), 7.0, seed));
             vec3 awning = shop < 0.25 ? vec3(0.82, 0.18, 0.2) : shop < 0.5 ? vec3(0.12, 0.5, 0.62) : shop < 0.75 ? vec3(0.95, 0.68, 0.18) : vec3(0.28, 0.55, 0.3);
             float mull = step(0.05, fract(u / 3.5));
             vec3 inside = mix(vec3(0.98, 0.84, 0.62), vec3(0.75, 0.92, 1.0), step(0.5, hash(vec3(floor(u / 7.0), 3.0, 1.0))));
@@ -235,13 +238,15 @@ function buildCity() {
         const depth = (bz1 - bz0) * (0.55 + rand() * 0.4);
         const z0 = rand() < 0.5 ? bz0 : bz1 - depth, z1 = z0 + depth;
         const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-        if (open(cx, cz)) continue;
+        if (open(cx, cz) || lotTaken(x0, x1, z0, z1)) continue;
         const h = 10 + Math.pow(rand(), 1.6) * (j >= 3 ? 75 : 45);
         towers.push([cx, cz, x1 - x0, h, z1 - z0]);
         rect(x0 - 0.3, x1 + 0.3, z0 - 0.3, z1 + 0.3);
       }
     }
   }
+  // The buildings she can go into (interiors.js).
+  buildLots(G, towers, rect);
   // A wall of towers along the north edge, so the city goes on beyond where she can walk.
   for (let x = -140; x <= 140; x += 22) towers.push([x, 162 + rand() * 6, 18, 40 + rand() * 80, 14]);
   for (let x = -200; x <= 200; x += 30) towers.push([x, 230 + rand() * 60, 24, 60 + rand() * 120, 24]);
@@ -344,6 +349,7 @@ function buildCity() {
   for (const ax of avenues) for (let z = -105; z <= 140; z += 16) for (const s of [-1, 1]) {
     if (ax + s * 5.4 < B.x0 || ax + s * 5.4 > B.x1) continue;
     if (Math.abs(ax + s * 5.4) < 28 && z > -48 && z < -4) continue; // the square is open, for the crowds
+    if (lotTaken(ax + s * 5.4 - 0.5, ax + s * 5.4 + 0.5, z - 0.5, z + 0.5)) continue;
     add(new THREE.CylinderGeometry(0.08, 0.1, 5.5, 6), poleMat, ax + s * 5.4, 2.75, z).castShadow = false;
     add(new THREE.SphereGeometry(0.25, 8, 6), lampMat, ax + s * 5.4, 5.6, z).castShadow = false;
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0xffd090, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -702,12 +708,14 @@ function updateCity(dt) {
   updateIdol(dt);
   updateNav();
   updatePhone(dt);
+  updateInteriors();
   // The city's music follows the clock: bright pop by day, a late-night piano after dark.
   if (!show.active && (Sfx.trackName === 'city' || Sfx.trackName === 'cityNight')) Sfx.playMusic(cityMusic());
 }
 
 function cityClamp(pos) {
   if (!city.active) return;
+  if (city.inside && interiorClamp(pos)) return;
   pos.y = CITY.y;
   const B = CITY.bounds;
   pos.x = clamp(pos.x, B.x0, B.x1);
@@ -767,6 +775,8 @@ function updateScreen(dt) {
 function enterCity(at = CITY.landing) {
   buildCity();
   city.active = true;
+  city.inside = null;
+  aiming = false; cancelDraw();
   city.group.visible = true;
   world.setGroundHidden(true);
   document.body.classList.add('in-city');
@@ -800,7 +810,7 @@ function resetCity() {
 }
 
 function saveCity() {
-  return { active: city.active, idol: saveIdol(), at: city.active ? { x: player.pos.x, z: player.pos.z } : null };
+  return { active: city.active, idol: saveIdol(), at: city.active ? streetPos() : null };
 }
 
 function loadCity(data) {
@@ -812,11 +822,13 @@ function loadCity(data) {
 function cityKey(code) {
   if (!city.active) return false;
   if (code === 'KeyP') { togglePhone(); return true; }
+  if (code === 'Digit1' || code === 'Digit2' || code === 'Digit3' || code === 'KeyQ' || code === 'KeyZ') return true;
   if (code === 'KeyJ') { togglePhone('schedule'); return true; }
   return false;
 }
 
-function cityClick() { return city.active && !!city.talking; }
+// In the city her hands are empty: no bow, no axe, nothing to swing or draw.
+function cityClick() { return city.active; }
 
 /* ---------- Sounds ---------- */
 Object.assign(Sfx, {
@@ -833,3 +845,12 @@ Object.assign(Sfx, {
 });
 
 function cityMusic() { return dayNight.isNight() ? 'cityNight' : 'city'; }
+
+// Is this spot on a road, where nobody should stand about? (The square, the arcade and the
+// beach promenade are open to walk across.)
+function cityOnRoad(x, z) {
+  if (Math.abs(x) < 28 && z > -48 && z < -4) return false;
+  if (x > -66 && x < -54 && z > -46 && z < 96) return false;
+  if (z < -116) return false;
+  return [-120, -60, 0, 60, 120].some((a) => Math.abs(x - a) < 4.4) || [-112, -50, 0, 50, 100, 146].some((s) => Math.abs(z - s) < 4.4);
+}
