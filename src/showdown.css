@@ -38,11 +38,12 @@
 /* The fight has its own goal; the tracker, compass and minimap step aside. */
 body.boss-fight #objective, body.boss-fight #compass, body.boss-fight #minimap { display: none; }
 
-/* The heat wave's cooldown, by her hotbar. */
+/* The scythe's heat wave and beam, and their cooldowns, where her hotbar was. */
 body.boss-fight #hotbar { display: none; }
-#sword-wave { position: absolute; right: 26px; bottom: 26px; padding: 6px 12px 9px; border-radius: 8px; background: rgba(10, 14, 34, .6); font-size: 13px; letter-spacing: .06em; color: #cfe9ff; opacity: .6; }
-#sword-wave i { position: absolute; left: 10px; right: 10px; bottom: 4px; height: 2px; max-width: calc(100% - 20px); background: #6fc6ff; }
-#sword-wave.ready { opacity: 1; box-shadow: 0 0 14px rgba(90, 180, 255, .45); }
+#sword-wave { position: absolute; right: 26px; bottom: 26px; display: flex; gap: 10px; }
+#sword-wave .skill { position: relative; padding: 6px 12px 9px; border-radius: 8px; background: rgba(10, 14, 34, .6); font-size: 13px; letter-spacing: .06em; color: #cfe9ff; opacity: .6; }
+#sword-wave .skill i { position: absolute; left: 10px; bottom: 4px; height: 2px; max-width: calc(100% - 20px); background: #6fc6ff; }
+#sword-wave .skill.ready { opacity: 1; box-shadow: 0 0 14px rgba(90, 180, 255, .45); }
 
 /* The fairies' voices: soft and green. */
 #cine-caption.fairy { color: #e6ffe9; text-shadow: 0 0 6px #33d16a, 0 0 18px #2bbf5c, 0 2px 0 #0d3d1c; font-style: italic; }

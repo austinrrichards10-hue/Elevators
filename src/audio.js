@@ -130,7 +130,8 @@ const Sfx = {
       const bar2 = beat % 8;
       const chordIndex = Math.floor(beat / 8) % track.chords.length;
       const chord = track.chords[chordIndex];
-      this.musicBoxBeat(track, chord, chordIndex, bar2, t, beatLen);
+      if (track.beat) track.beat(this, beat, t, beatLen);
+      else this.musicBoxBeat(track, chord, chordIndex, bar2, t, beatLen);
       this.musicBeat++;
     }
   },

@@ -55,12 +55,12 @@ The ten sites are the Ranger Lookout, Henrik's Cabin, Hollow Station, the Frozen
 
 ## The way out
 
-Bring all ten parts and 10 planks to Varga's launch frame at the Breath and press E to assemble the balloon, then again to climb in. Teto has other ideas: she shoots the balloon full of holes and throws you into the forest, and the fight with her is long and hard.
+Bring all ten parts and 10 planks to Varga's launch frame at the Breath and press E to assemble the balloon, then again to climb in. Teto has other ideas: she shoots the balloon full of holes, grabs you, whirls you round and hurls you through the treetops into a clearing, then drops out of the sky after you. This is the final fight, and it's long and hard.
 
-- **Your swords.** You tear off your twin tails and they become two blue flame swords. Left click slashes (three times for a combo, ending in a spin); right click crosses them and throws a wave of heat at range.
-- **Her gatling hair.** She points, her drills light up with red sights, and then they rattle out bullets. Keep moving sideways or dodge with Space. After each burst she has to rest: that's when to hit her, and hits land harder then. Get too close and she whips her hair round you.
-- **Railguns.** Get hit too often and you're knocked down: she charges two railgun beams and you have to mash Space to roll clear. It takes more presses every time she knocks you down.
-- **If you lose**, the fight starts again from the top.
+- **Your scythe.** You tear off your twin tails and forge them into a blue double scythe. Left click whirls it (three times for a combo, ending in a spin). Right click spins it overhead and throws twin crescents of fire. Q levels it at Teto and fires an exploding blue beam, on a longer cooldown.
+- **Her gatling hair.** She points, her drills light up with red sights, and then they rattle out tracer rounds. Keep moving sideways or dodge with Space. After each burst she rests for a moment: that's when to hit her, and hits land harder then. Get too close and she whips her hair round you.
+- **Railguns.** Get hit too often and you're knocked down: she charges two railgun beams, the ground cracking under her and under you, and you have to mash Space to roll clear. It takes more presses every time she knocks you down.
+- **If you lose**, you go back to your last save (or, with no save yet, the fight starts again from the top).
 
 Afterwards you wake by the ruined balloon, hurt. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in, and that's the end of part one.
 
@@ -79,6 +79,8 @@ models/
     wolf.js                  The wolf, with its run, walk, creep, idle and sit animations
   vehicles/
     plane.js                 The plane, flying in the intro and wrecked on the map
+  weapons/
+    double-scythe.js         Miku's double scythe, for the fight with Teto
 src/
   game.js        Main loop, controls, camera, arrows, HUD, menus and the Character room
   cutscene.js    The opening plane crash, and the wreck site it leaves on the map, with Teto's seat
@@ -119,3 +121,5 @@ Character models: ["Doomer Miku and Teto"](https://sketchfab.com/3d-models/doome
 Wolf: ["Wolf with Animations"](https://sketchfab.com/3d-models/wolf-with-animations-f3769a474a714ebbbaca0d97f9b0a5a0) by [3DHaupt](https://sketchfab.com/dennish2010), licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). Textures scaled down and unused ones removed. The file is `models/animals/wolf.js`. Its licence doesn't allow commercial use, so the game can't be sold while it includes this model.
 
 Plane: ["RAF Voyager Aeroplane (Private Plane)"](https://sketchfab.com/3d-models/raf-voyager-aeroplane-private-plane-750e92f1cf7e4fb5b8e78c91a0253648) by [Foggy_123](https://sketchfab.com/foggy_123), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Only its colour textures are kept, scaled down. The file is `models/vehicles/plane.js`.
+
+Scythe: ["Double Scythe"](https://sketchfab.com/3d-models/double-scythe-c6db4ad9ef0042d8935e9e54dc37b21d) by [EVAI](https://sketchfab.com/Evvvai), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Only its geometry is kept; the game colours it blue. The file is `models/weapons/double-scythe.js`.

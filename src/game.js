@@ -97,9 +97,10 @@ function saveLoadout() {
   try { localStorage.setItem('hollowSnowLoadout', JSON.stringify({ skin: skinId, muted: Sfx.muted, mod: mod })); } catch { /* storage is optional */ }
 }
 
-// The character room has its own track; the forest has only its wind.
+// The character room has its own track, and so does the fight with Teto (showdown.js); the
+// forest has only its wind.
 function updateMusic() {
-  Sfx.playMusic(game.state === 'room' ? 'room' : null);
+  Sfx.playMusic(game.state === 'room' ? 'room' : showdownMusic());
 }
 
 function renderMute() {
@@ -164,6 +165,8 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') quickEat();
   if (e.code === 'KeyC') toggleSit();
   if (e.code === 'KeyZ') toggleBinoculars();
+  // In the fight, Q fires the scythe's blue beam (showdown.js).
+  if (e.code === 'KeyQ' && arenaActive()) showdownBeam();
   const digit = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
   // With the crafting list open, numbers craft; otherwise they pick what's in her hands.
   if (digit >= 0 && survival.crafting) craft(digit);
@@ -181,7 +184,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
   if (survival.sitting) { standUp(); return; }
-  // In the fight her hands are full of flame swords (showdown.js).
+  // In the fight her hands are full of her scythe (showdown.js).
   if (arenaActive()) { showdownClick(e.button); return; }
   if (e.button === 0) {
     if (survival.tool === 'axe') startSwing();
@@ -712,7 +715,7 @@ function updatePlayer(dt) {
   player.stride += (stride - player.stride) * (1 - Math.exp(-9 * dt));
   player.walkPhase += step * (sprinting ? 1.95 : 2.55) * player.gaitDir;
   poseAvatar(dt, move, moving);
-  // In the fight she holds her flame swords (showdown.js).
+  // In the fight she holds her scythe (showdown.js).
   showdownPosePlayer(dt);
   avatar.simulate(dt);
 }

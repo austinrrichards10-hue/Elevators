@@ -146,12 +146,13 @@ function buildPuffs(count, color, fog = false) {
     bounds.radius = Math.hypot(Math.max(c.x - x0, x1 - c.x), Math.max(c.y - y0, y1 - c.y), Math.max(c.z - z0, z1 - c.z)) + big * 0.71;
   };
   const puffs = [];
-  for (let i = 0; i < count; i++) puffs.push({ pos: new THREE.Vector3(), scale: 0, life: 0, max: 1, vel: new THREE.Vector3(), size: 1, grow: 1, alpha: 1 });
+  for (let i = 0; i < count; i++) puffs.push({ pos: new THREE.Vector3(), scale: 0, life: 0, max: 1, vel: new THREE.Vector3(), size: 1, grow: 1, alpha: 1, fall: 0 });
   let next = 0;
   const changed = () => { place.needsUpdate = true; shade.needsUpdate = true; };
   return {
     group,
-    emit(at, vel, { life = 2, size = 1, grow = 2, alpha = 0.6 } = {}) {
+    // `fall` pulls a puff down as it goes, for thrown snow and the like.
+    emit(at, vel, { life = 2, size = 1, grow = 2, alpha = 0.6, fall = 0 } = {}) {
       const i = next;
       const p = puffs[i];
       next = (next + 1) % count;
@@ -161,6 +162,7 @@ function buildPuffs(count, color, fog = false) {
       p.size = p.scale = size;
       p.grow = grow;
       p.alpha = alpha;
+      p.fall = fall;
       // Born transparent; its first update fades it in.
       P[i * 4] = at.x; P[i * 4 + 1] = at.y; P[i * 4 + 2] = at.z; P[i * 4 + 3] = size;
       A[i] = 0;
@@ -179,6 +181,7 @@ function buildPuffs(count, color, fog = false) {
         p.life -= dt;
         if (p.life <= 0) { P[i * 4 + 3] = 0; A[i] = 0; continue; }
         const age = 1 - p.life / p.max;
+        if (p.fall) p.vel.y -= p.fall * dt;
         p.pos.addScaledVector(p.vel, dt);
         p.scale = p.size * (1 + age * p.grow);
         P[i * 4] = p.pos.x; P[i * 4 + 1] = p.pos.y; P[i * 4 + 2] = p.pos.z; P[i * 4 + 3] = p.scale;
