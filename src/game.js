@@ -300,7 +300,11 @@ function continueFromFire() {
   say('I\'m still here. Barely.', 3);
   emitGame('revived');
 }
-$('dead-continue').addEventListener('click', continueFromFire);
+// From the death screen: back to the last save, or (with no save) the last fire she built.
+$('dead-continue').addEventListener('click', () => {
+  $('boss-fade').classList.remove('on');
+  if (readSave()) { loadGame(); toast('Back to your last save'); } else continueFromFire();
+});
 
 $('start').addEventListener('click', () => {
   Sfx.init();
@@ -332,25 +336,38 @@ function toMainMenu() {
   updateMusic();
 }
 $('pause-menu').addEventListener('click', toMainMenu);
-$('dead-menu').addEventListener('click', toMainMenu);
-$('dead-retry').addEventListener('click', () => { resetRun(); setWreckBurning(); beginPlay(); });
+$('dead-menu').addEventListener('click', () => { $('boss-fade').classList.remove('on'); toMainMenu(); });
+$('dead-retry').addEventListener('click', () => {
+  // Against Teto with nothing saved, this is another go at the fight.
+  if (showdown.stage === 'fight') { $('dead').classList.add('hidden'); restartFight(); return; }
+  resetRun(); setWreckBurning(); beginPlay();
+});
 
 const DEATHS = {
   cold: ['The cold took you', 'Out here, a fire is the difference between morning and never.'],
   wolf: ['The wolves took you', 'They were hungry, and you were alone.'],
+  teto: ['Teto took you', 'She\'s still laughing. Get up and make her stop.'],
 };
 
 function playerDied(cause) {
-  // Losing to Teto starts the fight over instead (showdown.js).
+  // Losing to Teto plays out her win first, then comes back here (showdown.js).
   if (showdownCatchDeath(cause)) return;
+  showDeathScreen(cause);
+}
+
+// The death screen: respawn at the last save, or go back to the main menu.
+function showDeathScreen(cause) {
   game.state = 'dead';
   pointerWasLocked = false;
   document.exitPointerLock();
   setCrafting(false);
-  const [title, text] = DEATHS[cause];
+  const [title, text] = DEATHS[cause] || DEATHS.cold;
   $('dead-title').textContent = title;
   $('dead-text').textContent = text;
-  $('dead-continue').classList.toggle('hidden', !survival.fires.length);
+  const canRespawn = !!readSave() || (showdown.stage !== 'fight' && survival.fires.length > 0);
+  $('dead-continue').classList.toggle('hidden', !canRespawn);
+  $('dead-retry').textContent = showdown.stage === 'fight' ? 'Fight her again' : 'Start over';
+  $('dead-retry').classList.toggle('hidden', canRespawn);
   $('hud').classList.add('hidden');
   $('dead').classList.remove('hidden');
   emitGame('playerDied', cause);

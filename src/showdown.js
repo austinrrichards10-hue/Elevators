@@ -27,7 +27,7 @@ const SHOWDOWN = {
     // across the clearing. The mega laser (from two thirds, now and then): see updateMega.
     blink: { tell: 0.6, windup: 0.28, range: 2.6, damage: 14 },
     sweep: { tell: 0.75, dur: 1.4, arc: 2.2, damage: 15, length: 34 },
-    mega: { leap: 1.1, slam: 0.8, charge: 4.4, fire: 3.2, rocks: 7, dps: 42, cooldown: 34 },
+    mega: { leap: 1.1, slam: 0.8, charge: 4.4, fire: 3.2, rocks: [2, 3], dps: 42, cooldown: 34 },
   },
   // Her gatling hair, by the stage of the fight (her health above 2/3, 1/3, and below).
   gatling: {
@@ -2831,16 +2831,14 @@ function megaSlam(t) {
     const a = Math.random() * Math.PI * 2, s = 4 + Math.random() * 8;
     k.debris.emit(t.pos.clone().add(sdU.set(Math.cos(a) * 1.5, 0.3, Math.sin(a) * 1.5)), sdW.set(Math.cos(a) * s, 4 + Math.random() * 8, Math.sin(a) * s), { life: 1.2, size: 0.4 + Math.random() * 0.4, grow: 1.5, alpha: 0.9, fall: 12 });
   }
-  const spots = [];
-  for (const r of k.rocks.slice(0, M.rocks)) {
-    let x = 0, z = 0;
-    for (let tries = 0; tries < 30; tries++) {
-      x = (Math.random() - 0.5) * (A.half * 2 - 3);
-      z = lerp(-A.length / 2 + 5, A.length / 2 - 10, Math.random());
-      if (spots.every(([sx, sz]) => Math.hypot(sx - x, sz - z) > 5)) break;
-    }
-    spots.push([x, z]);
-    const s = 1.3 + Math.random() * 0.5;
+  const count = M.rocks[0] + Math.floor(Math.random() * (M.rocks[1] - M.rocks[0] + 1));
+  // Only two or three, so it's a race to reach one: each in its own stretch of the clearing,
+  // and never right in front of her, where there'd be no time to run to it.
+  k.rocks.forEach((r, i) => { if (i >= count) { r.mesh.visible = false; r.landed = false; } });
+  k.rocks.slice(0, count).forEach((r, i) => {
+    const z = lerp(-A.length / 2 + 8, A.length / 2 - 14, (i + 0.2 + Math.random() * 0.6) / count);
+    const x = (Math.random() - 0.5) * (A.half * 2 - 4);
+    const s = 1.5 + Math.random() * 0.5;
     r.size.set(s * (1 + Math.random() * 0.3), s * (1.3 + Math.random() * 0.4), s);
     r.from.copy(t.pos).add(sdU.set(0, 1, 0));
     r.to.set(x, A.y, z);
@@ -2848,7 +2846,7 @@ function megaSlam(t) {
     r.mesh.material.emissive.setRGB(0.5, 0.12, 0.05);
     r.mesh.scale.copy(r.size).multiplyScalar(0.6);
     r.mesh.visible = true;
-  }
+  });
 }
 
 // Boulders in flight, and landing.
@@ -4305,10 +4303,8 @@ function showdownCatchDeath() {
   $('boss-hint').classList.add('hidden');
   tetoSays(showdownLine('won'), 2);
   Sfx.tetoLaugh();
-  const save = typeof readSave === 'function' ? readSave() : null;
-  if (!save) { setTimeout(restartFight, 900); return true; }
   setTimeout(() => $('boss-fade').classList.add('on'), 600);
-  setTimeout(() => { loadGame(); toast('Back to your last save'); }, 1500);
+  setTimeout(() => { if (showdown.stage === 'fight' && fight.over) showDeathScreen('teto'); }, 1500);
   return true;
 }
 
