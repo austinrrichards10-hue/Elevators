@@ -732,7 +732,7 @@ function busk() {
   idol.buskCount++;
   const songs = ['snowdrop', has('lyricsDone') ? 'paperplane' : 'snowdrop', has('joined') ? 'sakura' : 'snowdrop'];
   const l = fameLevel();
-  startBusk({ song: songs[idol.buskCount % songs.length], difficulty: 0.2 + l * 0.05, fame: 30 + l * 14, crowd: 10 + l * 6, title: 'Busking in the square', after: afterBusk });
+  startBusk({ choose: true, song: songs[idol.buskCount % songs.length], difficulty: 0.2 + l * 0.05, fame: 30 + l * 14, crowd: 10 + l * 6, title: 'Busking in the square', after: afterBusk });
 }
 
 function afterBusk(res) {
@@ -763,7 +763,7 @@ function tryGig(id) {
   if (h < v.open[0] || h > v.open[1]) { showNote(`Doors open at ${v.open[0]}:00. I could rest until then.`); return; }
   // A crowd that's seen you three times already cheers a little less: new stages pay better.
   const fresh = 1 / (1 + 0.3 * Math.min(4, idol.gigs[id] || 0));
-  const go = () => startGig({ venue: id, ...v, fame: Math.round(v.fame * fresh) }, (res) => afterGig(id, res));
+  const go = () => startGig({ venue: id, ...v, choose: true, fame: Math.round(v.fame * fresh) }, (res) => afterGig(id, res));
   if (id === 'tv') tetoBackstage(go);
   else go();
 }

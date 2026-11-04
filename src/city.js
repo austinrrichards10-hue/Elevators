@@ -25,49 +25,111 @@ function cityActive() { return city.active; }
 // so a tower of any size gets the right number of floors. Lit windows come on at night.
 function buildingMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uSun: { value: new THREE.Vector3(0.4, 0.8, 0.3) }, uDay: { value: 1 }, uTime: { value: 0 } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uSun: { value: new THREE.Vector3(0.4, 0.8, 0.3) }, uDay: { value: 1 }, uTime: { value: 0 }, uSky: { value: new THREE.Color(0x8fb0d8) } }]),
     fog: true,
     vertexShader: `
-      varying vec3 vW; varying vec3 vN; varying vec3 vCol;
+      varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec3 vLocal; varying vec3 vSize; varying float vSeed; varying float vBase;
       #include <fog_pars_vertex>
       void main() {
         vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
-        vW = w.xyz; vCol = instanceColor;
+        vW = w.xyz;
+        vCol = instanceColor;
+        vLocal = position;
+        vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+        vBase = instanceMatrix[3].y;
+        vSeed = fract(sin(dot(instanceMatrix[3].xz, vec2(12.9898, 78.233))) * 43758.5453);
         vN = normalize(mat3(modelMatrix * instanceMatrix) * normal);
         vec4 mvPosition = viewMatrix * w;
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }`,
     fragmentShader: `
-      uniform vec3 uSun; uniform float uDay; uniform float uTime;
-      varying vec3 vW; varying vec3 vN; varying vec3 vCol;
+      uniform vec3 uSun; uniform float uDay; uniform float uTime; uniform vec3 uSky;
+      varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec3 vLocal; varying vec3 vSize; varying float vSeed; varying float vBase;
       #include <fog_pars_fragment>
       float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+      float hash2(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 23758.5453); }
       void main() {
         vec3 n = normalize(vN);
-        float diff = max(dot(n, normalize(uSun)), 0.0);
-        vec3 base = vCol * (0.25 + 0.75 * uDay) * (0.55 + 0.45 * diff);
-        vec3 col = base;
-        // Windows on the walls, not the roof: floors every 3.4 m, bays every 2.6 m.
-        if (abs(n.y) < 0.5) {
-          float u = abs(n.x) > 0.5 ? vW.z : vW.x;
-          vec2 cell = vec2(floor(u / 2.6), floor((vW.y - 3000.0) / 3.4));
-          vec2 f = vec2(fract(u / 2.6), fract((vW.y - 3000.0) / 3.4));
-          float win = step(0.18, f.x) * step(f.x, 0.82) * step(0.22, f.y) * step(f.y, 0.78) * step(1.0, cell.y);
-          float lit = step(0.42, hash(vec3(cell, floor(vW.x * 0.01 + vW.z * 0.013))));
-          vec3 glass = mix(vec3(0.16, 0.2, 0.28), vec3(0.45, 0.55, 0.7), uDay * (0.4 + 0.6 * f.y));
-          vec3 warm = mix(vec3(1.0, 0.78, 0.45), vec3(0.75, 0.88, 1.0), hash(vec3(cell.yx, 3.0)));
-          col = mix(col, glass + warm * lit * (1.0 - uDay) * 1.6, win);
-          // At street level: shopfronts. Big panes lit warm inside, thin mullions, and an
-          // awning in the shop's own colour over them.
-          float gy = vW.y - 3000.0;
-          if (gy < 4.6) {
-            float shop = hash(vec3(floor(u / 7.0), 7.0, floor(vW.x * 0.007 + vW.z * 0.011)));
-            vec3 awning = mix(mix(vec3(0.75, 0.16, 0.18), vec3(0.15, 0.45, 0.6), step(0.33, shop)), vec3(0.85, 0.62, 0.2), step(0.66, shop));
-            float mull = step(0.06, fract(u / 3.5));
-            vec3 inside = mix(vec3(0.95, 0.82, 0.6), vec3(0.7, 0.9, 1.0), step(0.5, hash(vec3(floor(u / 7.0), 3.0, 1.0))));
-            vec3 front = mix(vec3(0.08, 0.09, 0.11), inside * (0.35 + 1.1 * (1.0 - uDay)) * 0.8 + vec3(0.12, 0.14, 0.18) * uDay, mull * step(0.25, gy) * step(gy, 3.4));
-            col = gy > 3.8 ? awning * (0.4 + 0.6 * uDay + 0.25) : front;
+        vec3 V = normalize(cameraPosition - vW);
+        vec3 L = normalize(uSun);
+        float diff = max(dot(n, L), 0.0);
+        // Sky light from above, a little bounce from the street below.
+        float hemi = 0.55 + 0.45 * n.y;
+        vec3 ambient = mix(vec3(0.42, 0.38, 0.36), uSky * 1.05, hemi);
+        vec3 light = ambient * (0.35 + 0.65 * uDay) + vec3(1.0, 0.96, 0.88) * diff * 0.85 * uDay;
+        // Where on the wall: metres along this face, metres up from the ground.
+        bool side = abs(n.x) > 0.5;
+        float u = side ? (vLocal.z + 0.5) * vSize.z : (vLocal.x + 0.5) * vSize.x;
+        float faceW = side ? vSize.z : vSize.x;
+        float y = vLocal.y * vSize.y + vBase;
+        float type = floor(vSeed * 4.0); // 0 glass tower, 1 office ribbons, 2 apartments, 3 tiled mid-rise
+        if (vSize.y > 55.0 && vSeed < 0.7) type = 0.0;
+        vec3 base = vCol;
+        vec3 col;
+        if (abs(n.y) > 0.5) {
+          // The roof: gravel and concrete, a darker parapet edge.
+          float edge = min(min(vLocal.x + 0.5, 0.5 - vLocal.x) * vSize.x, min(vLocal.z + 0.5, 0.5 - vLocal.z) * vSize.z);
+          col = mix(vec3(0.36, 0.36, 0.38), vec3(0.5, 0.5, 0.52), hash2(floor(vW.xz * 2.0)) * 0.4) * (edge < 0.6 ? 0.7 : 1.0) * light;
+        } else {
+          float floorH = type == 2.0 ? 3.0 : 3.6;
+          float fy = fract(y / floorH), floorN = floor(y / floorH);
+          float bay = type == 0.0 ? 1.6 : type == 1.0 ? 2.4 : type == 2.0 ? 3.2 : 2.6;
+          float fx = fract(u / bay), bayN = floor(u / bay);
+          float lit = step(0.45, hash(vec3(bayN, floorN, vSeed * 91.0)));
+          float flick = 0.85 + 0.15 * hash(vec3(bayN, floorN, 7.0));
+          vec3 warm = mix(vec3(1.0, 0.8, 0.52), vec3(0.78, 0.9, 1.0), step(0.7, hash(vec3(floorN, bayN, 3.0))));
+          if (hash(vec3(bayN, floorN, 11.0)) > 0.96) warm = vec3(0.5, 0.6, 1.0); // a television
+          vec3 night = warm * lit * flick * (1.0 - uDay) * 1.7;
+          // Glass: the sky reflected in it, brighter at a glancing angle.
+          float fres = pow(1.0 - max(dot(V, n), 0.0), 2.5);
+          vec3 refl = mix(uSky * 0.55, uSky * 1.25 + 0.1, fres) * (0.25 + 0.75 * uDay);
+          if (type == 0.0) {
+            // Curtain wall: tinted glass from top to bottom, fine mullions, a slab line each floor.
+            vec3 tint = mix(vec3(0.2, 0.38, 0.5), base, 0.35);
+            float mull = step(0.06, fx) * step(fy, 0.92);
+            col = mix(vec3(0.25, 0.28, 0.32) * light, tint * 0.6 * light + refl * 0.75 + night * 0.8, mull);
+          } else if (type == 1.0) {
+            // Ribbon windows between bands of coloured cladding.
+            float band = step(0.3, fy) * step(fy, 0.86);
+            float mull = step(0.04, fx);
+            vec3 glass = vec3(0.12, 0.16, 0.22) * light + refl * 0.55 + night;
+            col = mix(base * light, glass, band * mull);
+          } else if (type == 2.0) {
+            // Apartments: a balcony slab each floor, windows with curtains, the odd AC unit.
+            float slab = step(fy, 0.12);
+            float win = step(0.15, fx) * step(fx, 0.85) * step(0.28, fy) * step(fy, 0.9);
+            vec3 curtain = mix(vec3(0.95, 0.9, 0.8), vec3(0.6, 0.75, 0.9), hash(vec3(bayN, floorN, 5.0)));
+            vec3 glass = mix(vec3(0.15, 0.18, 0.24) * light + refl * 0.4, curtain * light * 0.6, step(0.6, hash(vec3(bayN, floorN, 9.0))) * step(0.55, fy)) + night;
+            col = mix(base * light, glass, win);
+            col = mix(col, vec3(0.86, 0.86, 0.84) * light, slab);
+            float ac = step(0.86, fx) * step(fx, 0.97) * step(0.3, fy) * step(fy, 0.48) * step(0.5, hash(vec3(bayN, floorN, 2.0)));
+            col = mix(col, vec3(0.85, 0.86, 0.88) * light, ac);
+          } else {
+            // Tiled mid-rise: punched windows with pale frames and sills.
+            float win = step(0.22, fx) * step(fx, 0.78) * step(0.25, fy) * step(fy, 0.82);
+            float frame = step(0.18, fx) * step(fx, 0.82) * step(0.21, fy) * step(fy, 0.86) - win;
+            float tile = 0.92 + 0.08 * hash2(floor(vec2(u * 4.0, y * 6.0)));
+            col = base * tile * light;
+            col = mix(col, vec3(0.9, 0.9, 0.88) * light, frame);
+            col = mix(col, vec3(0.13, 0.16, 0.22) * light + refl * 0.45 + night, win);
+          }
+          // A cornice at the top, a plinth at the bottom.
+          float top = vSize.y + vBase - y;
+          if (top < 0.7) col = mix(base, vec3(0.9), 0.4) * light * 0.85;
+          // Soft shadow where the walls meet the street and in the corners.
+          float edgeU = min(u, faceW - u);
+          float ao = mix(0.62, 1.0, smoothstep(0.0, 6.0, y)) * mix(0.8, 1.0, smoothstep(0.0, 1.2, edgeU));
+          col *= ao;
+          // At street level on the ground boxes: shopfronts, lit inside, an awning over them.
+          if (vBase < 0.5 && y < 4.6) {
+            float shop = hash(vec3(floor(u / 7.0), 7.0, vSeed * 13.0));
+            vec3 awning = shop < 0.25 ? vec3(0.82, 0.18, 0.2) : shop < 0.5 ? vec3(0.12, 0.5, 0.62) : shop < 0.75 ? vec3(0.95, 0.68, 0.18) : vec3(0.28, 0.55, 0.3);
+            float mull = step(0.05, fract(u / 3.5));
+            vec3 inside = mix(vec3(0.98, 0.84, 0.62), vec3(0.75, 0.92, 1.0), step(0.5, hash(vec3(floor(u / 7.0), 3.0, 1.0))));
+            vec3 front = mix(vec3(0.07, 0.08, 0.1), inside * (0.45 + 1.2 * (1.0 - uDay)) * 0.85 + refl * 0.3, mull * step(0.25, y) * step(y, 3.4));
+            float stripe = step(0.5, fract(u / 1.2));
+            col = y > 3.8 ? mix(awning, awning * 1.25 + 0.1, stripe) * (0.5 + 0.6 * uDay) : front;
           }
         }
         gl_FragColor = vec4(col, 1.0);
@@ -87,6 +149,37 @@ function neonTexture(text, color, bg = '#0b0d18') {
   });
 }
 
+// Ground textures: worn asphalt with patches and cracks, grey paving slabs, mown grass.
+function cityTexture(size, draw, repeat) {
+  const t = paintCanvas(size, size, draw);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeat[0], repeat[1]);
+  t.anisotropy = 4;
+  return t;
+}
+function asphaltTexture() {
+  return cityTexture(256, (g) => {
+    g.fillStyle = '#3a3c42'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 5000; i++) { const v = 40 + Math.random() * 40; g.fillStyle = `rgba(${v},${v},${v + 4},0.5)`; g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5); }
+    for (let i = 0; i < 6; i++) { g.fillStyle = `rgba(20,20,24,${0.12 + Math.random() * 0.1})`; g.beginPath(); g.ellipse(Math.random() * 256, Math.random() * 256, 20 + Math.random() * 40, 10 + Math.random() * 20, Math.random() * 3, 0, Math.PI * 2); g.fill(); }
+    g.strokeStyle = 'rgba(18,18,20,0.5)'; g.lineWidth = 1;
+    for (let i = 0; i < 5; i++) { g.beginPath(); let x = Math.random() * 256, y = Math.random() * 256; g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 30; y += (Math.random() - 0.5) * 30; g.lineTo(x, y); } g.stroke(); }
+  }, [400, 225]);
+}
+function paveTexture() {
+  return cityTexture(128, (g) => {
+    g.fillStyle = '#a8a6a0'; g.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 128; y += 32) for (let x = 0; x < 128; x += 32) { const v = 150 + Math.random() * 30; g.fillStyle = `rgb(${v},${v - 2},${v - 8})`; g.fillRect(x + 1, y + 1, 30, 30); }
+    for (let i = 0; i < 1200; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`; g.fillRect(Math.random() * 128, Math.random() * 128, 1, 1); }
+  }, [14, 12]);
+}
+function grassTexture() {
+  return cityTexture(128, (g) => {
+    g.fillStyle = '#5f9048'; g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 3000; i++) { const h = 80 + Math.random() * 40, l = 28 + Math.random() * 18; g.fillStyle = `hsl(${h},45%,${l}%)`; g.fillRect(Math.random() * 128, Math.random() * 128, 1, 2 + Math.random() * 2); }
+  }, [10, 8]);
+}
+
 function buildCity() {
   if (city.group) return;
   const G = new THREE.Group();
@@ -97,7 +190,7 @@ function buildCity() {
   const add = (geo, mat, x, y, z, rect) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.receiveShadow = true; m.castShadow = true; G.add(m); return m; };
   // The ground: asphalt, the beach, and the sea beyond.
   // The land runs on to the horizon behind the city; the beach runs along the whole coast.
-  const asphalt = add(new THREE.PlaneGeometry(3200, 1800).rotateX(-Math.PI / 2), std(0x34363c), 0, 0, 778);
+  const asphalt = add(new THREE.PlaneGeometry(3200, 1800).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: asphaltTexture(), roughness: 0.92 }), 0, 0, 778);
   asphalt.castShadow = false;
   const sand = add(new THREE.PlaneGeometry(3200, 60).rotateX(-Math.PI / 2), std(0xe6d3a8, { roughness: 1 }), 0, 0.02, -146);
   sand.castShadow = false;
@@ -121,7 +214,7 @@ function buildCity() {
   city.sea.position.set(0, -0.15, -870);
   G.add(city.sea);
   // Pavements: a raised kerb round every block.
-  const pave = std(0x8e9098);
+  const pave = new THREE.MeshStandardMaterial({ map: paveTexture(), roughness: 0.9 });
   // Towers, block by block.
   const B = CITY.bounds;
   const towers = [];
@@ -161,7 +254,8 @@ function buildCity() {
   const tGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const tMesh = new THREE.InstancedMesh(tGeo, buildingMaterial(), towers.length);
   const m4 = new THREE.Matrix4(), tint = new THREE.Color();
-  const palette = [0x9aa3b5, 0xb8b2a6, 0x7c8798, 0xc9c3b8, 0x6f7a8c, 0xa69c92, 0x8d9db0, 0x5f7a9a, 0xd8cfc0];
+  // A brighter, warmer palette: pastels, terracotta, cream, sage, sky, a few deep tones.
+  const palette = [0xe8c8b0, 0xb8d4c8, 0xf0dca0, 0xc8d0e8, 0xd88a6a, 0xf2ece0, 0x9ab8a0, 0xe8b8c8, 0x8aa8c8, 0xd8c8a8, 0x6a7a8a, 0xc87a5a, 0xa8c0d8, 0xf0e0c8];
   towers.forEach(([x, z, w, h, d, y0], i) => {
     m4.makeScale(w, h, d).setPosition(x, y0 || 0, z);
     tMesh.setMatrixAt(i, m4);
@@ -229,19 +323,18 @@ function buildCity() {
   const poleMat = std(0x2e3036, { metalness: 0.6, roughness: 0.4 });
   for (const ax of avenues) for (let z = -105; z <= 140; z += 16) for (const s of [-1, 1]) {
     if (ax + s * 5.4 < B.x0 || ax + s * 5.4 > B.x1) continue;
+    if (Math.abs(ax + s * 5.4) < 28 && z > -48 && z < -4) continue; // the square is open, for the crowds
     add(new THREE.CylinderGeometry(0.08, 0.1, 5.5, 6), poleMat, ax + s * 5.4, 2.75, z).castShadow = false;
     add(new THREE.SphereGeometry(0.25, 8, 6), lampMat, ax + s * 5.4, 5.6, z).castShadow = false;
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0xffd090, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     glow.position.set(ax + s * 5.4, 5.6, z); glow.scale.setScalar(4);
     G.add(glow); city.lampGlow.push(glow);
   }
-  const trunk = std(0x4a3226), blossom = new THREE.MeshStandardMaterial({ color: 0xf5b8cf, roughness: 0.9, emissive: 0x3a1020, emissiveIntensity: 0.2 });
-  for (let x = -110; x <= 110; x += 13) {
-    if (Math.abs(x + 30) < 8) continue;
-    add(new THREE.CylinderGeometry(0.18, 0.25, 2.6, 7), trunk, x, 1.3, -116);
-    for (let k = 0; k < 4; k++) add(new THREE.IcosahedronGeometry(1.2 + rand() * 0.6, 1), blossom, x + (rand() - 0.5) * 2, 3 + rand() * 1.2, -116 + (rand() - 0.5) * 2);
-    rect(x - 0.4, x + 0.4, -116.4, -115.6);
-  }
+  // The promenade's row of sakura, the same trees as the parks.
+  const prom = [];
+  for (let x = -110; x <= 110; x += 13) { if (Math.abs(x + 30) < 8) continue; prom.push([x, 0, -116, rand() * 6, 0.9 + rand() * 0.25]); rect(x - 0.4, x + 0.4, -116.4, -115.6); }
+  const promGeo = buildTreeGeometry(41, 'sakura');
+  instanced(G, promGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 }), prom);
   // Petals on the wind.
   city.petals = buildPuffs(160, 0xffc0d8);
   city.petals.group.children[0].material.uniforms.diffuse.value.multiplyScalar(1.3);
@@ -553,6 +646,7 @@ function updateCityAmbient(dt) {
   const k = dayNight.light;
   const night = 1 - k;
   city.towers.material.uniforms.uDay.value = 0.25 + 0.75 * k;
+  city.towers.material.uniforms.uSky.value.copy(world.sky.material.uniforms.uHorizon.value).lerp(world.sky.material.uniforms.uZenith.value, 0.45);
   city.towers.material.uniforms.uSun.value.copy(world.sunOffset).normalize();
   city.sea.material.uniforms.uTime.value = game.time;
   city.sea.material.uniforms.uDay.value = 0.15 + 0.85 * k;
@@ -586,6 +680,9 @@ function updateCity(dt) {
   setPrompt(thing ? (typeof thing.label === 'function' ? thing.label() : thing.label) : '');
   if (thing && pressed) thing.use();
   updateIdol(dt);
+  updateNav();
+  // The city's music follows the clock: bright pop by day, a late-night piano after dark.
+  if (!show.active && (Sfx.trackName === 'city' || Sfx.trackName === 'cityNight')) Sfx.playMusic(cityMusic());
 }
 
 function cityClamp(pos) {
@@ -661,7 +758,7 @@ function enterCity(at = CITY.landing) {
   // Her balloon, lying where it came down on the beach.
   if (!city.balloon && balloonModel) { city.balloon = balloonModel.group.clone(true); city.balloon.visible = true; city.group.add(city.balloon); }
   if (city.balloon && !city.voyaging) { city.balloon.position.set(CITY.landing.x - 4, 0, CITY.landing.z - 3); city.balloon.rotation.set(0, 0.4, 0); }
-  Sfx.playMusic('city');
+  Sfx.playMusic(cityMusic());
 }
 
 function leaveCity() {
@@ -712,3 +809,5 @@ Object.assign(Sfx, {
     this.hit({ dur: 1.6, freq: 3000, q: 0.6, vol: 0.08 * level, type: 'bandpass', attack: 0.2, delay: 0.1 });
   },
 });
+
+function cityMusic() { return dayNight.isNight() ? 'cityNight' : 'city'; }

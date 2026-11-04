@@ -44,7 +44,8 @@ function buildRhythmDom() {
     <div class="rh-progress"><i></i></div>
     <div class="rh-hype"><label>Crowd</label><div><i></i></div></div>
     <div class="rh-board">${RHYTHM.labels.map((k, i) => `<div class="rh-lane" data-lane="${i}"><div class="rh-key">${k}</div></div>`).join('')}<div class="rh-line"></div></div>
-    <div class="rh-judge"></div><div class="rh-combo"></div>`;
+    <div class="rh-judge"></div><div class="rh-combo"></div>
+    <div class="rh-lyrics"><p class="rh-jp"></p><p class="rh-en"></p></div>`;
   document.body.appendChild(el);
 }
 
@@ -99,6 +100,11 @@ function scoreNote(r, n, j) {
     r.hype = Math.min(1, r.hype + (j === 'perfect' ? 0.02 : 0.012));
   }
   if (n.el) { n.el.classList.add(j === 'miss' ? 'missed' : 'struck'); const e = n.el; setTimeout(() => e.remove(), 180); n.el = null; }
+  if (j !== 'miss') {
+    // A burst of light where it was struck.
+    const lane = r.board.querySelector(`[data-lane="${n.lane}"]`);
+    const b = document.createElement('i'); b.className = `rh-burst ${j}`; lane.appendChild(b); setTimeout(() => b.remove(), 400);
+  }
   const judge = r.el.querySelector('.rh-judge');
   judge.textContent = j === 'perfect' ? 'PERFECT' : j === 'great' ? 'GREAT' : j === 'good' ? 'GOOD' : 'MISS';
   judge.className = `rh-judge ${j} pop`;
@@ -131,6 +137,18 @@ function updateRhythm() {
   S.querySelector('.rh-score').textContent = Math.round(r.score).toLocaleString();
   S.querySelector('.rh-progress i').style.width = `${Math.min(100, (now / r.music.layout.seconds) * 100)}%`;
   S.querySelector('.rh-hype i').style.height = `${r.hype * 100}%`;
+  // The words, karaoke-style: the line being sung, each syllable lighting up as it's sung,
+  // and what it means underneath.
+  const beatNow = now / r.music.beat;
+  const lines = r.music.layout.lines;
+  const line = lines.find((l) => beatNow >= l.beat - 1.5 && beatNow < l.end + 0.6);
+  if (line !== r.lyricLine) {
+    r.lyricLine = line;
+    S.querySelector('.rh-jp').innerHTML = line ? line.tokens.map((tk) => `<span data-b="${tk.beat}">${tk.text}</span>`).join(' ') : '';
+    S.querySelector('.rh-en').textContent = line ? line.en : '';
+  }
+  if (line) for (const sp of S.querySelectorAll('.rh-jp span')) sp.classList.toggle('sung', +sp.dataset.b <= beatNow + 0.05);
+  r.board.classList.toggle('fever', r.hype > 0.85);
   if (now > r.music.layout.seconds + 0.5) {
     r.ended = true;
     const total = r.notes.length || 1;

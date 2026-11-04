@@ -120,6 +120,7 @@ function buildCrowdIn(parent, n) {
 /* ---------- Busking ---------- */
 // Singing out in the city: a crowd gathers round her, Haru plays (once she's met him).
 function startBusk(opts) {
+  if (opts.choose && !opts.chosen) { chooseSong({ name: opts.title }, (song) => startBusk({ ...opts, song, chosen: true, difficulty: (opts.difficulty || 0.3) + SONGS[song].stars * 0.05 })); return; }
   const at = opts.where === 'beach' ? { x: -26, z: -142 } : opts.where === 'park' ? { x: -6, z: 64 } : { x: 2, z: -20 };
   const set = { g: new THREE.Group(), crowd: null, beams: [], lights: null, open: true, busk: true };
   city.group.add(set.g);
@@ -136,6 +137,7 @@ function startBusk(opts) {
 
 /* ---------- Gigs ---------- */
 function startGig(v, after) {
+  if (v.choose && !v.chosen) { chooseSong(v, (song) => startGig({ ...v, song, chosen: true, difficulty: (v.difficulty || 0.4) + (SONGS[song].stars - 2) * 0.05 }, after)); return; }
   const style = v.style || 'club';
   const S = STAGES[style];
   const at = S.open ? (style === 'fest' ? { x: 70, z: -150 } : { x: 96, z: -140 }) : STAGE_AT;
@@ -315,8 +317,10 @@ function finishPerformance() {
   poseAvatar(1 / 60, cityV.set(0, 0, 0), false);
   avatar.simulate(1 / 60);
   endScene();
-  Sfx.playMusic('city');
+  Sfx.playMusic(cityMusic());
   if (P.fame) { addFame(P.fame, P.opts.kind === 'gig' ? P.opts.name : 'busking'); addYen(P.yen); }
+  idol.played = idol.played || {};
+  idol.played[P.opts.song] = (idol.played[P.opts.song] || 0) + 1;
   if (P.after) P.after(P.res);
   saveGame();
 }
@@ -738,4 +742,37 @@ function updateConfetti(dt, S) {
     p[i * 3 + 2] += v[i * 3 + 2] * dt;
   }
   S.confetti.geometry.attributes.position.needsUpdate = true;
+}
+
+/* ---------- The setlist ---------- */
+// Before a show: which song? Every song she's unlocked, how hard it is, how often she's sung it.
+function songsAvailable() {
+  return Object.entries(SONGS).filter(([id, s]) => !s.teto && id !== 'crown' && s.unlock());
+}
+
+function chooseSong(opts, then) {
+  const list = songsAvailable();
+  if (list.length <= 1) { then(list.length ? list[0][0] : opts.song); return; }
+  const played = idol.played || (idol.played = {});
+  const pickIdx = list.reduce((best, [id], i) => ((played[id] || 0) < (played[list[best][0]] || 0) ? i : best), 0);
+  let el = $('setlist');
+  if (!el) { el = document.createElement('div'); el.id = 'setlist'; document.body.appendChild(el); }
+  el.innerHTML = `<h3>${opts.name || 'Tonight'}</h3><h2>What will we sing?</h2><ol>${list.map(([id, s], i) => `<li data-i="${i}" class="${i === pickIdx ? 'pick' : ''}"><kbd>${i + 1}</kbd><span><b>${s.title}${played[id] ? '' : '<span class="new">NEW</span>'}</b><small>${s.mood}</small></span><span class="stars">${'★'.repeat(s.stars)}${'☆'.repeat(4 - s.stars)}</span></li>`).join('')}</ol><p class="hint">1-${list.length} to choose · Enter for the highlighted song</p>`;
+  el.classList.remove('hidden');
+  document.exitPointerLock();
+  const done = (i) => {
+    removeEventListener('keydown', onKey, true);
+    el.removeEventListener('click', onClick);
+    el.classList.add('hidden');
+    lockPointer();
+    then(list[i][0]);
+  };
+  const onKey = (e) => {
+    const d = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
+    if (d >= 0 && d < list.length) { e.preventDefault(); e.stopImmediatePropagation(); done(d); }
+    else if (e.code === 'Enter' || e.code === 'KeyE' || e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); done(pickIdx); }
+  };
+  const onClick = (e) => { const li = e.target.closest('li'); if (li) done(+li.dataset.i); };
+  addEventListener('keydown', onKey, true);
+  el.addEventListener('click', onClick);
 }

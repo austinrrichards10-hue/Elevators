@@ -1064,6 +1064,7 @@ function mapSizeBook() {
 }
 
 function mapDrawBook() {
+  if (cityActive()) { drawCityMap($('map-canvas'), $('map-legend')); return; }
   const canvas = $('map-canvas'), b = mapState.book;
   if (!b.w || !b.h || !mapState.chart) return;
   const g = canvas.getContext('2d');
@@ -1353,6 +1354,8 @@ function closeBook(pause = false) {
 
 function mapShowTab(tab, opening = false) {
   if (!BOOK_HINTS[tab]) tab = 'map';
+  // In Tokyo the crater's journal has nothing more to say: the map is of the city.
+  if (cityActive() && tab === 'journal') tab = 'map';
   if (!opening && tab !== mapState.tab) Sfx.bookPage();
   mapState.tab = tab;
   for (const button of document.querySelectorAll('#book .book-tabs [data-tab]')) {
@@ -1361,7 +1364,7 @@ function mapShowTab(tab, opening = false) {
     button.setAttribute('aria-selected', on);
   }
   for (const page of ['map', 'journal', 'pack']) $(`book-${page}`).classList.toggle('active', page === tab);
-  document.querySelector('#book .book-hint').innerHTML = BOOK_HINTS[tab];
+  document.querySelector('#book .book-hint').innerHTML = cityActive() ? (tab === 'map' ? '<kbd>I</kbd> pack &nbsp;·&nbsp; <kbd>M</kbd> or <kbd>Tab</kbd> close' : '<kbd>M</kbd> map &nbsp;·&nbsp; <kbd>I</kbd> or <kbd>Tab</kbd> close') : BOOK_HINTS[tab];
   mapRefreshPage();
 }
 
@@ -1370,6 +1373,7 @@ function mapRefreshPage() {
   const tab = mapState.tab;
   if (tab === 'journal') mapSafe(() => renderJournal($('book-journal')));
   else if (tab === 'pack') mapSafe(() => renderPack($('book-pack')));
+  else if (cityActive()) { $('book-map').classList.remove('no-chart'); mapSizeBook(); drawCityMap($('map-canvas'), $('map-legend')); }
   else {
     const charted = hasMap();
     $('book-map').classList.toggle('no-chart', !charted);

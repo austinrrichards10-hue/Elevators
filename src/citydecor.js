@@ -35,7 +35,7 @@ function buildCityDecor(G, rand, rect) {
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; G.add(m); return m; };
   const decor = {};
   /* ---------- Parks ---------- */
-  const grass = std(0x5f8f4a, { roughness: 1 }), path = std(0xc9b99a, { roughness: 1 }), hedge = std(0x3f6a36, { roughness: 1 });
+  const grass = new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 1 }), path = std(0xc9b99a, { roughness: 1 }), hedge = std(0x3f6a36, { roughness: 1 });
   const sakuraTrees = [], greenTrees = [], lanterns = [], benches = [];
   for (const [name, P] of Object.entries(PARKS)) {
     const w = P.x1 - P.x0, d = P.z1 - P.z0, cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2;
@@ -118,14 +118,18 @@ function buildCityDecor(G, rand, rect) {
     greenTrees.push([x, 0.14, z, rand() * 6, 0.7 + rand() * 0.25]);
     rect(x - 0.25, x + 0.25, z - 0.25, z + 0.25);
   }
-  // Trunks, round green crowns (each a slightly different green), pink sakura clouds.
-  const trunkGeo = new THREE.CylinderGeometry(0.14, 0.2, 2.6, 7).translate(0, 1.3, 0);
-  instanced(G, trunkGeo, std(0x4a3426), [...greenTrees, ...sakuraTrees].map((t) => [t[0], t[1], t[2], t[3], t[4]]));
-  const crownGeo = new THREE.IcosahedronGeometry(1.5, 1).translate(0, 3.4, 0);
-  decor.greenCrowns = instanced(G, crownGeo, std(0xffffff, { roughness: 0.9 }), greenTrees.map((t) => [t[0], t[1], t[2], t[3], t[4], t[4] * 0.9]), [0x4f8a3e, 0x5a9444, 0x467c38, 0x62a04a]);
-  const puffs = [];
-  for (const t of sakuraTrees) for (let k = 0; k < 4; k++) puffs.push([t[0] + (rand() - 0.5) * 1.8 * t[4], t[1] + 3 + rand() * 1.1 * t[4], t[2] + (rand() - 0.5) * 1.8 * t[4], rand() * 6, (0.9 + rand() * 0.5) * t[4]]);
-  instanced(G, new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, emissive: 0x3a1020, emissiveIntensity: 0.25 }), puffs, [0xf7bfd3, 0xf5b0c8, 0xfad0de, 0xf2a6c0]);
+  // Whole trees, a few shapes of each, instanced: sakura with spreading canopies of blossom,
+  // and street trees in clumps of green; petals scattered on the ground under the sakura.
+  const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
+  const sakuraShapes = [0, 1, 2].map((v) => buildTreeGeometry(v * 17 + 3, 'sakura'));
+  const greenShapes = [0, 1, 2].map((v) => buildTreeGeometry(v * 23 + 5, 'green'));
+  const byShape = (list, n) => Array.from({ length: n }, (_, k) => list.filter((_, i) => i % n === k));
+  byShape(sakuraTrees, 3).forEach((list, k) => { if (list.length) instanced(G, sakuraShapes[k], treeMat, list.map((t) => [t[0], t[1], t[2], t[3], t[4]])); });
+  byShape(greenTrees, 3).forEach((list, k) => { if (list.length) instanced(G, greenShapes[k], treeMat, list.map((t) => [t[0], t[1], t[2], t[3], t[4] * 0.85])); });
+  const petals = [];
+  for (const t of sakuraTrees) for (let k = 0; k < 10; k++) { const a = rand() * 6.28, r = rand() * 3.2 * t[4]; petals.push([t[0] + Math.cos(a) * r, t[1] + 0.03 + rand() * 0.01, t[2] + Math.sin(a) * r, rand() * 6, 0.4 + rand() * 0.5, 1, -Math.PI / 2]); }
+  const petalMesh = instanced(G, new THREE.CircleGeometry(0.5, 6), new THREE.MeshStandardMaterial({ color: 0xf6c4d4, roughness: 1, transparent: true, opacity: 0.85, depthWrite: false }), petals);
+  petalMesh.castShadow = false;
   // Stone lanterns and benches.
   const stone = std(0xa6a39c);
   instanced(G, new THREE.BoxGeometry(0.5, 1.2, 0.5).translate(0, 0.6, 0), stone, lanterns);
@@ -328,4 +332,55 @@ function updateCityDecor(dt) {
   L.towerLight.material.opacity = Math.floor(game.time * 1.2) % 2 ? 1 : 0.2;
   L.towerGlow.intensity = night * 6;
   L.bridgeMat.opacity = night * 0.95;
+}
+
+// One tree as a single mesh with its colours in its vertices: a gently curving trunk that
+// forks into branches, and clusters of foliage (blossom or leaves) at the branch tips.
+function buildTreeGeometry(seed, kind) {
+  const rand = seededRandom(seed), parts = [];
+  const bark = new THREE.Color(kind === 'sakura' ? 0x3e2a24 : 0x4a3a2c);
+  const put = (geo, matrix, color, vary = 0) => { geo = geo.index ? geo.toNonIndexed() : geo; geo.applyMatrix4(matrix); const n = geo.attributes.position.count, c = new Float32Array(n * 3), cc = new THREE.Color(); for (let i = 0; i < n; i++) { cc.copy(color); if (vary) { const y = geo.attributes.position.getY(i); cc.offsetHSL(0, 0, (rand() - 0.5) * vary + (kind === 'sakura' ? (y - 3.5) * 0.04 : (y - 3.5) * 0.03)); } c.set([cc.r, cc.g, cc.b], i * 3); } geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.deleteAttribute('uv'); parts.push(geo); };
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  const limb = (from, to, r0, r1) => { const d = new THREE.Vector3().subVectors(to, from), len = d.length(); q.setFromUnitVectors(up, d.normalize()); m.compose(from, q, new THREE.Vector3(1, 1, 1)); put(new THREE.CylinderGeometry(r1, r0, len, 7).translate(0, len / 2, 0), m, bark); };
+  const trunkTop = new THREE.Vector3((rand() - 0.5) * 0.4, kind === 'sakura' ? 1.7 : 2.4, (rand() - 0.5) * 0.4);
+  limb(new THREE.Vector3(0, 0, 0), trunkTop, 0.26, 0.18);
+  const tips = [];
+  const branches = kind === 'sakura' ? 5 : 4;
+  for (let b = 0; b < branches; b++) {
+    const a = (b / branches) * Math.PI * 2 + rand() * 0.8;
+    const spread = kind === 'sakura' ? 2.2 + rand() * 1.0 : 1.2 + rand() * 0.6;
+    const mid = trunkTop.clone().add(new THREE.Vector3(Math.cos(a) * spread * 0.55, 0.9 + rand() * 0.5, Math.sin(a) * spread * 0.55));
+    const end = trunkTop.clone().add(new THREE.Vector3(Math.cos(a) * spread, (kind === 'sakura' ? 1.4 : 2.0) + rand() * 0.8, Math.sin(a) * spread));
+    limb(trunkTop, mid, 0.15, 0.1);
+    limb(mid, end, 0.1, 0.05);
+    tips.push(mid, end);
+  }
+  // Foliage: many soft lumps round each tip, wider and flatter for sakura.
+  const pinks = [0xf9c6d6, 0xf4afc6, 0xfbd8e3, 0xf09ab8, 0xfde6ee];
+  const greens = [0x4f8a3e, 0x5a9a46, 0x3f7a34, 0x6aa850, 0x4a8040];
+  for (const tip of tips) {
+    const clusters = kind === 'sakura' ? 7 : 6;
+    for (let k = 0; k < clusters; k++) {
+      const r = (kind === 'sakura' ? 0.55 : 0.65) + rand() * 0.45;
+      const geo = new THREE.IcosahedronGeometry(r, 1);
+      const gp = geo.attributes.position;
+      for (let i = 0; i < gp.count; i++) { const s = 1 + (rand() - 0.5) * 0.28; gp.setXYZ(i, gp.getX(i) * s, gp.getY(i) * s * (kind === 'sakura' ? 0.72 : 0.9), gp.getZ(i) * s); }
+      geo.computeVertexNormals();
+      const off = new THREE.Vector3((rand() - 0.5) * 1.6, (rand() - 0.3) * 0.8, (rand() - 0.5) * 1.6);
+      m.makeTranslation(tip.x + off.x, tip.y + off.y, tip.z + off.z);
+      const list = kind === 'sakura' ? pinks : greens;
+      put(geo, m, new THREE.Color(list[Math.floor(rand() * list.length)]), 0.08);
+    }
+  }
+  // Merge.
+  let count = 0;
+  for (const p of parts) count += p.attributes.position.count;
+  const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), col = new Float32Array(count * 3);
+  let o = 0;
+  for (const p of parts) { pos.set(p.attributes.position.array, o * 3); nor.set(p.attributes.normal.array, o * 3); col.set(p.attributes.color.array, o * 3); o += p.attributes.position.count; }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
 }

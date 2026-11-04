@@ -1486,7 +1486,7 @@ function renderPack(el) {
   if (!any) html += '<p class="pack-empty">Nothing yet but lint and a boarding pass.</p>';
 
   // Varga's ten parts, in the order of the sites.
-  html += `<section class="pack-section"><h4 class="pack-title">Balloon parts <b>${packPartCount()} / ${PACK_PART_IDS.length}</b></h4><div class="pack-parts">`;
+  html += `<section class="pack-section pack-crater"><h4 class="pack-title">Balloon parts <b>${packPartCount()} / ${PACK_PART_IDS.length}</b></h4><div class="pack-parts">`;
   for (const id of PACK_PART_IDS) {
     const d = ITEMS[id];
     const site = siteById(d.site);
@@ -1497,7 +1497,7 @@ function renderPack(el) {
   }
   html += '</div></section>';
   const shards = packShardCount();
-  html += `<section class="pack-section"><h4 class="pack-title">Star-iron shards <b>${shards} / ${LOOT.shardTotal}</b></h4><div class="pack-shards">`
+  html += `<section class="pack-section pack-crater"><h4 class="pack-title">Star-iron shards <b>${shards} / ${LOOT.shardTotal}</b></h4><div class="pack-shards">`
     + Array.from({ length: LOOT.shardTotal }, (_, i) => `<i class="${i < shards ? 'got' : ''}"></i>`).join('') + '</div></section>';
   html += '</div>';
   el.innerHTML = html;
