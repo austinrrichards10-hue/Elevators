@@ -612,7 +612,9 @@ function playSong(id, { level = 0.8 } = {}) {
   const swing = style.swing || 0;
   const handle = {
     id, start, beat, layout: L, out,
-    time: () => ctx.currentTime - start,
+    // What can be heard right now: the audio clock less the time the sound takes to reach
+    // the speakers, so notes and key presses line up with the music you hear.
+    time: () => heardTime(ctx) - start,
     stop(fade = 0.6) { stopped = true; clearInterval(timer); out.gain.setTargetAtTime(0, ctx.currentTime, fade / 3); setTimeout(() => out.disconnect(), fade * 1000 + 400); },
     done: () => ctx.currentTime - start > L.seconds,
   };
@@ -631,6 +633,7 @@ function playSong(id, { level = 0.8 } = {}) {
       else songVoice(ctx, band, kind, t, ev[2], ev[3], beat, S, ev[4]);
     }
   };
+  warmVoice(ctx, L, S);
   const timer = setInterval(pump, 120);
   pump();
   return handle;
@@ -661,7 +664,7 @@ function voxWave(ctx, formants, f0, key) {
   let w = voxCache.get(k0);
   if (w) return w;
   if (voxCache.size > 900) voxCache.clear();
-  const n = Math.max(4, Math.min(80, Math.floor(7000 / f0)));
+  const n = Math.max(4, Math.min(48, Math.floor(6000 / f0)));
   const real = new Float32Array(n + 1), imag = new Float32Array(n + 1);
   let sum = 0;
   for (let k = 1; k <= n; k++) {
@@ -1045,3 +1048,42 @@ Sfx.tracks.cityNight = {
     S.hit({ dur: 0.12, freq: 6000, q: 0.5, vol: 0.02 + (beat % 2) * 0.015, type: 'highpass', delay: t - S.ctx.currentTime });
   },
 };
+
+/* ---------- Keeping the stage in time ---------- */
+function heardTime(ctx) {
+  if (ctx.getOutputTimestamp) {
+    const ts = ctx.getOutputTimestamp();
+    if (ts.contextTime > 0 && ts.performanceTime > 0) {
+      const t = ts.contextTime + (performance.now() - ts.performanceTime) / 1000;
+      // Never ahead of the clock, never more than a fifth of a second behind it.
+      return Math.min(ctx.currentTime, Math.max(ctx.currentTime - 0.2, t));
+    }
+  }
+  return ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
+}
+
+// Every voice shape a song will need, built a few at a time while the intro plays, so
+// none of them has to be made in the middle of a phrase (that's what made it stutter).
+function warmVoice(ctx, L, S) {
+  const jobs = [], seen = new Set();
+  for (const ev of L.events) {
+    const kind = ev[1];
+    if (kind !== 'lead' && kind !== 'harm' && kind !== 'chop') continue;
+    const tok = ev[4] || 'la';
+    if (tok === '-') continue;
+    const vowel = tok === 'n' ? 'n' : tok[tok.length - 1], cons = consOf(tok);
+    if (!VOX[vowel]) continue;
+    const shift = (S.teto ? 0.94 : 1.06) * (kind === 'harm' && ev[6] === 'up' ? 1.06 : 1);
+    const f0 = midiHz(ev[2]);
+    const add = (formants, key) => { const k = `${key}|${Math.round(f0 / 5)}`; if (!seen.has(k) && !voxCache.has(k)) { seen.add(k); jobs.push([formants, f0, key]); } };
+    add(formantsFor(vowel, '', shift), `${vowel}${shift}`);
+    if (cons === 'm' || cons === 'n') add(VOX[cons].map(([f, b, a]) => [f * shift, b, a]), `${cons}${shift}`);
+    else if (cons === 'y') add(formantsFor('i', '', shift), `i${shift}`);
+    else if (cons === 'w') add(formantsFor('u', '', shift), `u${shift}`);
+    else if (cons) add(formantsFor(vowel, cons, shift, /^(k|g|t|d|p|b|ch|ts)/.test(cons) ? 'stop' : 'fric'), `${vowel}~${cons}${shift}`);
+  }
+  // The first phrase straight away, the rest a handful per frame.
+  let i = 0;
+  const step = (n) => { const end = Math.min(jobs.length, i + n); for (; i < end; i++) voxWave(ctx, jobs[i][0], jobs[i][1], jobs[i][2]); if (i < jobs.length) setTimeout(() => step(6), 16); };
+  step(24);
+}

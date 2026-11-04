@@ -401,17 +401,26 @@ function buildCity() {
 // hair), each coloured per person, so a crowd costs a few draws.
 function buildCrowd(count) {
   const parts = {
-    legL: new THREE.BoxGeometry(0.13, 0.8, 0.14).translate(0, -0.4, 0),
-    legR: new THREE.BoxGeometry(0.13, 0.8, 0.14).translate(0, -0.4, 0),
-    body: new THREE.BoxGeometry(0.38, 0.6, 0.22).translate(0, 0.3, 0),
-    armL: new THREE.BoxGeometry(0.1, 0.58, 0.11).translate(0, -0.29, 0),
-    armR: new THREE.BoxGeometry(0.1, 0.58, 0.11).translate(0, -0.29, 0),
-    head: new THREE.SphereGeometry(0.13, 10, 8),
-    hair: new THREE.SphereGeometry(0.145, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    legL: new THREE.CylinderGeometry(0.07, 0.052, 0.8, 10).translate(0, -0.4, 0),
+    legR: new THREE.CylinderGeometry(0.07, 0.052, 0.8, 10).translate(0, -0.4, 0),
+    body: new THREE.CylinderGeometry(0.19, 0.15, 0.6, 14).scale(1, 1, 0.6).translate(0, 0.3, 0),
+    armL: new THREE.CylinderGeometry(0.052, 0.042, 0.58, 8).translate(0, -0.29, 0),
+    armR: new THREE.CylinderGeometry(0.052, 0.042, 0.58, 8).translate(0, -0.29, 0),
+    head: new THREE.SphereGeometry(0.13, 18, 14),
+    hair: new THREE.SphereGeometry(0.145, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    // Faces, and for the girls: a flared skirt, long hair down the back, two tails (or one
+    // ponytail), a bow.
+    eyeL: new THREE.SphereGeometry(0.026, 8, 6).scale(1, 1.45, 0.55),
+    eyeR: new THREE.SphereGeometry(0.026, 8, 6).scale(1, 1.45, 0.55),
+    skirt: new THREE.CylinderGeometry(0.19, 0.31, 0.36, 16, 1, true).translate(0, -0.16, 0),
+    hairLong: new THREE.CylinderGeometry(0.15, 0.12, 0.5, 12, 1, true, Math.PI * 0.6, Math.PI * 0.8).translate(0, -0.22, 0),
+    tailL: new THREE.CylinderGeometry(0.09, 0.03, 0.78, 10).translate(0, -0.37, 0),
+    tailR: new THREE.CylinderGeometry(0.09, 0.03, 0.78, 10).translate(0, -0.37, 0),
+    bow: new THREE.BoxGeometry(0.2, 0.08, 0.05),
   };
   const meshes = {};
   for (const [k, geo] of Object.entries(parts)) {
-    const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), count);
+    const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: k.startsWith('eye') ? 0.3 : 0.8, side: k === 'skirt' || k === 'hairLong' ? THREE.DoubleSide : THREE.FrontSide }), count);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.castShadow = true;
     m.frustumCulled = false;
@@ -438,13 +447,22 @@ function addPerson(crowd, look) {
   const c = new THREE.Color();
   const set = (k, hex) => crowd.meshes[k].setColorAt(i, c.setHex(hex));
   set('legL', look.legs); set('legR', look.legs); set('body', look.top); set('armL', look.top); set('armR', look.top); set('head', look.skin); set('hair', look.hair);
+  set('eyeL', look.eyes || 0x1a1a24); set('eyeR', look.eyes || 0x1a1a24); set('skirt', look.skirt || look.legs); set('hairLong', look.hair); set('tailL', look.hair); set('tailR', look.hair); set('bow', look.bow || look.top);
   for (const m of Object.values(crowd.meshes)) { m.count = crowd.people.length; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   return p;
 }
 
 function randomLook(rand = Math.random) {
   const pick = (a) => a[Math.floor(rand() * a.length)];
-  return { skin: pick(PEOPLE_COLORS.skin), hair: pick(PEOPLE_COLORS.hair), top: pick(PEOPLE_COLORS.top), legs: pick(PEOPLE_COLORS.legs), scale: 0.92 + rand() * 0.14 };
+  const look = { skin: pick(PEOPLE_COLORS.skin), hair: pick(PEOPLE_COLORS.hair), top: pick(PEOPLE_COLORS.top), legs: pick(PEOPLE_COLORS.legs), scale: 0.92 + rand() * 0.14 };
+  if (rand() < 0.45) {
+    look.girl = pick(['long', 'long', 'bob', 'pony', 'twin']);
+    look.skirt = pick([0x2b3a5a, 0x8a2a3a, 0xe8e2d6, 0x22242a, 0xd8a0b8, 0x5a7ab8, 0x3a5a4a]);
+    look.legs = pick([look.skin, look.skin, 0x22242a, 0xf0f0f0]);
+    look.scale = 0.9 + rand() * 0.08;
+    if (rand() < 0.3) look.bow = pick([0xff8ab8, 0xffffff, 0x39d5c8, 0xd8302f]);
+  }
+  return look;
 }
 
 // Pedestrians walk loops round the blocks.
@@ -502,7 +520,8 @@ function poseCrowd(crowd, dt) {
     placePart(M.armL, p.i, lx, y + 0.56 * s, lz, p.yaw, -swing + (p.cheer > 0 ? up : 0), s);
     placePart(M.armR, p.i, rx, y + 0.56 * s, rz, p.yaw, swing + up, s);
     placePart(M.head, p.i, p.x, y + 0.75 * s, p.z, p.yaw, 0, s);
-    placePart(M.hair, p.i, p.x, y + 0.77 * s, p.z, p.yaw, -0.25, s);
+    placePart(M.hair, p.i, p.x, y + 0.77 * s, p.z, p.yaw, p.look.girl ? -0.06 : -0.25, s * (p.look.girl ? 1.04 : 1));
+    poseLook(M, p, y, s, cos, sin);
     p.wave = Math.max(0, p.wave - dt);
   }
   for (const m of Object.values(M)) m.instanceMatrix.needsUpdate = true;
@@ -853,4 +872,27 @@ function cityOnRoad(x, z) {
   if (x > -66 && x < -54 && z > -46 && z < 96) return false;
   if (z < -116) return false;
   return [-120, -60, 0, 60, 120].some((a) => Math.abs(x - a) < 4.4) || [-112, -50, 0, 50, 100, 146].some((s) => Math.abs(z - s) < 4.4);
+}
+
+// The face and, for the girls, the skirt, the hair and the bow.
+const LOOK_HIDE = -60;
+function poseLook(M, p, y, s, cos, sin) {
+  const hy = y + 0.75 * s, L = p.look, g = L.girl, i = p.i;
+  const at = (fwd, right, up) => [p.x + sin * fwd * s + cos * right * s, hy + up * s, p.z + cos * fwd * s - sin * right * s];
+  const hide = (m) => placePart(m, i, p.x, LOOK_HIDE, p.z, 0, 0, 0.0001);
+  let q = at(0.141, 0.047, -0.004); placePart(M.eyeL, i, q[0], q[1], q[2], p.yaw, 0, s);
+  q = at(0.141, -0.047, -0.004); placePart(M.eyeR, i, q[0], q[1], q[2], p.yaw, 0, s);
+  if (!g) { hide(M.skirt); hide(M.hairLong); hide(M.tailL); hide(M.tailR); hide(M.bow); return; }
+  placePart(M.skirt, i, p.x, y + 0.06 * s, p.z, p.yaw, 0, s);
+  const sway = Math.sin(p.phase * 0.5 + game.time * 1.5) * 0.06;
+  if (g === 'bob') { q = at(-0.01, 0, 0.06); placePart(M.hairLong, i, q[0], q[1], q[2], p.yaw, 0, s * 0.72); }
+  else { q = at(-0.01, 0, 0.05); placePart(M.hairLong, i, q[0], q[1], q[2], p.yaw, 0.05, s * (g === 'long' ? 1.08 : 0.8)); }
+  if (g === 'twin') {
+    q = at(-0.03, 0.19, 0.1); placePart(M.tailL, i, q[0], q[1], q[2], p.yaw, 0.14 + sway, s);
+    q = at(-0.03, -0.19, 0.1); placePart(M.tailR, i, q[0], q[1], q[2], p.yaw, 0.14 - sway, s);
+  } else if (g === 'pony') {
+    q = at(-0.15, 0, 0.1); placePart(M.tailL, i, q[0], q[1], q[2], p.yaw, 0.32 + sway, s * 0.95);
+    hide(M.tailR);
+  } else { hide(M.tailL); hide(M.tailR); }
+  if (L.bow) { q = at(-0.06, 0, 0.15); placePart(M.bow, i, q[0], q[1], q[2], p.yaw, -0.4, s); } else hide(M.bow);
 }

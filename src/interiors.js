@@ -18,7 +18,7 @@ const lotTaken = (x0, x1, z0, z1) => SPECIAL_LOTS.some(([a, b, c, d]) => x1 > a 
 // (room coordinates), `face` which way she faces coming in.
 const ROOMS = {
   hotel: { name: 'Ishida Capsule Hotel', w: 16, d: 14, h: 4.2, door: { x: -45, z: -53.6 }, entry: { x: 0, z: -5.6 }, open: () => true },
-  apartment: { name: 'your apartment', w: 11, d: 9, h: 3.2, door: { x: 74, z: -53.6 }, entry: { x: -3.5, z: -3.4 }, open: () => has('apartment'), locked: 'Maison Hoshizora. Somebody else lives here... for now.' },
+  apartment: { name: 'your apartment', w: 12, d: 10, h: 3.3, door: { x: 74, z: -53.6 }, entry: { x: -4, z: -3.8 }, open: () => has('apartment'), locked: 'Maison Hoshizora. Somebody else lives here... for now.' },
   agency: { name: 'Starlight Production', w: 18, d: 16, h: 4.6, door: { x: 62.6, z: -36 }, entry: { x: 0, z: -6.6 }, open: () => true },
   konbini: { name: 'the convenience store', w: 14, d: 12, h: 3.6, door: { x: 103, z: 51.8 }, entry: { x: 0, z: -4.6 }, open: () => true },
 };
@@ -113,6 +113,7 @@ function buildInteriors() {
     add(new THREE.PlaneGeometry(R.w, R.d).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6, emissive: 0xffffff, emissiveMap: floorTex, emissiveIntensity: 0.35 }), 0, 0.01, 0);
     const wallC = { hotel: 0xe8dcc8, apartment: 0xf2ece2, agency: 0xf4f6f8, konbini: 0xf8f8f6 }[R.id];
     add(new THREE.BoxGeometry(R.w, R.h, R.d).translate(0, R.h / 2, 0), mat(wallC, { side: THREE.BackSide, emissiveIntensity: 0.26 }), 0, 0, 0);
+    add(new THREE.BoxGeometry(R.w + 0.6, R.h + 0.6, R.d + 0.6).translate(0, R.h / 2, 0), new THREE.MeshBasicMaterial({ color: 0x14161c }), 0, -0.3, 0);
     for (let i = 0; i < Math.floor(R.w / 4); i++) for (let j = 0; j < Math.floor(R.d / 4); j++) add(new THREE.PlaneGeometry(1.6, 0.9).rotateX(Math.PI / 2), glow(0xfff8ee, 1.2), -R.w / 2 + 2 + i * 4, R.h - 0.02, -R.d / 2 + 2 + j * 4);
     // Skirting along the walls.
     for (const [w, d, x, z] of [[R.w, 0.06, 0, -R.d / 2 + 0.03], [R.w, 0.06, 0, R.d / 2 - 0.03], [0.06, R.d, -R.w / 2 + 0.03, 0], [0.06, R.d, R.w / 2 - 0.03, 0]]) box(w, 0.14, d, 0x6a5040, x, 0, z, false);
@@ -152,31 +153,108 @@ const INTERIOR_DRESS = {
   },
   apartment(R) {
     const { box, add, mat, glow } = R;
-    // The bed, made, with a teal throw.
-    box(2.2, 0.45, 3.2, 0x8a6a4a, 3.6, 0, 1.6);
-    box(2.1, 0.25, 3.0, 0xf4f4f8, 3.6, 0.45, 1.6, false);
-    box(2.12, 0.08, 1.8, 0x39b5a8, 3.6, 0.7, 1.0, false);
-    box(1.2, 0.2, 0.5, 0xffffff, 3.6, 0.7, 2.8, false);
-    // The desk with her laptop, a chair, a lamp.
-    box(2, 0.75, 0.8, 0xd8c8b0, -3.8, 0, 3.8);
-    const lap = box(0.6, 0.03, 0.4, 0x2a2c34, -3.8, 0.75, 3.7, false);
-    void lap;
-    add(new THREE.PlaneGeometry(0.58, 0.36), glow(0x8ff4e8, 1), -3.8, 0.97, 3.92).rotation.y = Math.PI;
-    box(0.5, 0.45, 0.5, 0x39d5c8, -3.8, 0, 2.8);
-    // A window on the city, a poster of the group, a mirror, a little kitchen.
-    const win = add(new THREE.PlaneGeometry(3.2, 1.8), new THREE.MeshBasicMaterial({ map: paintCanvas(256, 144, (g) => { const gr = g.createLinearGradient(0, 0, 0, 144); gr.addColorStop(0, '#1a2448'); gr.addColorStop(1, '#ff8ab8'); g.fillStyle = gr; g.fillRect(0, 0, 256, 144); for (let i = 0; i < 26; i++) { const w = 6 + Math.random() * 14, h = 30 + Math.random() * 90; g.fillStyle = '#141828'; g.fillRect(i * 10, 144 - h, w, h); g.fillStyle = '#ffd890'; for (let k = 0; k < 8; k++) if (Math.random() < 0.5) g.fillRect(i * 10 + 2 + Math.random() * (w - 4), 144 - h + Math.random() * h, 2, 2); } }), toneMapped: false }), 0, 1.7, R.d / 2 - 0.05);
-    win.rotation.y = Math.PI;
-    R.window = win;
-    box(3.4, 0.12, 0.2, 0xffffff, 0, 0.78, R.d / 2 - 0.1, false);
-    R.poster = add(new THREE.PlaneGeometry(1.1, 1.5), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), -R.w / 2 + 0.05, 1.7, 0);
-    R.poster.rotation.y = Math.PI / 2;
-    add(new THREE.PlaneGeometry(0.8, 1.6), mat(0xb8d8f0, { metalness: 0.9, roughness: 0.05 }), R.w / 2 - 0.05, 1.2, -1.6).rotation.y = -Math.PI / 2;
-    box(2.4, 0.9, 0.6, 0xe8e8ec, -3.6, 0, -R.d / 2 + 0.6 + 1.4);
-    box(0.7, 1.7, 0.7, 0xdfe6ee, -1.7, 0, -R.d / 2 + 1.6, true, { metalness: 0.4 });
-    add(new THREE.CircleGeometry(1.4, 28).rotateX(-Math.PI / 2), mat(0xf5b8cf), 0.4, 0.02, 0.6);
-    box(0.4, 0.4, 0.4, 0x6a4a30, 1.2, 0, 3.9, true); add(new THREE.SphereGeometry(0.45, 10, 8), mat(0x3a8a4a), 1.2, 0.85, 3.9);
-    citySpot({ x: R.x + 3.6, z: R.z - 0.4, r: 2, label: () => 'Press E to rest', use: () => restMenu(), active: () => city.inside === 'apartment' });
-    citySpot({ x: R.x - 3.8, z: R.z + 2.9, r: 1.6, label: () => 'Press E to open the laptop (StarTube)', use: () => openPhone('startube'), active: () => city.inside === 'apartment' && has('phone') });
+    const cyl = (rt, rb, h, color, x, y, z, seg = 16) => add(new THREE.CylinderGeometry(rt, rb, h, seg), color && color.isMaterial ? color : mat(color), x, y + h / 2, z);
+    const ball = (r, color, x, y, z, sx = 1, sy = 1, sz = 1) => { const o = add(new THREE.SphereGeometry(r, 16, 12), color && color.isMaterial ? color : mat(color), x, y, z); o.scale.set(sx, sy, sz); return o; };
+    const plane = (w, h, m, x, y, z, ry = 0) => { const o = add(new THREE.PlaneGeometry(w, h), m, x, y, z); o.rotation.y = ry; return o; };
+    const canvasMat = (w, h, draw) => new THREE.MeshBasicMaterial({ map: paintCanvas(w, h, draw), toneMapped: false });
+    const W = R.w / 2, D = R.d / 2;
+    const block = (x0, x1, z0, z1) => R.rects.push({ x0: R.x + x0, x1: R.x + x1, z0: R.z + z0, z1: R.z + z1 });
+    // The walls: a deep blue feature wall behind the bed and the window, and a cove of LED
+    // light running round the ceiling, teal fading to pink and violet.
+    plane(R.w - 0.02, R.h - 0.02, mat(0x232a4a, { emissiveIntensity: 0.25 }), 0, R.h / 2, D - 0.02, Math.PI);
+    for (const [w, x, z, ry, c] of [[R.w, 0, D - 0.04, Math.PI, 0xff8ab8], [R.w, 0, -D + 0.04, 0, 0x39d5c8], [R.d, -W + 0.04, 0, Math.PI / 2, 0x39d5c8], [R.d, W - 0.04, 0, -Math.PI / 2, 0xb48aff]]) plane(w, 0.08, glow(c, 1.6), x, R.h - 0.12, z, ry);
+    // The big window: Tokyo by night (or by day), curtains, fairy lights, plants on the sill.
+    const night = paintCanvas(512, 200, (g) => {
+      const gr = g.createLinearGradient(0, 0, 0, 200); gr.addColorStop(0, '#0c1030'); gr.addColorStop(0.7, '#3a2460'); gr.addColorStop(1, '#ff7aa8'); g.fillStyle = gr; g.fillRect(0, 0, 512, 200);
+      for (let i = 0; i < 60; i++) { g.fillStyle = 'rgba(255,255,255,.7)'; g.fillRect(Math.random() * 512, Math.random() * 80, 1.5, 1.5); }
+      for (let i = 0; i < 44; i++) { const w = 8 + Math.random() * 22, h = 40 + Math.random() * 130, x = i * 12 - 6; g.fillStyle = i % 3 ? '#0e1226' : '#151a34'; g.fillRect(x, 200 - h, w, h); for (let k = 0; k < 14; k++) if (Math.random() < 0.55) { g.fillStyle = Math.random() < 0.8 ? '#ffd890' : '#8ff4e8'; g.fillRect(x + 2 + Math.random() * (w - 4), 200 - h + 4 + Math.random() * (h - 8), 2, 2); } }
+      g.fillStyle = '#e8303a'; g.fillRect(250, 22, 6, 120); g.fillStyle = '#ffffff'; g.fillRect(246, 60, 14, 6);
+    });
+    const day = paintCanvas(512, 200, (g) => {
+      const gr = g.createLinearGradient(0, 0, 0, 200); gr.addColorStop(0, '#6aa8e8'); gr.addColorStop(1, '#d8ecff'); g.fillStyle = gr; g.fillRect(0, 0, 512, 200);
+      for (let i = 0; i < 44; i++) { const w = 8 + Math.random() * 22, h = 40 + Math.random() * 130, x = i * 12 - 6; g.fillStyle = ['#c8d0dc', '#b8c4d4', '#d8d0c8', '#a8b8cc'][i % 4]; g.fillRect(x, 200 - h, w, h); g.fillStyle = 'rgba(80,110,150,.5)'; for (let k = 0; k < 10; k++) g.fillRect(x + 2 + Math.random() * (w - 4), 200 - h + 4 + Math.random() * (h - 8), 3, 2); }
+    });
+    R.window = plane(5.2, 2.0, new THREE.MeshBasicMaterial({ map: night, toneMapped: false }), -0.6, 1.75, D - 0.06, Math.PI);
+    R.windowTex = { night, day };
+    const white = mat(0xf4f4f6);
+    for (const [w, h, x, y] of [[5.5, 0.12, -0.6, 2.8], [5.5, 0.18, -0.6, 0.72], [0.12, 2.1, -3.3, 1.75], [0.12, 2.1, 2.1, 1.75], [0.06, 2.0, -0.6, 1.75]]) box(w, h, 0.14, white, x, y - h / 2, D - 0.1, false);
+    box(5.6, 0.06, 0.4, white, -0.6, 0.63, D - 0.22, false);
+    for (const s of [-1, 1]) plane(1.1, 2.6, mat(0xf5b8cf, { side: THREE.DoubleSide, emissiveIntensity: 0.3 }), -0.6 + s * 3.15, 1.6, D - 0.2, Math.PI);
+    for (let i = 0; i < 18; i++) ball(0.035, glow(i % 2 ? 0xfff0b0 : 0xffb8d8, 2), -3.1 + i * 0.29, 2.72 - Math.sin(i * 0.55) * 0.1, D - 0.18);
+    for (const [x, c] of [[-2.6, 0x3a9a5a], [-1.9, 0x5ab06a], [1.4, 0x3a8a4a]]) { cyl(0.11, 0.09, 0.2, 0xd8b8a0, x, 0.66, D - 0.22); ball(0.17, c, x, 1.02, D - 0.22, 1, 1.2, 1); }
+    // The bed: an upholstered pink headboard, a teal duvet, pillows, a plush bunny, and
+    // fairy lights strung over it.
+    box(2.6, 0.32, 3.6, 0x6a4a3a, 3.9, 0, 3.1, false);
+    box(2.5, 0.28, 3.45, 0xffffff, 3.9, 0.32, 3.1, false);
+    box(2.56, 0.1, 2.4, 0x2aa89a, 3.9, 0.6, 2.55, false);
+    box(2.58, 0.11, 0.45, 0x7affe0, 3.9, 0.6, 3.7, false);
+    for (const x of [3.3, 4.5]) box(0.9, 0.18, 0.45, 0xfff6fa, x, 0.62, 4.4, false);
+    box(2.9, 1.3, 0.16, 0xf08ab0, 3.9, 0, D - 0.1, false, { emissiveIntensity: 0.3 });
+    for (let i = 0; i < 6; i++) box(0.04, 1.1, 0.03, 0xd8709a, 2.65 + i * 0.5, 0.1, D - 0.19, false);
+    ball(0.2, 0xffd0e0, 4.6, 0.95, 4.1); ball(0.15, 0xffd0e0, 4.6, 1.25, 4.1); ball(0.05, 0xffd0e0, 4.52, 1.42, 4.1, 0.6, 2, 0.6); ball(0.05, 0xffd0e0, 4.68, 1.42, 4.1, 0.6, 2, 0.6);
+    for (let i = 0; i < 14; i++) ball(0.03, glow(0xfff0b0, 2), 2.6 + i * 0.2, 1.55 + Math.sin(i * 0.9) * 0.06, D - 0.22);
+    block(2.3, 5.5, 1, D);
+    // The nightstand and its lamp.
+    box(0.6, 0.55, 0.5, 0xf4f4f6, 2.05, 0, 4.4, false);
+    cyl(0.05, 0.08, 0.3, 0xd8b040, 2.05, 0.55, 4.4);
+    cyl(0.14, 0.22, 0.25, glow(0xffe0b8, 1.1), 2.05, 0.85, 4.4);
+    // Her desk: a big monitor on StarTube, an RGB keyboard, a singer's microphone on an arm,
+    // a teal gaming chair, and a shelf of little figures with a light under it.
+    box(2.8, 0.06, 0.95, 0xf8f8fa, -4.4, 0.75, 4.35, false);
+    for (const x of [-5.7, -3.1]) box(0.08, 0.75, 0.85, 0xd8d8dc, x, 0, 4.35, false);
+    block(-W, -2.9, 3.7, D);
+    const screen = canvasMat(320, 180, (g) => {
+      g.fillStyle = '#0c1018'; g.fillRect(0, 0, 320, 180); g.fillStyle = '#ff4a5a'; g.fillRect(16, 16, 34, 24);
+      g.fillStyle = '#fff'; g.beginPath(); g.moveTo(28, 21); g.lineTo(28, 35); g.lineTo(40, 28); g.fill(); g.font = 'bold 18px sans-serif'; g.fillText('StarTube', 58, 34);
+      const gr = g.createLinearGradient(0, 50, 320, 170); gr.addColorStop(0, '#39d5c8'); gr.addColorStop(1, '#ff8ab8'); g.fillStyle = gr; g.fillRect(16, 52, 190, 108);
+      g.fillStyle = '#fff'; g.font = 'bold 20px sans-serif'; g.fillText('LIVE', 30, 112); for (let i = 0; i < 4; i++) { g.fillStyle = '#2a3040'; g.fillRect(218, 52 + i * 28, 86, 22); }
+    });
+    box(1.2, 0.72, 0.05, 0x14161c, -4.4, 0.95, 4.72, false);
+    plane(1.12, 0.64, screen, -4.4, 1.31, 4.69, Math.PI);
+    box(0.08, 0.2, 0.08, 0x2a2c34, -4.4, 0.78, 4.74, false);
+    box(0.9, 0.03, 0.3, 0x1a1c24, -4.4, 0.78, 4.15, false);
+    plane(0.9, 0.04, glow(0xb48aff, 1.8), -4.4, 0.8, 4.0, Math.PI);
+    cyl(0.04, 0.04, 0.5, 0x2a2c34, -3.4, 0.78, 4.6); cyl(0.05, 0.05, 0.14, 0x14161c, -3.55, 1.28, 4.3); ball(0.07, 0x8a8e96, -3.55, 1.42, 4.3);
+    box(0.62, 0.12, 0.6, 0x39d5c8, -4.4, 0.45, 3.3, false); box(0.62, 0.85, 0.12, 0x39d5c8, -4.4, 0.5, 3.0, false); cyl(0.04, 0.04, 0.45, 0x2a2c34, -4.4, 0, 3.3);
+    box(2.6, 0.05, 0.3, 0xf8f8fa, -4.4, 1.95, 4.82, false);
+    plane(2.5, 0.03, glow(0x39d5c8, 1.8), -4.4, 1.93, 4.66, Math.PI);
+    [0xff8ab8, 0x39d5c8, 0xffd36a, 0xb47aff, 0xffffff].forEach((c, i) => { box(0.14, 0.22, 0.14, c, -5.4 + i * 0.5, 2.0, 4.82, false); ball(0.07, 0xf5dcc8, -5.4 + i * 0.5, 2.3, 4.82); });
+    // The music corner: a synth on a stand, a red guitar, an amp, posters of the group.
+    box(1.5, 0.06, 0.42, 0x1a1c24, -5.4, 0.85, 0.9, false);
+    const keys = plane(1.4, 0.32, canvasMat(256, 60, (g) => { g.fillStyle = '#f4f4f4'; g.fillRect(0, 0, 256, 60); g.fillStyle = '#111'; for (let i = 0; i < 36; i++) { g.fillRect(i * 7.1, 0, 0.8, 60); if (i % 7 !== 2 && i % 7 !== 6) g.fillRect(i * 7.1 + 4.5, 0, 4, 36); } }), -5.4, 0.92, 0.9);
+    keys.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+    for (const z of [0.6, 1.2]) box(0.04, 0.85, 0.04, 0x8a8e96, -5.4, 0, z, false);
+    block(-W, -4.6, 0.4, 1.4);
+    ball(0.26, 0xd83a3a, -5.6, 0.38, 2.3, 0.35, 1.2, 1); ball(0.2, 0xd83a3a, -5.6, 0.72, 2.3, 0.35, 1, 1); box(0.04, 0.7, 0.07, 0x3a2a1e, -5.6, 0.82, 2.3, false);
+    box(0.35, 0.45, 0.5, 0x2a2c34, -5.7, 0, 1.75, false);
+    [['#39d5c8', G()], ['#ff8ab8', 'LIVE'], ['#ffd36a', 'TOKYO']].forEach(([c, t], i) => plane(0.85, 1.15, canvasMat(128, 172, (g) => { const gr = g.createLinearGradient(0, 0, 0, 172); gr.addColorStop(0, c); gr.addColorStop(1, '#1a1430'); g.fillStyle = gr; g.fillRect(0, 0, 128, 172); g.beginPath(); g.arc(64, 70, 30, 0, Math.PI * 2); g.fillStyle = 'rgba(255,255,255,.35)'; g.fill(); g.fillStyle = '#fff'; g.font = 'bold 20px sans-serif'; g.textAlign = 'center'; g.fillText(t, 64, 150, 120); }), -W + 0.04, 2.05, -0.6 + i * 1.05, Math.PI / 2));
+    // A Hollywood mirror on a dresser, bulbs all round it, and a neon sign.
+    box(0.5, 0.8, 1.6, 0xf8f4f0, W - 0.3, 0, -2.4, false);
+    block(W - 0.6, W, -3.2, -1.6);
+    plane(1.1, 1.0, mat(0xc8e4f8, { metalness: 0.95, roughness: 0.04, emissiveIntensity: 0.15 }), W - 0.05, 1.5, -2.4, -Math.PI / 2);
+    for (let i = 0; i < 5; i++) { ball(0.05, glow(0xfff6e0, 2.2), W - 0.08, 1.05 + i * 0.22, -2.98); ball(0.05, glow(0xfff6e0, 2.2), W - 0.08, 1.05 + i * 0.22, -1.82); }
+    for (const [z, c] of [[-2.7, 0xff8ab8], [-2.5, 0x39d5c8], [-2.25, 0xffd36a]]) cyl(0.03, 0.03, 0.12, c, W - 0.3, 0.8, z);
+    plane(1.8, 0.6, new THREE.MeshBasicMaterial({ map: neonTexture('MIKU', '#ff8ab8', '#232a4a'), toneMapped: false }), W - 0.05, 2.45, -0.4, -Math.PI / 2);
+    // The lounge: a fluffy round rug, a beanbag, a low table with tea, cushions, a lamp.
+    add(new THREE.CircleGeometry(1.5, 40).rotateX(-Math.PI / 2), mat(0xf5c8dc, { emissiveIntensity: 0.35 }), 0, 0.02, -0.4);
+    add(new THREE.RingGeometry(1.5, 1.62, 40).rotateX(-Math.PI / 2), mat(0xffffff), 0, 0.025, -0.4);
+    ball(0.55, 0x39b5a8, -1.2, 0.35, -0.9, 1, 0.62, 1);
+    cyl(0.45, 0.45, 0.04, 0xf8f8fa, 0.4, 0.38, -0.3); cyl(0.05, 0.05, 0.38, 0xd8d8dc, 0.4, 0, -0.3);
+    cyl(0.05, 0.04, 0.09, 0xffffff, 0.3, 0.42, -0.25); cyl(0.05, 0.04, 0.09, 0xff8ab8, 0.55, 0.42, -0.4);
+    block(-0.15, 0.95, -0.85, 0.25);
+    cyl(0.02, 0.02, 1.6, 0x2a2c34, 1.6, 0, -1.6); cyl(0.18, 0.25, 0.32, glow(0xffe0c0, 1.1), 1.6, 1.6, -1.6);
+    for (const [x, z, c] of [[0.9, 0.8, 0xffd36a], [-0.6, 0.9, 0xb48aff]]) cyl(0.32, 0.34, 0.12, c, x, 0, z);
+    // Stage outfits on a rail along the front wall, out of the way of the door.
+    box(1.8, 0.04, 0.04, 0xd8d8dc, 4.4, 1.7, -D + 0.5, false);
+    for (const x of [3.6, 5.2]) box(0.04, 1.7, 0.04, 0xd8d8dc, x, 0, -D + 0.5, false);
+    [0x39d5c8, 0xffffff, 0xff8ab8, 0x2a2a3a].forEach((c, i) => { const o = box(0.36, 0.9, 0.06, c, 3.8 + i * 0.4, 0.75, -D + 0.5, false); o.rotation.y = 0.4; });
+    block(3.5, 5.3, -D, -D + 0.8);
+    // A mat inside the door.
+    add(new THREE.PlaneGeometry(1.4, 0.8).rotateX(-Math.PI / 2), mat(0x5a3a2a), -4, 0.021, -D + 0.6);
+    citySpot({ x: R.x + 3.2, z: R.z + 0.6, r: 1.8, label: () => 'Press E to rest', use: () => restMenu(), active: () => city.inside === 'apartment' });
+    citySpot({ x: R.x - 4.4, z: R.z + 2.6, r: 1.4, label: () => 'Press E to sit at the desk (StarTube)', use: () => openPhone('startube'), active: () => city.inside === 'apartment' && has('phone') });
+    citySpot({ x: R.x - 4.2, z: R.z + 0.9, r: 1.3, label: () => 'Press E to play the keyboard', use: () => playKeyboard(), active: () => city.inside === 'apartment' });
+    citySpot({ x: R.x + W - 1.2, z: R.z - 2.4, r: 1.3, label: () => 'Press E to look in the mirror', use: () => mirrorLine(), active: () => city.inside === 'apartment' });
   },
   agency(R) {
     const { box, add, mat, glow } = R;
@@ -237,7 +315,6 @@ function enterRoom(id) {
     setStreetVisible(false);
     player.pos.set(R.x + R.entry.x, CITY.y, R.z + R.entry.z + 1.6);
     player.yaw = player.bodyYaw = 0;
-    if (id === 'apartment' && R.poster) R.poster.material.map = neonTexture(G(), '#39d5c8', '#ffffff');
     if (id === 'konbini') setTimeout(() => say('"Irasshaimase!"', 2), 300);
     f.classList.remove('on');
   }, 380);
@@ -312,7 +389,7 @@ function streetPos() { const R = ROOMS[city.inside]; return R ? cityDoorOut(R) :
 
 function updateInteriors() {
   const R = ROOMS.apartment;
-  if (R.window && city.inside === 'apartment') R.window.material.color.setScalar(0.35 + 0.65 * (dayNight.light ?? 1));
+  if (R.window && city.inside === 'apartment') { const map = dayNight.isNight() ? R.windowTex.night : R.windowTex.day; if (R.window.material.map !== map) { R.window.material.map = map; R.window.material.needsUpdate = true; } }
 }
 
 /* ---------- The shop ---------- */
@@ -372,4 +449,29 @@ function setStreetVisible(on) {
     city.street = city.group.children.filter((o) => !keep.has(o) && !Object.values(ROOMS).some((r) => r.g === o));
   }
   for (const o of city.street) o.visible = on;
+}
+
+// The last word on the camera, whatever placed it (walking, talking, resting): never
+// through a wall, the floor or the ceiling.
+function clampRoomCamera() {
+  const R = ROOMS[city.inside];
+  if (!R) return;
+  const c = camera.position, m = 0.35;
+  const x = clamp(c.x, R.x - R.w / 2 + m, R.x + R.w / 2 - m), z = clamp(c.z, R.z - R.d / 2 + m, R.z + R.d / 2 - m), y = clamp(c.y, CITY.y + 0.4, CITY.y + R.h - 0.3);
+  if (x !== c.x || y !== c.y || z !== c.z) { c.set(x, y, z); camera.updateMatrixWorld(); }
+}
+
+// At home: a tune on the keyboard, and a look in the mirror.
+function playKeyboard() {
+  if (!Sfx.ctx) return;
+  const S = SONGS.snowdrop, t = Sfx.ctx.currentTime + 0.05, beat = 60 / 120;
+  for (const [b, step, len] of S.hookC.slice(0, 11)) {
+    const n = S.scale.length, o = Math.floor(step / n), s = ((step % n) + n) % n;
+    Sfx.piano(S.root - 12 + S.scale[s] + 12 * o, t + b * beat, len * beat, 0.08);
+  }
+  say('Snowdrop Heart, with one finger. Mirai would be horrified.', 3);
+}
+function mirrorLine() {
+  const h = idol.hairShown === undefined ? 1 : idol.hairShown;
+  say(h < 0.35 ? 'Still so short. Teto really took it all. It\'ll grow back.' : h < 0.7 ? 'Growing back. Almost to my shoulders again.' : h < 0.98 ? 'Nearly there. The twin tails are coming back.' : 'Back to how it should be. Twin tails, ready for anything.', 3.2);
 }
