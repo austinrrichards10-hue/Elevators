@@ -24,10 +24,14 @@ const SHOWDOWN = {
   knock: { hits: 5, charge: 1.5, need: 7, grow: 1.5, most: 12, laser: 36, laserGrow: 4 },
   scythe: {
     reach: 3.0, arc: 1.9, strike: 0.32, spin: 0.5, damage: [18, 18, 30], open: 1.6,
-    wave: { windup: 0.42, speed: 26, life: 1.5, damage: 36, radius: 1.7, cooldown: 2.4 },
-    beam: { charge: 0.7, damage: 70, radius: 1.3, blast: 3.4, cooldown: 7, range: 48 },
+    // Thrown spinning like a boomerang: out until it hits her or has gone `range`, then home.
+    toss: { windup: 0.3, speed: 24, back: 30, range: 16, damage: 34, returnDamage: 20, radius: 1.7, cooldown: 2.2 },
+    // A beam of light held on her for `hold` seconds, burning `damage` into her over it.
+    beam: { charge: 0.7, hold: 1.1, damage: 90, radius: 1.1, turn: 1.2, cooldown: 7, range: 48 },
   },
   finaleAt: 0.1,
+  // Her rages at 2/3 and 1/3 health: lines, and the red the sky turns.
+  rage: [null, { line: 'You think this is OVER?!', fog: 0.25 }, { line: 'NOW you\'ve made me ANGRY!', fog: 0.5 }],
   repair: { wolfpelt: 5, pelt: 10 },
   // Hair drill tips, in her head's space: where the bullets and beams come from.
   muzzles: [new THREE.Vector3(0.2, -0.1, -0.05), new THREE.Vector3(-0.2, -0.1, -0.05)],
@@ -49,16 +53,32 @@ const SHOWDOWN_LINES = {
   finale: 'ENOUGH! Let\'s end this from up HERE!',
   fairyA: 'Please... don\'t let her get away with this.',
   fairyB: 'Mend the silk with what the forest gives you. Five wolves, and ten hares.',
-  wake: 'Everything hurts. The balloon... I need a fire.',
   healed: 'I can feel my legs again. Five wolf pelts and ten hare pelts. Right.',
   repaired: 'Patched. It\'ll hold. It has to.',
+  // Her thoughts on the long limp back down the clearing, by how far along it she's got.
+  limp: [
+    [-99, 'I\'m... alive? She buried me. She actually buried me.'],
+    [-99, 'Can\'t feel my left leg. Move. Just move.'],
+    [-14, 'My scythe\'s gone. My hair\'s gone. She took everything.'],
+    [-2, 'No. Not everything. She didn\'t get the balloon. Not yet.'],
+    [14, 'Every step\'s a knife. Count them. One. Two. Three.'],
+    [36, 'There. Through the trees. It\'s still standing.'],
+    [56, 'Varga built that thing to carry storms. It can carry me.'],
+    [78, 'Almost there. Don\'t you dare fall now, Miku.'],
+  ],
+  limpIdle: ['Keep walking. She could come back.', 'Get up. Get moving.', 'Don\'t stop. If I stop, I won\'t start again.'],
+  stumble: ['Ngh-!', 'Ah... my leg...', 'Still standing. Still standing.'],
+  wake: 'The balloon. I made it. Now... a fire. I need a fire.',
+  leave: 'Goodbye, Hollow. I\'m coming back for you, Teto.',
 };
 
 /* ---------- State ---------- */
 const showdown = {
-  // 'none', 'ambush' (the scene at the balloon), 'fight', 'finale', 'buried', 'injured' (she
-  // wakes hurt, until a fire), 'repair' (healed, gathering pelts), 'repaired', 'done'.
+  // 'none', 'ambush' (the scene at the balloon), 'fight', 'finale', 'limp' (she drags herself
+  // back down the clearing to the balloon), 'injured' (hurt, until a fire), 'repair' (healed,
+  // gathering pelts), 'repaired', 'leaving' (flying away), 'done'.
   stage: 'none',
+  limp: null, // her walk back down the clearing: { said, t, idle, stumble }
   shortHair: false,
   hp: SHOWDOWN.teto.hp,
   hits: 0,
@@ -72,9 +92,13 @@ const fight = {
   teto: { pos: new THREE.Vector3(), yaw: 0, state: 'idle', t: 0, dur: 0, aim: new THREE.Vector3(), aimDir: new THREE.Vector3(), shotT: 0, muzzle: 0, walk: 0, dashT: 0, whipT: 0, target: new THREE.Vector3(), hurtT: 0, flash: 0 },
   swing: null, // { k, t, hit } while she's slashing
   combo: 0, comboT: 0, queued: false,
-  waveCd: 0, waveT: -1,
+  tossCd: 0, tossT: -1,
   beamCd: 0, beamT: -1,
   knocked: null, // { t, need, presses, dodged, done, at } while she's down
+  toss: null, // { phase, pos, dir, gone, hitOut, hitBack, spin } while the scythe's in the air
+  rage: null, // { t, stage } while Teto rages between stages
+  fovKick: 0,
+  beatT: 0,
   invuln: 0,
   hitStop: 0,
   tauntT: 4,
@@ -86,6 +110,7 @@ let showdownScene = null;
 const sdV = new THREE.Vector3(), sdW = new THREE.Vector3(), sdU = new THREE.Vector3(), sdQ = new THREE.Quaternion();
 const sdX = new THREE.Vector3(), sdY = new THREE.Vector3(), sdZ = new THREE.Vector3(), sdM = new THREE.Matrix4(), sdT = new THREE.Quaternion();
 const SD_UP = new THREE.Vector3(0, 1, 0);
+const SD_RED = new THREE.Color(0x4a0c18);
 
 /* ---------- Words ---------- */
 function showdownLine(key) {
@@ -280,7 +305,12 @@ Sfx.tracks.teto = {
     if (inChord === 0) s.pad(chord.map((n) => n - 12), t, len * 8, 0.022);
     // Sixteenth arpeggios up high once the first section's in, the hook over them after that.
     if (beat >= 8) for (let i = 0; i < 4; i++) s.synthAt(chord[(beat * 4 + i) % 3] + 12, t + i * len / 4, len * 0.22, 0.012, { type: 'square', cutoff: 3200, echo: true, detune: 0 });
-    if (section % 2 === 1) for (const [at, note, beats] of this.hook[chordIndex]) if (at === inChord) s.synthAt(note, t, beats * len * 0.92, 0.03, { cutoff: 2600, echo: true });
+    // Angrier, it drives harder: an extra kick on the off-beat, sixteenth hats, a snare roll
+    // into every chord, and the hook every time round.
+    const hot = this.intensity || 0;
+    if (hot >= 1) { s.pitchAt(t + len / 2, 130, 45, 0.22, 0.3); if (inChord === 7) for (let i = 0; i < 4; i++) s.hitAt(t + i * len / 4, 0.1, 1700, 0.7, 0.08 + i * 0.04, 'bandpass'); }
+    if (hot >= 2) { for (let i = 1; i < 4; i += 2) s.hitAt(t + i * len / 4, 0.03, 9000, 1, 0.04, 'highpass'); s.synthAt(root + 24, t, len * 0.3, 0.02, { type: 'square', cutoff: 1400, detune: 0 }); }
+    if (section % 2 === 1 || hot >= 1) for (const [at, note, beats] of this.hook[chordIndex]) if (at === inChord) s.synthAt(note, t, beats * len * 0.92, 0.03, { cutoff: 2600, echo: true });
   },
 };
 
@@ -542,6 +572,7 @@ function animateBeam(beam, time) {
   u.arc.geometry.attributes.position.needsUpdate = true;
   u.flare.position.set(0, 0, 1);
   u.flare.scale.set(u.radius * 9 * w, u.radius * 9 * w, 1).multiplyScalar(0.8 + Math.random() * 0.4);
+  if (u.spin) for (const line of u.spin) { line.rotation.z = time * 14; line.scale.set(w, w, 1); line.visible = w > 0.2; }
 }
 
 function glowOrb(color, size) {
@@ -550,6 +581,93 @@ function glowOrb(color, size) {
   sprite.visible = false;
   scene.add(sprite);
   return sprite;
+}
+
+// Miku's beam: a needle of white light in a blue sheath and a wide soft haze, with two
+// threads of light spiralling round it.
+function buildLightBeam() {
+  const beam = buildBeam(0xa8dcff, 0.12);
+  const haze = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1, 24, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), beamMaterial(0x2a6dff, 0.14, 15));
+  const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 8, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), additive(new THREE.Color(0xffffff).multiplyScalar(6)));
+  beam.add(haze, needle);
+  beam.userData.mats.push(haze.material);
+  const helixMat = new THREE.LineBasicMaterial({ color: new THREE.Color(0xd8f2ff).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, fog: false });
+  beam.userData.spin = [0, Math.PI].map((phase) => {
+    const pts = [];
+    for (let i = 0; i <= 240; i++) { const a = phase + i * 0.55; pts.push(new THREE.Vector3(Math.cos(a) * 0.3, Math.sin(a) * 0.3, i / 240)); }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), helixMat);
+    line.frustumCulled = false;
+    beam.add(line);
+    return line;
+  });
+  return beam;
+}
+
+// Teto's jets: red disks of light shed downwards from her drills, swelling as they fall.
+function buildJetDisks(count) {
+  const disk = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const ring = new THREE.RingGeometry(0.4, 0.5, 32).rotateX(-Math.PI / 2);
+  return Array.from({ length: count }, () => {
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(disk, new THREE.MeshBasicMaterial({ map: TEX.softDot, color: new THREE.Color(0xff2d55).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
+    group.add(new THREE.Mesh(ring, additive(new THREE.Color(0xff6a88).multiplyScalar(3), 1, { side: THREE.DoubleSide })));
+    group.visible = false;
+    scene.add(group);
+    return { group, vel: new THREE.Vector3(), t: 1, life: 1, size: 1 };
+  });
+}
+
+function emitJetDisk(at, vel, size = 0.35, life = 0.45) {
+  const d = showdownKit.disks.find((x) => x.t >= x.life) || showdownKit.disks[0];
+  Object.assign(d, { t: 0, life, size });
+  d.vel.copy(vel);
+  d.group.position.copy(at);
+  d.group.visible = true;
+}
+
+// Jets from both drill tips, `power` of them a frame.
+function tetoJets(power = 1) {
+  const k = showdownKit;
+  for (let i = 0; i < 2; i++) {
+    tetoMuzzle(i, sdV);
+    if (Math.random() < power) emitJetDisk(sdV, sdW.set((Math.random() - 0.5) * 0.6, -7 - Math.random() * 3, (Math.random() - 0.5) * 0.6), 0.25 + Math.random() * 0.15);
+    k.jets.emit(sdV, sdW.set((Math.random() - 0.5) * 1.2, -8 - Math.random() * 4, (Math.random() - 0.5) * 1.2), { life: 0.35, size: 0.35, grow: 2.2, alpha: 0.9 });
+  }
+}
+
+// Her last attack: rings wheeling round the gathering light, lightning to the ground, and a
+// red circle closing on Miku.
+function buildFinaleKit() {
+  const rings = [3, 4.4, 6].map((r, i) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.06 + i * 0.02, 6, 64), additive(new THREE.Color(i === 1 ? 0xffffff : 0xff3d6a).multiplyScalar(3), 0.9));
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+  const bolts = Array.from({ length: 5 }, () => {
+    const line = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(18 * 3), 3)), new THREE.LineBasicMaterial({ color: new THREE.Color(0xffc0d0).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, fog: false }));
+    line.frustumCulled = false;
+    line.visible = false;
+    scene.add(line);
+    return line;
+  });
+  const target = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2), additive(new THREE.Color(0xff2d55).multiplyScalar(3), 0.9));
+  target.visible = false;
+  scene.add(target);
+  return { rings, bolts, target };
+}
+
+// A jagged bolt of lightning between two points.
+function strikeBolt(line, a, b, jag = 1.2) {
+  const arr = line.geometry.attributes.position.array;
+  for (let i = 0; i < 18; i++) {
+    const u = i / 17, off = Math.sin(u * Math.PI) * jag;
+    arr[i * 3] = lerp(a.x, b.x, u) + (Math.random() - 0.5) * off;
+    arr[i * 3 + 1] = lerp(a.y, b.y, u) + (Math.random() - 0.5) * off;
+    arr[i * 3 + 2] = lerp(a.z, b.z, u) + (Math.random() - 0.5) * off;
+  }
+  line.geometry.attributes.position.needsUpdate = true;
+  line.visible = true;
 }
 
 // Cracks in the ground: jagged lines running out from the middle, forking as they go.
@@ -636,7 +754,7 @@ function buildShowdownDom() {
   const skills = document.createElement('div');
   skills.id = 'sword-wave';
   skills.className = 'hidden';
-  skills.innerHTML = '<span class="skill" id="skill-wave"><kbd>RMB</kbd> Heat wave<i></i></span><span class="skill" id="skill-beam"><kbd>Q</kbd> Blue beam<i></i></span>';
+  skills.innerHTML = '<span class="skill" id="skill-wave"><kbd>RMB</kbd> Scythe throw<i></i></span><span class="skill" id="skill-beam"><kbd>Q</kbd> Light beam<i></i></span>';
   hud.append(bar, taunt, hint, skills);
   const fade = document.createElement('div');
   fade.id = 'boss-fade';
@@ -661,21 +779,10 @@ function buildShowdownKit() {
   const flames = pool(400, 0x5ab4ff);
   const sparks = pool(160, 0xff7aa0);
   const trails = pool(700, 0xff4d86, 2.4);
-  const jets = pool(160, 0xffa070);
+  const jets = pool(200, 0xff3355, 2.6);
   const debris = pool(160, 0xe8ecf6, 1);
   const smoke = buildPuffs(80, 0x6d6670);
   scene.add(smoke.group);
-  // The heat wave: two crossed crescents of white-blue fire.
-  const crescent = new THREE.TorusGeometry(1.3, 0.14, 8, 40, Math.PI * 0.95).rotateX(Math.PI / 2).rotateY(Math.PI * 0.025 + Math.PI / 2);
-  const waveMesh = new THREE.Group();
-  for (const [tilt, s] of [[0.5, 1], [-0.5, 1], [0, 1.25]]) {
-    const m = new THREE.Mesh(crescent, additive(new THREE.Color(s > 1 ? 0x3d8bff : 0xb5ecff).multiplyScalar(2.6), s > 1 ? 0.45 : 0.9));
-    m.rotation.z = tilt;
-    m.scale.setScalar(s);
-    waveMesh.add(m);
-  }
-  waveMesh.visible = false;
-  scene.add(waveMesh);
   // Laser sights from her drills while she aims.
   const sights = SHOWDOWN.muzzles.map(() => buildBeam(0xff3366, 0.012));
   const muzzleFlash = SHOWDOWN.muzzles.map(() => glowOrb(0xff9ec0, 0.7));
@@ -703,16 +810,23 @@ function buildShowdownKit() {
   // Her pink light, on her while she's out to kill.
   const tetoLight = new THREE.PointLight(0xff3d7a, 0, 14, 1.6);
   scene.add(tetoLight);
+  // Miku's light: at the scythe's tip while the beam's up, and where it lands.
+  const beamLights = [new THREE.PointLight(0x7fc4ff, 0, 16, 1.5), new THREE.PointLight(0x7fc4ff, 0, 18, 1.5)];
+  scene.add(...beamLights);
   const scythe = buildScythe();
   return {
     teto, scythe, strands: [buildHairStrand(), buildHairStrand()],
-    flames, sparks, trails, jets, debris, smoke, waveMesh, sights, muzzleFlash, fairies, mound, shocks, tetoLight,
+    flames, sparks, trails, jets, debris, smoke, sights, muzzleFlash, fairies, mound, shocks, tetoLight,
     arena: buildArena(),
     snow: buildHeavySnow(),
     bullets: buildBullets(90),
     rails: [buildBeam(0xff2d6f, 0.2), buildBeam(0xff2d6f, 0.2)],
     giant: buildBeam(0xff4d86, 3.2),
-    mikuBeam: buildBeam(0x3d8bff, 0.2),
+    mikuBeam: buildLightBeam(),
+    beamLights,
+    disks: buildJetDisks(60),
+    finale: buildFinaleKit(),
+    streaks: [glowOrb(0xbfe6ff, 1), glowOrb(0xbfe6ff, 1)],
     cracks: [buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0x4da0ff)],
     orbs: [glowOrb(0xff4d7a, 0.4), glowOrb(0xff4d7a, 0.4)],
     bigOrb: glowOrb(0xff86b0, 1),
@@ -724,7 +838,7 @@ function buildShowdownKit() {
 
 /* ---------- Helpers ---------- */
 function arenaActive() {
-  return showdown.stage === 'fight' || (showdown.stage === 'ambush' && !!showdownScene && showdownScene.inArena) || showdown.stage === 'finale';
+  return showdown.stage === 'fight' || (showdown.stage === 'ambush' && !!showdownScene && showdownScene.inArena) || showdown.stage === 'finale' || showdown.stage === 'limp';
 }
 
 // A point in the arena, from its own coordinates (x across, z along, y up from the snow).
@@ -775,9 +889,11 @@ function explode(at, color, size = 1) {
   k.blast.material.color.set(color).multiplyScalar(3);
   k.blast.userData = { t: 0, size: 1.5 + size * 2.5 };
   k.blast.visible = true;
+  // Teto's fire is red, Miku's blue.
+  const fire = k.blast.material.color.r > k.blast.material.color.b ? k.jets : k.flames;
   for (let i = 0; i < 40 * size; i++) {
     const v = sdW.set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize().multiplyScalar(3 + Math.random() * 7 * size);
-    k.flames.emit(at, v, { life: 0.45 + Math.random() * 0.3, size: 0.5 + Math.random() * 0.6 * size, grow: 2.2, alpha: 0.9 });
+    fire.emit(at, v, { life: 0.45 + Math.random() * 0.3, size: 0.5 + Math.random() * 0.6 * size, grow: 2.2, alpha: 0.9 });
   }
   for (let i = 0; i < 18 * size; i++) k.debris.emit(sdV.copy(at).add(sdU.set((Math.random() - 0.5) * size, -0.5, (Math.random() - 0.5) * size)), sdW.set((Math.random() - 0.5) * 5, 3 + Math.random() * 5, (Math.random() - 0.5) * 5), { life: 1, size: 0.6, grow: 2.5, alpha: 0.7, fall: 9 });
   shockwave(at, 4 + size * 5, color, 0.7);
@@ -917,18 +1033,27 @@ function poseScytheArms() {
       gripScythe(armR, 0, POLE_R);
       solveArm(armL, target(1, 0.42, -0.05, 0.1), POLE_L);
     }
-  } else if (fight.waveT >= 0) {
-    // Whirled overhead, faster and faster, then brought down to loose the wave.
-    const u = clamp(fight.waveT / S.wave.windup, 0, 1);
-    const a = fight.waveT * (10 + fight.waveT * 30);
-    const down = smooth(clamp((fight.waveT - S.wave.windup * 0.75) / 0.2, 0, 1));
+  } else if (fight.toss) {
+    // Empty-handed while it flies: her throwing arm still out after it, the other braced.
+    const reach = fight.toss.phase === 'back' ? 1 : Math.max(0, 1 - fight.toss.t * 2);
+    solveArm(armR, target(-1, -0.05, lerp(-0.35, 0.05, reach), lerp(0.15, 0.5, reach)), POLE_R);
+    solveArm(armL, target(1, 0.12, -0.42, 0.12), POLE_L);
+    armL.hand.quaternion.identity();
+    armR.hand.quaternion.identity();
+    return;
+  } else if (fight.tossT >= 0) {
+    // Whirled overhead, faster and faster, then brought round to throw.
+    const u = clamp(fight.tossT / S.toss.windup, 0, 1);
+    const a = fight.tossT * (10 + fight.tossT * 30);
+    const down = smooth(clamp((fight.tossT - S.toss.windup * 0.75) / 0.2, 0, 1));
     placeScythe(0, lerp(1.95, 1.2, down), lerp(0.15, 0.7, down), sdU.set(Math.cos(a), 0, Math.sin(a)), SD_UP);
     gripScythe(armR, 0, POLE_R);
     solveArm(armL, target(1, 0.1, lerp(0.35, -0.1, down) + u * 0.05, lerp(0.1, 0.4, down)), POLE_L);
   } else if (fight.beamT >= 0) {
     // Levelled like a lance, a blade at Teto, both hands on the shaft.
-    const kick = fight.beamT > S.beam.charge ? Math.max(0, 1 - (fight.beamT - S.beam.charge) * 4) : 0;
-    placeScythe(0.05, 1.22, 0.38 - kick * 0.15, sdU.set(0, 0.04, 1), SD_UP);
+    const kick = fight.beamT > S.beam.charge ? Math.max(0.15, 1 - (fight.beamT - S.beam.charge) * 4) : 0;
+    const shudder = fight.beamT > S.beam.charge ? (Math.random() - 0.5) * 0.015 : 0;
+    placeScythe(0.05 + shudder, 1.22 + shudder, 0.38 - kick * 0.12, sdU.set(0, 0.04, 1), SD_UP);
     gripScythe(armR, -0.28, POLE_R);
     gripScythe(armL, 0.02, POLE_L);
   } else {
@@ -948,13 +1073,24 @@ function scytheFlames(dt) {
   if (!s.visible) return;
   const u = s.userData;
   u.uniforms.uTime.value = game.time;
-  const hot = fight.swing || fight.waveT >= 0 || fight.beamT >= 0 ? 5 : 2;
+  const hot = fight.swing || fight.tossT >= 0 || fight.beamT >= 0 ? 5 : 2;
   s.updateMatrixWorld(true);
   for (let i = 0; i < hot; i++) {
     const p = u.samples[Math.floor(Math.random() * u.samples.length)];
     if (Math.abs(p.y) > u.uniforms.uReveal.value) continue;
     s.localToWorld(sdV.copy(p));
     k.flames.emit(sdV, sdW.set((Math.random() - 0.5) * 0.3, 0.7 + Math.random() * 0.7, (Math.random() - 0.5) * 0.3), { life: 0.3, size: 0.09 + Math.random() * 0.08, grow: 1.4, alpha: 0.85 });
+  }
+  // Whirling, the blades leave arcs of fire hanging in the air behind them.
+  if (fight.swing || fight.toss) {
+    for (const tip of [u.tipA, u.tipB]) {
+      s.localToWorld(sdV.copy(tip));
+      k.flames.emit(sdV, sdW.set(0, 0.3, 0), { life: 0.28, size: 0.32, grow: 0.6, alpha: 0.95 });
+    }
+    for (let i = 0; i < 6; i++) {
+      s.localToWorld(sdV.copy(u.samples[Math.floor(Math.random() * u.samples.length)]));
+      k.flames.emit(sdV, sdW.set(0, 0.5, 0), { life: 0.22, size: 0.2, grow: 0.8, alpha: 0.8 });
+    }
   }
 }
 
@@ -1278,7 +1414,7 @@ function updateAmbush(dt) {
       const u = (t - A.drop) / (A.quake - A.drop);
       tt.pos.y = SHOWDOWN.arena.y + 40 * (1 - u * u);
       tetoMode = 'fly';
-      k.jets.emit(tt.pos.clone().add(sdU.set(0, 1.4, 0)), sdW.set(0, 6, 0), { life: 0.25, size: 0.5, grow: 2, alpha: 0.6 });
+      emitJetDisk(tt.pos.clone().add(sdU.set(0, 1.6, 0)), sdW.set(0, 8, 0), 0.4);
     } else {
       tt.pos.y = SHOWDOWN.arena.y;
       crouch = 1 - smooth(clamp((t - A.quake - 0.4) / 0.9, 0, 1));
@@ -1412,11 +1548,17 @@ function clearFightFx() {
   for (const beam of [...k.rails, k.giant, k.mikuBeam, ...k.sights]) beam.visible = false;
   for (const o of [...k.orbs, k.bigOrb, k.tipOrb, k.blast, ...k.muzzleFlash]) o.visible = false;
   for (const c of k.cracks) { c.visible = false; c.material.opacity = 0; }
-  k.waveMesh.visible = false;
-  fight.wave = null;
   fight.beam = null;
   fight.beamT = -1;
-  fight.waveT = -1;
+  fight.tossT = -1;
+  for (const l of k.beamLights) l.intensity = 0;
+  for (const o of k.streaks) o.visible = false;
+  // A thrown scythe comes straight back to her hand.
+  if (fight.toss) { avatar.root.add(k.scythe); fight.toss = null; }
+  fight.rage = null;
+  fight.fovKick = 0;
+  const F = k.finale;
+  for (const m of [...F.rings, ...F.bolts, F.target]) m.visible = false;
 }
 
 function leaveArena() {
@@ -1426,7 +1568,10 @@ function leaveArena() {
   if (k.farBalloon) k.farBalloon.visible = false;
   k.tetoLight.intensity = 0;
   scene.fog.density = FOG_DENSITY;
+  scene.fog.color.setHex(FOG_COLOR);
+  document.body.classList.remove('limp-walk');
   clearFightFx();
+  for (const d of k.disks) { d.t = d.life; d.group.visible = false; }
   for (const sh of k.shocks) { sh.t = sh.life; sh.mesh.visible = false; }
   for (const strand of k.strands) strand.visible = false;
   showdown.music = false;
@@ -1456,6 +1601,17 @@ function updateShowdownFx(dt) {
     c.material.opacity = Math.max(0, c.material.opacity - dt * c.userData.fade);
     if (c.material.opacity <= 0) { c.visible = false; c.userData.fade = 0; }
   }
+  // The jet disks: falling, swelling, fading.
+  for (const d of k.disks) {
+    if (d.t >= d.life) continue;
+    d.t += dt;
+    const u = Math.min(1, d.t / d.life);
+    d.group.position.addScaledVector(d.vel, dt);
+    d.group.scale.setScalar(d.size * (1 + u * 3));
+    for (const m of d.group.children) m.material.opacity = (1 - u) * (1 - u);
+    if (u >= 1) d.group.visible = false;
+  }
+  fight.fovKick *= Math.exp(-dt * 6);
   for (const f of k.muzzleFlash) if (f.visible && (f.userData.t = (f.userData.t || 0) - dt) <= 0) f.visible = false;
   for (const beam of [...k.rails, k.giant, k.mikuBeam, ...k.sights]) animateBeam(beam, game.time);
   if (k.snow.visible) k.snow.userData.update(dt, game.time, camera.position);
@@ -1471,7 +1627,8 @@ function updateShowdownFx(dt) {
 function startFight() {
   showdown.stage = 'fight';
   showdown.hp = SHOWDOWN.teto.hp;
-  Object.assign(fight, { swing: null, combo: 0, comboT: 0, queued: false, waveCd: 0, waveT: -1, beamCd: 0, beamT: -1, beam: null, knocked: null, invuln: 1.5, hitStop: 0, tauntT: 5, over: false });
+  Object.assign(fight, { swing: null, combo: 0, comboT: 0, queued: false, tossCd: 0, tossT: -1, beamCd: 0, beamT: -1, beam: null, knocked: null, toss: null, rage: null, redFog: 0, invuln: 1.5, hitStop: 0, tauntT: 5, over: false });
+  Sfx.tracks.teto.intensity = 0;
   Object.assign(fight.teto, { state: 'reposition', t: 0, dur: 1.2, whipT: SHOWDOWN.whip.every, dashT: 0, hurtT: 0 });
   showdown.hits = 0;
   showdown.knocks = 0;
@@ -1537,7 +1694,7 @@ function damageTeto(amount, heavy = false) {
     $('boss-bar').classList.remove('stage-up');
     void $('boss-bar').offsetWidth;
     $('boss-bar').classList.add('stage-up');
-    Sfx.tetoLaugh();
+    if (!fight.knocked) startRage(fightStage());
   }
   if (showdown.hp <= SHOWDOWN.teto.hp * SHOWDOWN.finaleAt) startFinale();
 }
@@ -1557,7 +1714,7 @@ function knockDown() {
   const K = SHOWDOWN.knock, k = showdownKit;
   showdown.hits = 0;
   fight.swing = null;
-  fight.waveT = -1;
+  fight.tossT = -1;
   fight.beamT = -1;
   k.tipOrb.visible = false;
   player.dodge = null;
@@ -1658,8 +1815,51 @@ function updateKnocked(dt) {
 }
 
 // Each frame of the fight, for Teto.
+// Between stages she rages: up on her jets, screaming, the sky going red, a blast that throws
+// Miku back across the snow. And the music climbs with her.
+function startRage(stage) {
+  const k = showdownKit;
+  fight.rage = { t: 0, stage, pulse: 0, fog: fight.redFog || 0 };
+  Object.assign(fight.teto, { state: 'rage', t: 0, dashing: null });
+  for (const b of k.bullets) { b.life = 0; b.mesh.visible = false; }
+  for (const line of k.sights) line.visible = false;
+  Sfx.stinger();
+  Sfx.tetoLaugh();
+  tetoSays(SHOWDOWN.rage[stage].line, 2.6);
+  Sfx.tracks.teto.intensity = stage;
+  fight.fovKick = -6;
+}
+
+function updateRage(dt) {
+  const r = fight.rage, t = fight.teto, k = showdownKit, R = SHOWDOWN.rage[r.stage];
+  r.t += dt;
+  t.yaw = Math.atan2(player.pos.x - t.pos.x, player.pos.z - t.pos.z);
+  const lift = smooth(clamp(r.t / 0.6, 0, 1)) * 2.2 * (1 - smooth(clamp((r.t - 2.1) / 0.4, 0, 1)));
+  if (lift > 0.05) tetoJets(0.8);
+  fight.redFog = lerp(r.fog, R.fog, smooth(clamp(r.t / 1.5, 0, 1)));
+  k.tetoLight.intensity = 7 + Math.sin(r.t * 30) * 3;
+  // The blast.
+  if (r.t > 0.75 && !r.blasted) {
+    r.blasted = true;
+    explode(tetoChest(sdV).clone().add(sdU.set(0, lift, 0)), 0xff2d55, 1.3);
+    Sfx.quake();
+    r.push = sdW.set(player.pos.x - t.pos.x, 0, player.pos.z - t.pos.z).normalize().clone();
+    player.dodge = null;
+  }
+  if (r.push && r.t < 1.2) { player.pos.addScaledVector(r.push, 11 * (1.2 - r.t) * dt); showdownClamp(player.pos); }
+  // Rings of red light pulsing out under her.
+  r.pulse -= dt;
+  if (r.t > 0.75 && r.t < 2.1 && r.pulse <= 0) { r.pulse = 0.3; shockwave(t.pos, 9, 0xff2d55, 0.7); }
+  player.shake = Math.max(player.shake, r.t < 2 ? 0.1 : 0);
+  poseTeto(dt, 'rail', mikuChest(sdU.clone()), { lift });
+  if (r.t >= 2.6) { fight.rage = null; Object.assign(t, { state: 'reposition', t: 0, dur: 0.5 }); }
+}
+
 function updateTetoFight(dt) {
   const t = fight.teto, G = SHOWDOWN.gatling, k = showdownKit, st = fightStage();
+  // The sky reddens as she gets angrier.
+  scene.fog.color.setHex(FOG_COLOR).lerp(SD_RED, fight.redFog || 0);
+  if (fight.rage) { updateRage(dt); return; }
   t.t += dt;
   t.flash = Math.max(0, t.flash - dt);
   t.whipT -= dt;
@@ -1841,14 +2041,14 @@ function segmentDistance(a, b, c, d) {
 
 /* ---------- Miku's strikes ---------- */
 function busyStriking() {
-  return fight.swing || fight.waveT >= 0 || fight.beamT >= 0;
+  return fight.swing || fight.tossT >= 0 || fight.beamT >= 0 || fight.toss;
 }
 
 function showdownClick(button) {
   if (showdown.stage !== 'fight' || fight.knocked || fight.over) return;
   if (button === 2) {
-    if (fight.waveCd > 0 || busyStriking()) return;
-    fight.waveT = 0;
+    if (fight.tossCd > 0 || busyStriking()) return;
+    fight.tossT = 0;
     faceTeto();
     Sfx.heatWave();
     return;
@@ -1859,11 +2059,11 @@ function showdownClick(button) {
   startStrike();
 }
 
-// Q: the blue beam.
+// Q: the beam of light.
 function showdownBeam() {
   if (showdown.stage !== 'fight' || fight.knocked || fight.over || fight.beamCd > 0 || busyStriking()) return false;
   fight.beamT = 0;
-  faceTeto();
+  faceTeto(30);
   Sfx.beamCharge();
   return true;
 }
@@ -1887,10 +2087,10 @@ function faceTeto(range = 14) {
 function updateStrikes(dt) {
   const S = SHOWDOWN.scythe, t = fight.teto, k = showdownKit;
   fight.comboT -= dt;
-  fight.waveCd = Math.max(0, fight.waveCd - dt);
+  if (!fight.toss) fight.tossCd = Math.max(0, fight.tossCd - dt);
   fight.beamCd = Math.max(0, fight.beamCd - dt);
-  $('skill-wave').classList.toggle('ready', fight.waveCd <= 0);
-  $('skill-wave').querySelector('i').style.width = `${(1 - fight.waveCd / S.wave.cooldown) * 100}%`;
+  $('skill-wave').classList.toggle('ready', fight.tossCd <= 0 && !fight.toss);
+  $('skill-wave').querySelector('i').style.width = `${(1 - fight.tossCd / S.toss.cooldown) * 100}%`;
   $('skill-beam').classList.toggle('ready', fight.beamCd <= 0);
   $('skill-beam').querySelector('i').style.width = `${(1 - fight.beamCd / S.beam.cooldown) * 100}%`;
   const sw = fight.swing;
@@ -1916,97 +2116,214 @@ function updateStrikes(dt) {
       if (fight.queued) { fight.queued = false; startStrike(); }
     }
   }
-  // The heat wave: the scythe whirled overhead and brought down, and twin crescents of fire
-  // roll out, spinning.
-  if (fight.waveT >= 0) {
-    fight.waveT += dt;
-    if (fight.waveT >= S.wave.windup && !fight.wave) {
+  updateToss(dt);
+  updateLightBeam(dt);
+}
+
+// The throw: the scythe whirled overhead and let fly, spinning flat like a boomerang in a
+// wheel of fire. It flies out until it hits Teto or has gone its range, then turns for home
+// and comes back to her hand, cutting Teto again if she's in the way.
+function updateToss(dt) {
+  const S = SHOWDOWN.scythe, T = S.toss, k = showdownKit, t = fight.teto, sc = k.scythe;
+  if (fight.tossT >= 0) {
+    fight.tossT += dt;
+    if (fight.tossT >= T.windup) {
+      fight.tossT = -1;
+      // Let go: at Teto if she's anywhere ahead, otherwise straight on.
+      sc.updateMatrixWorld(true);
+      const from = sc.getWorldPosition(new THREE.Vector3());
       const dir = new THREE.Vector3(Math.sin(player.bodyYaw), 0, Math.cos(player.bodyYaw));
-      fight.wave = { pos: player.pos.clone().add(sdU.set(0, 1, 0)).addScaledVector(dir, 0.8), dir, life: S.wave.life, hit: false, spin: 0 };
-      fight.waveCd = S.wave.cooldown;
-      impact('invert', 40);
-      shockwave(player.pos, 3, 0x6fc6ff, 0.4);
+      const toT = tetoChest(sdV).sub(from).setY(0).normalize();
+      if (toT.dot(dir) > 0.6) dir.copy(toT);
+      scene.attach(sc);
+      fight.toss = { phase: 'out', t: 0, pos: from.setY(player.pos.y + 1.1), dir, gone: 0, hitOut: false, hitBack: false, spin: 0, whoosh: 0 };
       Sfx.whoosh(0.5);
+      Sfx.ignite();
+      impact('invert', 35);
+      fight.fovKick = 5;
     }
-    if (fight.waveT >= S.wave.windup + 0.15) fight.waveT = -1;
   }
-  const w = fight.wave;
-  if (w) {
-    w.life -= dt;
-    w.spin += dt * 9;
-    w.pos.addScaledVector(w.dir, S.wave.speed * dt);
-    const yaw = Math.atan2(w.dir.x, w.dir.z);
-    k.waveMesh.visible = true;
-    k.waveMesh.position.copy(w.pos);
-    k.waveMesh.rotation.set(0, yaw, 0);
-    k.waveMesh.children[0].rotation.z = 0.5 + Math.sin(w.spin) * 0.3;
-    k.waveMesh.children[1].rotation.z = -0.5 - Math.sin(w.spin) * 0.3;
-    k.waveMesh.scale.setScalar(1 + (S.wave.life - w.life) * 0.5);
-    for (const m of k.waveMesh.children) m.material.opacity = Math.min(m.scale.x > 1 ? 0.45 : 0.9, w.life * 2);
-    for (let i = 0; i < 6; i++) k.flames.emit(sdV.copy(w.pos).add(sdW.set((Math.random() - 0.5) * 2.6, (Math.random() - 0.5) * 0.9, -0.3).applyAxisAngle(SD_UP, yaw)), sdW.set(0, 0.8, 0), { life: 0.4, size: 0.35, grow: 1.6, alpha: 0.85 });
-    k.debris.emit(sdV.copy(w.pos).setY(SHOWDOWN.arena.y + 0.1), sdW.set((Math.random() - 0.5) * 2, 2, 0), { life: 0.6, size: 0.5, grow: 2, alpha: 0.6, fall: 9 });
-    if (!w.hit && Math.hypot(w.pos.x - t.pos.x, w.pos.z - t.pos.z) < S.wave.radius) {
-      w.hit = true;
-      damageTeto(S.wave.damage, true);
-      explode(tetoChest(sdV).clone(), 0x6fb6ff, 0.6);
+  const toss = fight.toss;
+  if (!toss) return;
+  toss.t += dt;
+  if (toss.phase === 'out') {
+    const step = T.speed * (1 - 0.35 * toss.gone / T.range) * dt;
+    toss.pos.addScaledVector(toss.dir, step);
+    toss.gone += step;
+    if (toss.gone >= T.range || Math.abs(toss.pos.x) > SHOWDOWN.arena.half + 2) toss.phase = 'back';
+  } else {
+    // Home, faster and faster, to wherever she's got to.
+    const home = mikuChest(sdV);
+    const to = sdW.subVectors(home, toss.pos);
+    const d = to.length();
+    const speed = Math.min(T.back, 8 + toss.t * 20);
+    if (d < 0.9 || d < speed * dt) {
+      // Caught.
+      avatar.root.add(sc);
+      fight.toss = null;
+      fight.tossCd = T.cooldown;
+      Sfx.swordHit();
+      burst(home.clone(), 0x7fc4ff, 12, 3);
+      return;
     }
-    if (w.life <= 0 || Math.abs(w.pos.x) > SHOWDOWN.arena.half + 4) { fight.wave = null; k.waveMesh.visible = false; }
+    toss.pos.addScaledVector(to.normalize(), speed * dt);
   }
-  // The blue beam: the scythe levelled, light gathering at the blade's tip, then a lance of
-  // blue fire that blows up wherever it lands.
-  if (fight.beamT >= 0) {
-    const B = S.beam;
-    fight.beamT += dt;
-    const sc = k.scythe;
-    sc.updateMatrixWorld(true);
-    const tip = sc.localToWorld(sdV.copy(sc.userData.tipA));
-    if (fight.beamT < B.charge) {
-      faceTeto(30);
-      const u = fight.beamT / B.charge;
-      k.tipOrb.position.copy(tip);
-      k.tipOrb.scale.setScalar(0.2 + u * 1.2 + Math.random() * 0.1);
-      k.tipOrb.visible = true;
-      const from = sdW.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(1.2);
-      k.flames.emit(sdU.copy(tip).add(from), from.multiplyScalar(-1 / 0.2), { life: 0.2, size: 0.12, grow: 0.4, alpha: 0.9 });
-    } else if (!fight.beam) {
-      // Fire: at Teto if she's anywhere ahead, otherwise straight on.
-      const dir = sdW.set(Math.sin(player.bodyYaw), 0, Math.cos(player.bodyYaw));
-      const toT = tetoChest(sdU).sub(tip);
-      const aimed = toT.clone().normalize();
-      if (aimed.dot(dir) > 0.7 && toT.length() < B.range) dir.copy(aimed);
-      let end = tip.clone().addScaledVector(dir, B.range);
-      const hitT = segmentDistance(tip, end, sdU.copy(t.pos).add(sdX.set(0, 0.3, 0)), t.pos.clone().add(sdX.set(0, 1.6, 0))) < B.radius;
-      if (hitT) end = tetoChest(sdU).clone();
-      else if (dir.y < -0.01) end = tip.clone().addScaledVector(dir, (tip.y - SHOWDOWN.arena.y) / -dir.y);
-      fight.beam = { t: 0, from: tip.clone(), to: end };
-      aimBeam(k.mikuBeam, tip, end, 1);
-      k.tipOrb.visible = false;
-      fight.beamCd = B.cooldown;
-      Sfx.beamFire();
-      impact('invert', 50);
-      player.shake = 0.3;
-      explode(end, 0x4da0ff, 1.2);
-      // A blue scar left in the snow where it hit.
-      const scar = k.cracks[2];
-      scar.position.copy(end).setY(SHOWDOWN.arena.y + 0.03);
-      scar.scale.setScalar(4);
-      scar.material.opacity = 1;
-      scar.userData.fade = 0.4;
-      scar.visible = true;
-      if (hitT) damageTeto(B.damage, true);
-      else if (Math.hypot(end.x - t.pos.x, end.z - t.pos.z) < B.blast) damageTeto(B.damage * 0.5, true);
+  // Against Teto, once each way.
+  const hitKey = toss.phase === 'out' ? 'hitOut' : 'hitBack';
+  if (!toss[hitKey] && toss.pos.distanceTo(tetoChest(sdV)) < T.radius) {
+    toss[hitKey] = true;
+    damageTeto(toss.phase === 'out' ? T.damage : T.returnDamage, true);
+    explode(toss.pos.clone(), 0x5ab4ff, 0.5);
+    if (toss.phase === 'out') toss.phase = 'back';
+  }
+  // Spinning flat, the blades whirling a ring of fire round it.
+  toss.spin += dt * 24;
+  // Tilted back towards her, so the whole wheel of it shows as it goes.
+  basisQuat(sc.quaternion, sdV.set(Math.cos(toss.spin), 0, Math.sin(toss.spin)), SD_UP);
+  sc.quaternion.premultiply(sdT.setFromUnitVectors(SD_UP, sdW.set(-toss.dir.x * 0.6, 0.8, -toss.dir.z * 0.6).normalize()));
+  sc.position.copy(toss.pos);
+  toss.whoosh -= dt;
+  if (toss.whoosh <= 0) { toss.whoosh = 0.16; Sfx.whoosh(0.18); }
+  k.debris.emit(sdV.copy(toss.pos).setY(SHOWDOWN.arena.y + 0.1), sdW.set((Math.random() - 0.5) * 2, 1.5, (Math.random() - 0.5) * 2), { life: 0.5, size: 0.4, grow: 2, alpha: 0.5, fall: 9 });
+}
+
+// The beam: the scythe levelled, motes of light drawn into the blade's tip, then a needle of
+// white light held on Teto, burning into her the whole time it's on her and blowing up where
+// it ends.
+function updateLightBeam(dt) {
+  const S = SHOWDOWN.scythe, B = S.beam, k = showdownKit, t = fight.teto;
+  if (fight.beamT < 0) return;
+  fight.beamT += dt;
+  const sc = k.scythe;
+  sc.updateMatrixWorld(true);
+  const tip = sc.localToWorld(sdV.copy(sc.userData.tipA)).clone();
+  const [tipLight, hitLight] = k.beamLights;
+  const [flare, hitFlare] = k.streaks;
+  if (fight.beamT < B.charge) {
+    // Gathering.
+    faceTeto(30);
+    const u = fight.beamT / B.charge;
+    k.tipOrb.position.copy(tip);
+    k.tipOrb.scale.setScalar(0.2 + u * 1.1 + Math.random() * 0.1);
+    k.tipOrb.visible = true;
+    flare.position.copy(tip);
+    flare.scale.set(u * 4, 0.12 + u * 0.1, 1);
+    flare.visible = true;
+    tipLight.position.copy(tip);
+    tipLight.intensity = u * 6;
+    for (let i = 0; i < 3; i++) {
+      const from = sdW.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(1.4 + Math.random());
+      k.flames.emit(sdU.copy(tip).add(from), from.multiplyScalar(-1 / 0.22), { life: 0.22, size: 0.1, grow: 0.3, alpha: 1 });
     }
-    if (fight.beam) {
-      fight.beam.t += dt;
-      const fade = 1 - clamp((fight.beam.t - 0.15) / 0.35, 0, 1);
-      k.mikuBeam.scale.x = k.mikuBeam.scale.y = Math.max(0.001, fade * (1 + Math.random() * 0.2));
-      if (fade <= 0) { k.mikuBeam.visible = false; fight.beam = null; fight.beamT = -1; }
-    }
+    fight.camBeam = Math.min(1, (fight.camBeam || 0) + dt * 3);
+    return;
+  }
+  if (!fight.beam) {
+    // Fire.
+    const dir = new THREE.Vector3(Math.sin(player.bodyYaw), 0, Math.cos(player.bodyYaw));
+    const toT = tetoChest(sdW).sub(tip);
+    if (toT.clone().normalize().dot(dir) > 0.6 && toT.length() < B.range) dir.copy(toT).normalize();
+    fight.beam = { t: 0, dir, len: 0, tick: 0, end: tip.clone() };
+    Sfx.beamFire();
+    Sfx.explosion(0.5);
+    impact('white', 45);
+    fight.fovKick = 9;
+    player.shake = Math.max(player.shake, 0.3);
+    k.tipOrb.visible = false;
+    fight.beamCd = B.cooldown;
+    // A ring of light thrown off her as it goes.
+    shockwave(player.pos, 4, 0x9fd8ff, 0.5);
+  }
+  const bm = fight.beam;
+  bm.t += dt;
+  // Held on Teto, turning after her as she moves.
+  const want = tetoChest(sdW).sub(tip).normalize();
+  if (want.dot(sdU.set(Math.sin(player.bodyYaw), 0, Math.cos(player.bodyYaw))) > 0.3) {
+    const angle = bm.dir.angleTo(want);
+    if (angle > 1e-4) bm.dir.lerp(want, Math.min(1, (B.turn * dt) / angle)).normalize();
+  }
+  player.bodyYaw = Math.atan2(bm.dir.x, bm.dir.z);
+  // It reaches out at the speed of light, near enough, and stops at whatever it hits.
+  bm.len = Math.min(B.range, bm.len + dt * 160);
+  let len = bm.len;
+  const far = tip.clone().addScaledVector(bm.dir, len);
+  const onTeto = segmentDistance(tip, far, sdU.copy(t.pos).add(sdX.set(0, 0.3, 0)), t.pos.clone().add(sdX.set(0, 1.6, 0))) < B.radius;
+  if (onTeto) len = Math.min(len, tip.distanceTo(tetoChest(sdU)));
+  else if (bm.dir.y < -0.01) len = Math.min(len, (tip.y - SHOWDOWN.arena.y) / -bm.dir.y);
+  bm.end.copy(tip).addScaledVector(bm.dir, len);
+  const swell = Math.min(1, bm.t / 0.08) * (1 - clamp((bm.t - B.hold) / 0.25, 0, 1));
+  aimBeam(k.mikuBeam, tip, bm.end, Math.max(0.001, swell * (0.9 + Math.random() * 0.2)));
+  // Light at both ends of it, and streaks across the lens.
+  tipLight.position.copy(tip);
+  tipLight.intensity = 9 * swell;
+  hitLight.position.copy(bm.end);
+  hitLight.intensity = 14 * swell;
+  flare.position.copy(tip);
+  flare.scale.set(9 * swell, 0.25 * swell + 0.01, 1);
+  hitFlare.position.copy(bm.end);
+  hitFlare.scale.set(12 * swell, 0.35 * swell + 0.01, 1);
+  hitFlare.visible = true;
+  // Sparks pouring off where it lands, motes of light streaming along it.
+  for (let i = 0; i < 4; i++) k.flames.emit(bm.end, sdW.set((Math.random() - 0.5) * 9, Math.random() * 6, (Math.random() - 0.5) * 9), { life: 0.3, size: 0.25, grow: 1, alpha: 0.95 });
+  for (let i = 0; i < 3; i++) k.flames.emit(sdU.copy(tip).addScaledVector(bm.dir, Math.random() * len), sdW.copy(bm.dir).multiplyScalar(12), { life: 0.2, size: 0.12, grow: 0.5, alpha: 1 });
+  if (!onTeto && Math.random() < dt * 20) k.debris.emit(sdU.copy(bm.end).setY(SHOWDOWN.arena.y + 0.1), sdW.set((Math.random() - 0.5) * 4, 3 + Math.random() * 3, (Math.random() - 0.5) * 4), { life: 0.8, size: 0.5, grow: 2, alpha: 0.7, fall: 9 });
+  player.shake = Math.max(player.shake, 0.08 * swell);
+  // Burning her while it's on her.
+  bm.tick -= dt;
+  if (onTeto && bm.t < B.hold && bm.tick <= 0) {
+    bm.tick = 0.1;
+    damageTeto(B.damage * 0.1 / B.hold, false);
+    bm.burned = true;
+  }
+  // And it goes out with a bang.
+  if (bm.t >= B.hold && !bm.boom) {
+    bm.boom = true;
+    explode(bm.end.clone(), 0x7fc4ff, 1.4);
+    if (bm.burned) { damageTeto(B.damage * 0.25, true); fight.hitStop = 0.15; }
+    const scar = k.cracks[2];
+    scar.position.copy(bm.end).setY(SHOWDOWN.arena.y + 0.03);
+    scar.scale.setScalar(5);
+    scar.material.opacity = 1;
+    scar.userData.fade = 0.4;
+    scar.visible = true;
+  }
+  if (bm.t >= B.hold + 0.3) {
+    k.mikuBeam.visible = false;
+    fight.beam = null;
+    fight.beamT = -1;
+    for (const l of k.beamLights) l.intensity = 0;
+    for (const o of k.streaks) o.visible = false;
+  }
+}
+
+// The camera during the fight, after the usual follow camera (game.js): for the beam it
+// swings out over her shoulder so the light runs across the screen, and big moments kick
+// the field of view.
+function showdownCamera(dt) {
+  if (showdown.stage !== 'fight') { fight.camBeam = 0; return; }
+  const want = fight.beamT >= 0 ? 1 : 0;
+  fight.camBeam = (fight.camBeam || 0) + (want - (fight.camBeam || 0)) * (1 - Math.exp(-dt * (want ? 6 : 3)));
+  const c = fight.camBeam;
+  if (c > 0.001) {
+    const yaw = player.bodyYaw;
+    const side = sdV.set(-Math.cos(yaw), 0, Math.sin(yaw));
+    const goal = sdW.copy(player.pos).addScaledVector(side, 2.5).add(sdU.set(-Math.sin(yaw) * 2.4, 1.3, -Math.cos(yaw) * 2.4));
+    camera.position.lerp(goal, c);
+    const look = sdU.copy(player.pos).add(sdX.set(Math.sin(yaw) * 6, 1.1, Math.cos(yaw) * 6));
+    camera.lookAt(look);
+  }
+  if (Math.abs(fight.fovKick) > 0.05) {
+    camera.fov += fight.fovKick * 0.15;
+    camera.updateProjectionMatrix();
   }
 }
 
 /* ---------- The finale ---------- */
-const FINALE = { lift: 1.2, charge: 3.6, fire: 5.2, white: 5.6, still: 7.2, frames: 9, every: 0.55, dark: 13.4, end: 15 };
+// Teto goes up on her jets, the sky turns to blood, and she gathers everything she has into
+// one light between her drills: rings wheeling round it, lightning crawling down to the
+// snow, a red circle closing on Miku. Then a column of light from the sky, slowed right
+// down as it lands, and white.
+const FINALE = { lift: 1.0, sky: 1.6, charge: 3.4, fire: 7.2, slow: 7.9, white: 8.6, still: 10.2, frames: 9, every: 0.55, dark: 16.4, end: 18 };
 
 function startFinale() {
   if (showdown.stage !== 'fight') return;
@@ -2017,50 +2334,102 @@ function startFinale() {
   $('boss-hint').classList.add('hidden');
   $('sword-wave').classList.add('hidden');
   clearFightFx();
-  showdownScene = { t: 0, fired: {}, inArena: true, frame: -1, from: fight.teto.pos.clone() };
+  showdownScene = { t: 0, fired: {}, inArena: true, frame: -1, from: fight.teto.pos.clone(), fog: fight.redFog || 0, boom: 0 };
   playScene({ update: updateFinale });
 }
 
 function updateFinale(dt) {
-  const s = showdownScene, F = FINALE, k = showdownKit, t = fight.teto;
-  s.t += dt;
-  game.time += dt;
+  const s = showdownScene, F = FINALE, k = showdownKit, t = fight.teto, K = k.finale;
+  // The moment it lands plays slowed down.
+  const sdt = s.t > F.fire && s.t < F.slow ? dt * 0.3 : dt;
+  s.t += sdt;
+  game.time += sdt;
   const time = s.t;
   ambushOnce('line', 0.2, () => tetoSays(showdownLine('finale')));
-  ambushOnce('jets', F.lift, () => { s.jet = Sfx.jet(); s.jet.set(0.6, 0.3); });
-  // Up on her hair, jets of flame pouring down from the drills.
-  const lift = smooth(clamp((time - F.lift) / 2.2, 0, 1)) * 15;
+  ambushOnce('jets', F.lift, () => { s.jet = Sfx.jet(); s.jet.set(0.7, 0.3); Sfx.whoosh(1); });
+  ambushOnce('sky', F.sky, () => { Sfx.stinger(); Sfx.tetoLaugh(); });
+  // Up on her hair, red disks of light pouring down from the drills.
+  const lift = smooth(clamp((time - F.lift) / 2.2, 0, 1)) * 16;
   t.yaw = Math.atan2(player.pos.x - t.pos.x, player.pos.z - t.pos.z);
-  if (time > F.lift && time < F.white) {
-    for (let i = 0; i < 2; i++) {
-      tetoMuzzle(i, sdV);
-      k.jets.emit(sdV, sdW.set((Math.random() - 0.5) * 1.2, -9 - Math.random() * 4, (Math.random() - 0.5) * 1.2), { life: 0.4, size: 0.5, grow: 2.5, alpha: 0.9 });
-    }
-  }
+  if (time > F.lift && time < F.white) tetoJets(1);
+  // The sky goes red.
+  fight.redFog = lerp(s.fog, 0.85, smooth(clamp((time - F.sky) / 2, 0, 1)));
+  if (time < F.white) scene.fog.color.setHex(FOG_COLOR).lerp(SD_RED, fight.redFog);
   if (time < F.white) poseTeto(dt, time > F.lift ? 'fly' : 'idle', mikuChest(sdU.clone()), { lift });
-  // The charge: a huge orb gathering between her drills, the clearing cracking under Miku.
-  if (time > F.charge && time < F.fire + 0.4) {
-    const u = smooth((time - F.charge) / (F.fire - F.charge));
+
+  // The charge.
+  const orb = k.bigOrb.position;
+  if (time > F.charge && time < F.fire + 0.6) {
+    const u = smooth(clamp((time - F.charge) / (F.fire - F.charge), 0, 1));
     tetoMuzzle(0, sdV); tetoMuzzle(1, sdW);
-    k.bigOrb.position.lerpVectors(sdV, sdW, 0.5).add(sdU.set(0, -0.3, 0));
-    k.bigOrb.scale.setScalar(0.5 + u * 4 + Math.random() * 0.3);
+    orb.lerpVectors(sdV, sdW, 0.5).add(sdU.set(0, -0.6, 0));
+    k.bigOrb.scale.setScalar(0.5 + u * 5 + Math.random() * 0.4);
     k.bigOrb.visible = true;
+    // Rings wheeling round it on three axes.
+    K.rings.forEach((ring, i) => {
+      ring.visible = true;
+      ring.position.copy(orb);
+      ring.rotation.set(game.time * (1.5 + i), game.time * (2.2 - i * 0.6), i * 1.1);
+      ring.scale.setScalar(0.2 + u * (1 - i * 0.12) + Math.sin(game.time * 9 + i) * 0.03);
+      ring.material.opacity = 0.9 * Math.min(1, u * 3);
+    });
+    // Light streaming in from all round.
+    for (let i = 0; i < 5; i++) {
+      const from = sdW.set(Math.random() - 0.5, Math.random() - 0.6, Math.random() - 0.5).normalize().multiplyScalar(8 + Math.random() * 6);
+      k.trails.emit(sdU.copy(orb).add(from), from.multiplyScalar(-1 / 0.5), { life: 0.5, size: 0.3, grow: 0.2, alpha: 0.9 });
+    }
+    // Lightning down to the snow round her.
+    for (const bolt of K.bolts) {
+      if (Math.random() < 0.45) strikeBolt(bolt, orb, sdW.copy(player.pos).add(sdU.set((Math.random() - 0.5) * 14 * (1 - u * 0.6), 0, (Math.random() - 0.5) * 14 * (1 - u * 0.6))), 3);
+      else bolt.visible = false;
+    }
+    // The ground splitting under her, chunks of it lifting, the circle closing.
     const crack = k.cracks[1];
     crack.visible = true;
     crack.position.copy(player.pos).setY(SHOWDOWN.arena.y + 0.03);
-    crack.scale.setScalar(2 + u * 12);
+    crack.scale.setScalar(2 + u * 16);
     crack.material.opacity = u * (0.7 + Math.random() * 0.3);
-    k.tetoLight.intensity = 4 + u * 10;
-    player.shake = Math.max(player.shake, u * 0.15);
+    K.target.visible = true;
+    K.target.position.copy(player.pos).setY(SHOWDOWN.arena.y + 0.05);
+    K.target.scale.setScalar(lerp(12, 2.2, u));
+    K.target.material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(time * (6 + u * 18)));
+    if (Math.random() < sdt * 30) k.debris.emit(sdV.copy(player.pos).add(sdU.set((Math.random() - 0.5) * 10, 0.1, (Math.random() - 0.5) * 10)), sdW.set(0, 1.5 + Math.random() * 2.5, 0), { life: 1.6, size: 0.35, grow: 1, alpha: 0.85 });
+    k.tetoLight.intensity = 5 + u * 14;
+    k.tetoLight.position.copy(orb);
+    player.shake = Math.max(player.shake, u * 0.22);
+    s.beat = (s.beat || 0) - sdt;
+    if (s.beat <= 0) { s.beat = lerp(0.9, 0.3, u); Sfx.tone(70, 36, 0.2, 0.6); }
   }
   ambushOnce('charge', F.charge, () => Sfx.railCharge());
+  ambushOnce('charge2', F.charge + 1.4, () => Sfx.railCharge());
+  ambushOnce('charge3', F.charge + 2.6, () => { Sfx.railCharge(); Sfx.glide([[0, 200], [1.2, 2400]], 0.12, 'sawtooth', 30); });
   ambushOnce('fire', F.fire, () => {
     Sfx.railFire();
-    Sfx.boom(1);
-    aimBeam(k.giant, k.bigOrb.position, player.pos.clone(), 1);
-    explode(player.pos.clone().add(sdU.set(0, 0.5, 0)), 0xff6a9a, 2);
+    Sfx.boom(1.2);
+    Sfx.explosion(1.2);
+    impact('white', 90);
+    for (const bolt of K.bolts) bolt.visible = false;
+    for (const ring of K.rings) ring.visible = false;
+    K.target.visible = false;
     if (s.jet) { s.jet.stop(); s.jet = null; }
   });
+  // The column of light, swelling as it lands, the snow blown out from under it in waves.
+  if (time > F.fire && time < F.white) {
+    const u = (time - F.fire) / (F.white - F.fire);
+    aimBeam(k.giant, orb, player.pos.clone().setY(SHOWDOWN.arena.y), Math.min(1, u * 5) * (0.9 + Math.random() * 0.2));
+    s.boom -= sdt;
+    if (s.boom <= 0) {
+      s.boom = 0.12;
+      shockwave(player.pos, 8 + Math.random() * 10, Math.random() < 0.5 ? 0xff2d55 : 0xffffff, 0.6);
+      burst(player.pos.clone().add(sdU.set(0, 0.5, 0)), 0xff86b0, 20, 9);
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      k.jets.emit(sdV.copy(player.pos).add(sdU.set(Math.cos(a) * 2.5, 0.3, Math.sin(a) * 2.5)), sdW.set(Math.cos(a) * 14, 2 + Math.random() * 10, Math.sin(a) * 14), { life: 0.6, size: 1.2, grow: 2, alpha: 0.9 });
+      k.debris.emit(sdV.copy(player.pos).add(sdU.set(Math.cos(a) * 3, 0.2, Math.sin(a) * 3)), sdW.set(Math.cos(a) * 10, 4 + Math.random() * 6, Math.sin(a) * 10), { life: 1.2, size: 1.2, grow: 2, alpha: 0.85, fall: 9 });
+    }
+    player.shake = 1;
+  }
   ambushOnce('white', F.white, () => {
     $('flash').className = 'white';
     k.giant.visible = false;
@@ -2072,6 +2441,8 @@ function updateFinale(dt) {
     $('boss-bar').classList.add('hidden');
     showdown.music = false;
     Sfx.playMusic(null);
+    fight.redFog = 0;
+    scene.fog.color.setHex(FOG_COLOR);
   });
   // Miku: on her feet looking up, then flat in the snow.
   if (time < F.white) {
@@ -2083,7 +2454,7 @@ function updateFinale(dt) {
   } else {
     poseLying(dt, player.pos);
   }
-  updateShowdownFx(dt);
+  updateShowdownFx(sdt);
   // Frame by frame: the snow settling on her, a still every so often.
   if (time >= F.still) {
     const frame = Math.min(F.frames - 1, Math.floor((time - F.still) / F.every));
@@ -2106,45 +2477,138 @@ function updateFinale(dt) {
     // The world stands still between stills.
     s.hold = true;
   } else if (time < F.white) {
+    // Shots.
     const toT = sdW.set(t.pos.x - player.pos.x, 0, t.pos.z - player.pos.z).normalize();
-    camera.position.copy(player.pos).addScaledVector(toT, -3).add(sdU.set(0, 1.0, 0));
-    camera.lookAt(t.pos.clone().add(sdU.set(0, lift + 1.2, 0)));
-    setFov(56);
-    if (time > F.fire) shake(camera.position, 0.3);
-    else if (player.shake > 0) shake(camera.position, player.shake * 0.4);
+    const side = sdX.set(toT.z, 0, -toT.x);
+    const sky = t.pos.clone().add(sdU.set(0, lift + 1.2, 0));
+    let at, look, fov = 56;
+    if (time < F.lift) {
+      at = player.pos.clone().addScaledVector(toT, -3).add(sdU.set(0, 1.1, 0));
+      look = sky;
+    } else if (time < F.charge) {
+      // Wide and low from the side: her going up on her jets.
+      const mid = player.pos.clone().lerp(t.pos, 0.5);
+      at = mid.addScaledVector(side, 11).add(sdU.set(0, 0.6, 0));
+      look = t.pos.clone().add(sdU.set(0, lift * 0.6 + 1, 0));
+      fov = 58;
+    } else if (time < 4.8) {
+      // Close under the light as it gathers.
+      at = orb.clone().addScaledVector(side, 3.4).addScaledVector(toT, -2.4).add(sdU.set(0, -1.6, 0));
+      look = orb.clone();
+      fov = 50;
+    } else if (time < 6.0) {
+      // Miku's face, looking up into it.
+      at = player.pos.clone().addScaledVector(toT, 1.3).addScaledVector(side, 0.3).add(sdU.set(0, 1.05, 0));
+      look = player.pos.clone().add(sdU.set(0, 1.45, 0));
+      fov = 44;
+    } else if (time < F.fire) {
+      // Over Teto's shoulder, down on her, the circle closing.
+      at = t.pos.clone().add(sdU.set(0, lift + 3.2, 0)).addScaledVector(toT, -2.2).addScaledVector(side, 1.2);
+      look = player.pos.clone();
+      fov = 52;
+    } else {
+      // Far off down the clearing, whichever way there's more of it: the whole column of
+      // light, sky to snow.
+      const A = SHOWDOWN.arena, behind = player.pos.z + A.length / 2, ahead = A.length / 2 + A.balloon * 0.5 - player.pos.z;
+      const dz = behind > ahead ? -Math.min(26, behind - 3) : Math.min(26, ahead - 3);
+      at = sdU.set(clamp(player.pos.x + 5, -A.half + 1.5, A.half - 1.5), A.y + 2.4, player.pos.z + dz).clone();
+      look = player.pos.clone().add(sdU.set(0, 7, 0));
+      fov = 60;
+    }
+    camera.position.copy(at);
+    if (player.shake > 0) shake(camera.position, player.shake * 0.35);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(look);
+    setFov(fov);
   }
   ambushOnce('dark', F.dark, () => { $('boss-fade').classList.add('on'); });
-  if (time >= F.end) wakeInjured();
+  if (time >= F.end) wakeInClearing();
 }
 
 /* ---------- Afterwards ---------- */
-// She comes to by the ruined balloon, hurt.
-function wakeInjured() {
-  const k = showdownKit;
+// She comes to under the snow in the empty clearing, hurt, and has to drag herself all the
+// way back down it to the balloon.
+function wakeInClearing() {
+  const k = showdownKit, A = SHOWDOWN.arena;
   k.mound.visible = false;
-  leaveArena();
-  showdown.stage = 'injured';
+  clearFightFx();
+  showdown.stage = 'limp';
   showdown.injured = true;
+  showdown.limp = { next: 0, t: 0, said: -9, idle: 0, stumble: 5 + Math.random() * 3, slow: 0 };
+  subtitles.length = 0;
   document.body.classList.remove('boss-fight');
+  document.body.classList.add('limp-walk');
   $('boss-bar').classList.add('hidden');
+  $('sword-wave').classList.add('hidden');
   if (showdownScene && showdownScene.jet) showdownScene.jet.stop();
   showdownScene = null;
-  const out = balloonSpot.out, side = balloonSpot.side;
-  const x = balloonSpot.x + out.x * 5 + side.x * 2, z = balloonSpot.z + out.z * 5 + side.z * 2;
-  player.pos.set(x, groundHeight(x, z), z);
-  player.bodyYaw = player.yaw = Math.atan2(-out.x, -out.z);
+  k.snow.visible = true;
+  fight.redFog = 0;
+  scene.fog.color.setHex(FOG_COLOR);
+  scene.fog.density = A.fog;
+  player.pos.y = A.y;
+  player.bodyYaw = player.yaw = 0;
   player.pitch = 0.05;
-  world.stream(player.pos, Infinity);
-  balloon.sag = 1;
-  for (const hole of k.holes) if (hole.userData.glow) hole.userData.glow.visible = false;
   survival.health = 32;
   survival.warmth = 55;
   avatar.reset();
   endScene();
   $('boss-fade').classList.remove('on');
   $('flash').className = '';
-  say(showdownLine('wake'), 4);
-  emitGame('tetoGone');
+}
+
+// The walk back: her thoughts as she goes, a stumble now and then, and the balloon at the end.
+function updateLimp(dt) {
+  const L = showdown.limp, A = SHOWDOWN.arena, lines = SHOWDOWN_LINES.limp;
+  if (!L || L.arriving) return;
+  L.t += dt;
+  L.slow = Math.max(0, L.slow - dt);
+  const next = lines[L.next];
+  if (next && player.pos.z >= next[0] && L.t - L.said > 4.2) {
+    say(next[1], 4);
+    L.said = L.t;
+    L.next++;
+  }
+  if (player.stride < 0.05) {
+    L.idle += dt;
+    if (L.idle > 10) { L.idle = 0; say(showdownLine('limpIdle'), 3); }
+  } else {
+    L.idle = 0;
+    L.stumble -= dt;
+    if (L.stumble <= 0) {
+      // Her leg goes out from under her for a moment.
+      L.stumble = 6 + Math.random() * 5;
+      L.slow = 0.8;
+      player.shake = Math.max(player.shake, 0.35);
+      Sfx.thud();
+      Sfx.crimsonVoice([[0, 330], [0.25, 260]], 0.08, { vowel: 'u', breath: 0.4 });
+      if (Math.random() < 0.5) say(showdownLine('stumble'), 1.6);
+    }
+  }
+  if (player.pos.z > A.length / 2 + A.balloon - 9) arriveAtBalloon();
+}
+
+function arriveAtBalloon() {
+  showdown.limp.arriving = true;
+  $('boss-fade').classList.add('on');
+  setTimeout(() => {
+    leaveArena();
+    showdown.stage = 'injured';
+    showdown.limp = null;
+    const out = balloonSpot.out, side = balloonSpot.side;
+    const x = balloonSpot.x + out.x * 5 + side.x * 2, z = balloonSpot.z + out.z * 5 + side.z * 2;
+    player.pos.set(x, groundHeight(x, z), z);
+    player.bodyYaw = player.yaw = Math.atan2(-out.x, -out.z);
+    player.pitch = 0.05;
+    world.stream(player.pos, Infinity);
+    balloon.sag = 1;
+    for (const hole of showdownKit.holes) if (hole.userData.glow) hole.userData.glow.visible = false;
+    avatar.reset();
+    $('boss-fade').classList.remove('on');
+    subtitles.length = 0;
+    say(showdownLine('wake'), 4);
+    emitGame('tetoGone');
+  }, 900);
 }
 
 // Sitting at a fire after waking: the fairies come.
@@ -2215,7 +2679,7 @@ function showdownRepairLabel() {
 function showdownUseFrame() {
   const R = SHOWDOWN.repair;
   if (showdown.stage === 'none') { startAmbush(); return true; }
-  if (showdown.stage === 'repaired') { endPartOne(); return true; }
+  if (showdown.stage === 'repaired') { liftOff(); return true; }
   if (showdown.stage === 'repair') {
     if (packCount('wolfpelt') >= R.wolfpelt && packCount('pelt') >= R.pelt) {
       packTake('wolfpelt', R.wolfpelt);
@@ -2238,6 +2702,14 @@ function showdownUseFrame() {
   return false;
 }
 
+// Aboard at last: the balloon's own lift-off and climb through the cloud into the dawn
+// (balloon.js), with END PART 1 coming up over the last of it.
+function liftOff() {
+  showdown.stage = 'leaving';
+  BALLOON_LINES.launch = showdownLine('leave');
+  startBalloonLaunch();
+}
+
 function endPartOne() {
   showdown.stage = 'done';
   game.state = 'ending';
@@ -2249,6 +2721,7 @@ function endPartOne() {
 
 // The tracker's goal while this part of the story plays out, or null.
 function showdownObjective() {
+  if (showdown.stage === 'limp') return 'limpBack';
   if (showdown.stage === 'injured') return 'mendFire';
   if (showdown.stage === 'repair') return 'repair';
   if (showdown.stage === 'repaired') return 'board';
@@ -2260,6 +2733,15 @@ function showdownObjective() {
 function showdownClamp(pos, pad = 0.5) {
   if (!arenaActive() && showdown.stage !== 'finale') return;
   const A = SHOWDOWN.arena;
+  // Walking back she can go on down the avenue to the balloon.
+  if (showdown.stage === 'limp') {
+    const front = A.length / 2;
+    pos.z = clamp(pos.z, -front + pad, front + A.balloon - 6);
+    const w = A.half + Math.max(0, pos.z - front) * 0.32 + (pos.z > front ? 1.5 : 0);
+    pos.x = clamp(pos.x, -w + pad, w - pad);
+    pos.y = A.y;
+    return;
+  }
   pos.x = clamp(pos.x, -A.half + pad, A.half - pad);
   pos.z = clamp(pos.z, -A.length / 2 + pad, A.length / 2 - pad);
   pos.y = A.y;
@@ -2275,11 +2757,27 @@ function showdownHoldsPlayer(dt) {
 
 function showdownPosePlayer() {
   if (showdown.stage === 'fight' && !fight.knocked) poseScytheArms();
+  // Hurt, she limps: she drops onto her good leg and drags the bad one, bent over.
+  if (showdown.injured && player.stride > 0.02) {
+    const s = player.stride, ph = player.walkPhase;
+    avatar.hips.position.y -= Math.max(0, Math.sin(ph)) * 0.07 * s;
+    avatar.hips.rotation.z += Math.sin(ph) * 0.09 * s;
+    avatar.chest.rotation.x += 0.22 * s;
+    avatar.chest.rotation.z -= Math.sin(ph) * 0.06 * s;
+    avatar.legL.shin.rotation.x *= 0.25;
+    avatar.legL.thigh.rotation.x *= 0.6;
+    // A hand pressed to her side.
+    avatar.root.updateMatrixWorld(true);
+    const sh = avatar.armR.upper.position;
+    solveArm(avatar.armR, sdV.set(-Math.abs(sh.x) + 0.12, sh.y - 0.3, 0.12), POLE_R);
+    avatar.armR.hand.quaternion.identity();
+  }
 }
 
 // Hurt, she can only limp.
 function showdownSpeed() {
-  return showdown.injured ? 0.55 : 1;
+  if (!showdown.injured) return 1;
+  return showdown.limp && showdown.limp.slow > 0 ? 0.12 : 0.48;
 }
 
 // The fight has its own music, from the moment the scythe lights until the clearing burns.
@@ -2329,6 +2827,7 @@ function showdownJumpTo() {
 /* ---------- Each frame, and runs ---------- */
 function updateShowdown(dt) {
   if (!showdownKit) return;
+  if (showdown.stage === 'limp') updateLimp(dt);
   if (showdown.stage === 'fight') {
     fight.invuln = Math.max(0, fight.invuln - dt);
     // A big hit holds the moment: Teto all but stops for a beat.
@@ -2344,6 +2843,15 @@ function updateShowdown(dt) {
     updateBullets(tdt);
     scytheFlames(dt);
     wolfAttack.cooldown = Math.max(wolfAttack.cooldown, 30);
+    // Low on health, her heart pounds.
+    if (survival.health < 35 && !fight.over) {
+      fight.beatT -= dt;
+      if (fight.beatT <= 0) {
+        fight.beatT = 0.4 + survival.health / 50;
+        Sfx.tone(72, 38, 0.16, 0.55);
+        setTimeout(() => Sfx.tone(64, 34, 0.18, 0.4), 170);
+      }
+    }
   }
   // Hurt, she limps: the view dips with every other step.
   if (showdown.injured && player.stride > 0.05) player.shake = Math.max(player.shake, 0.02);

@@ -644,6 +644,7 @@ const LORE = {
     mendFire: 'Build a campfire and rest by it (C)',
     repair: 'Patch the balloon: {wolf}/5 wolf pelts · {hare}/10 hare pelts',
     board: 'Climb into the patched balloon',
+    limpBack: 'Get back to the balloon',
   },
 
   /* ---------- The Ember Blade ---------- */

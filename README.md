@@ -57,12 +57,13 @@ The ten sites are the Ranger Lookout, Henrik's Cabin, Hollow Station, the Frozen
 
 Bring all ten parts and 10 planks to Varga's launch frame at the Breath and press E to assemble the balloon, then again to climb in. Teto has other ideas: she shoots the balloon full of holes, grabs you, whirls you round and hurls you through the treetops into a clearing, then drops out of the sky after you. This is the final fight, and it's long and hard.
 
-- **Your scythe.** You tear off your twin tails and forge them into a blue double scythe. Left click whirls it (three times for a combo, ending in a spin). Right click spins it overhead and throws twin crescents of fire. Q levels it at Teto and fires an exploding blue beam, on a longer cooldown.
+- **Your scythe.** You tear off your twin tails and forge them into a blue double scythe. Left click whirls it (three times for a combo, ending in a spin). Right click throws it: it spins out like a boomerang in a wheel of fire until it hits Teto or goes far enough, then comes back to your hand, cutting her again if she's in the way. Q levels it at Teto and fires a beam of light that tracks her, burns her the whole time it's on her and explodes when it ends, on a longer cooldown.
 - **Her gatling hair.** She points, her drills light up with red sights, and then they rattle out tracer rounds. Keep moving sideways or dodge with Space. After each burst she rests for a moment: that's when to hit her, and hits land harder then. Get too close and she whips her hair round you.
 - **Railguns.** Get hit too often and you're knocked down: she charges two railgun beams, the ground cracking under her and under you, and you have to mash Space to roll clear. It takes more presses every time she knocks you down.
+- **Her rages.** At two thirds and one third of her health she goes up on her jets, screams, blasts you back across the snow, and turns the sky redder. The music gets harder each time.
 - **If you lose**, you go back to your last save (or, with no save yet, the fight starts again from the top).
 
-Afterwards you wake by the ruined balloon, hurt. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in, and that's the end of part one.
+At the end she flies up and burns the clearing from the sky. You wake under the snow, hurt, and have to limp all the way back down the clearing to the balloon on your own. Build a fire and rest by it, and patch the balloon with 5 wolf pelts and 10 hare pelts. Climb in and fly away, and that's the end of part one.
 
 ## The Ember Blade
 

@@ -991,6 +991,8 @@ function updateCamera(dt) {
   const fov = binocularsUp() ? 13 : aiming ? 42 : lerp(58, 50, a);
   camera.fov += (fov - camera.fov) * ease(12);
   camera.updateProjectionMatrix();
+  // The fight swings it round for some moves (showdown.js).
+  showdownCamera(dt);
 }
 
 /* ---------- HUD ---------- */

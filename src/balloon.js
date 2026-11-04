@@ -1312,8 +1312,9 @@ function balloonReachEnding(skipped) {
   $('hud').classList.add('hidden');
   $('subtitle').classList.remove('on');
   subtitles.length = 0;
-  showBalloonEnding();
-  emitGame('escaped');
+  // Flying away from Teto's clearing, it's the end of part one instead (showdown.js).
+  if (showdown.stage === 'leaving') endPartOne();
+  else { showBalloonEnding(); emitGame('escaped'); }
   // The last shot keeps drifting behind the ending screen.
   let last = performance.now();
   const drift = (now) => {
