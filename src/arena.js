@@ -127,8 +127,8 @@ function auroraMaterial() {
         float x = vUv.x * 40.0 + uPhase;
         float curtain = 0.55 + 0.45 * sin(x * 1.7 + uTime * 0.6) * sin(x * 0.53 - uTime * 0.31);
         float rays = 0.6 + 0.4 * sin(x * 9.0 + uTime * 1.3 + sin(x * 2.0) * 2.0);
-        float fall = smoothstep(0.0, 0.12, vUv.y) * pow(1.0 - vUv.y, 1.6);
-        float ends = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x);
+        float fall = smoothstep(0.0, 0.12, vUv.y) * pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.6);
+        float ends = smoothstep(0.0, 0.15, vUv.x) * (1.0 - smoothstep(0.85, 1.0, vUv.x));
         vec3 col = mix(uColor, uColor2, vUv.y) * 1.6;
         gl_FragColor = vec4(col, uOpacity * curtain * rays * fall * ends);
       }`,

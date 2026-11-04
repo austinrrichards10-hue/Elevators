@@ -508,7 +508,7 @@ function buildBullets(count) {
 // lightning crawling round it.
 function beamMaterial(color, opacity, speed) {
   return new THREE.ShaderMaterial({
-    uniforms: { uColor: { value: new THREE.Color(color) }, uTime: { value: 0 }, uOpacity: { value: opacity }, uLen: { value: 10 }, uSpeed: { value: speed } },
+    uniforms: { uColor: { value: new THREE.Color(color) }, uCore: { value: new THREE.Color(3.2, 3.2, 3.2) }, uTime: { value: 0 }, uOpacity: { value: opacity }, uLen: { value: 10 }, uSpeed: { value: speed } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: `
       varying vec3 vN; varying vec3 vV; varying vec2 vUv;
@@ -520,13 +520,13 @@ function beamMaterial(color, opacity, speed) {
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform vec3 uColor; uniform float uTime; uniform float uOpacity; uniform float uLen; uniform float uSpeed;
+      uniform vec3 uColor; uniform vec3 uCore; uniform float uTime; uniform float uOpacity; uniform float uLen; uniform float uSpeed;
       varying vec3 vN; varying vec3 vV; varying vec2 vUv;
       void main() {
         float facing = abs(dot(normalize(vN), normalize(vV)));
         float along = vUv.y * uLen;
         float bands = 0.7 + 0.3 * sin(along * 3.0 - uTime * uSpeed) + 0.2 * sin(along * 11.0 - uTime * uSpeed * 1.7 + vUv.x * 12.0);
-        vec3 col = mix(uColor * 2.2, vec3(3.2), pow(facing, 5.0)) * bands;
+        vec3 col = mix(uColor * 2.2, uCore, pow(facing, 5.0)) * bands;
         gl_FragColor = vec4(col, pow(facing, 1.6) * uOpacity);
       }`,
   });
@@ -602,22 +602,135 @@ function glowOrb(color, size) {
 
 // Miku's beam: a needle of white light in a blue sheath and a wide soft haze, with two
 // threads of light spiralling round it.
+// Her colours: the teal of her hair, a pale mint for the hot heart of things, a deep sea-green.
+const MIKU_TEAL = 0x39d5c8, MIKU_MINT = 0xb4fff2, MIKU_DEEP = 0x0c9c9e;
+
 function buildLightBeam() {
-  const beam = buildBeam(0xa8dcff, 0.12);
-  const haze = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1, 24, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), beamMaterial(0x2a6dff, 0.14, 15));
-  const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 8, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), additive(new THREE.Color(0xffffff).multiplyScalar(6)));
+  const beam = buildBeam(MIKU_TEAL, 0.12);
+  const haze = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1, 24, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), beamMaterial(MIKU_DEEP, 0.55, 15));
+  // Painted over what's behind it, not added to it, so even against bright snow it reads as her teal.
+  haze.material.blending = THREE.NormalBlending;
+  haze.material.uniforms.uCore.value.setRGB(0.1, 0.75, 0.72);
+  // The haze first, then the glowing core and everything else on top of it.
+  haze.renderOrder = 1;
+  for (const child of beam.children) if (child !== haze) child.renderOrder = 2;
+  const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 8, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), additive(new THREE.Color(0.8, 2.6, 2.4)));
+  // Its heart is her teal too, white-hot only at the very centre, not blown out to white.
+  for (const m of beam.userData.mats) m.uniforms.uCore.value.setRGB(0.35, 2.4, 2.2);
+  beam.children[2].material.color.setRGB(0.3, 1.6, 1.5);
   beam.add(haze, needle);
+  needle.renderOrder = 2;
   beam.userData.mats.push(haze.material);
-  const helixMat = new THREE.LineBasicMaterial({ color: new THREE.Color(0xd8f2ff).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, fog: false });
-  beam.userData.spin = [0, Math.PI].map((phase) => {
+  const helixMat = new THREE.LineBasicMaterial({ color: new THREE.Color(MIKU_MINT).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, fog: false });
+  beam.userData.spin = [0, Math.PI * 2 / 3, Math.PI * 4 / 3].map((phase) => {
     const pts = [];
     for (let i = 0; i <= 240; i++) { const a = phase + i * 0.55; pts.push(new THREE.Vector3(Math.cos(a) * 0.3, Math.sin(a) * 0.3, i / 240)); }
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), helixMat);
     line.frustumCulled = false;
+    line.renderOrder = 2;
     beam.add(line);
     return line;
   });
   return beam;
+}
+
+// A music note, white on clear, for the notes of light that pour along her beam.
+function noteTexture(glyph) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  g.shadowColor = '#fff';
+  g.shadowBlur = 14;
+  g.font = 'bold 96px serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(glyph, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// The rest of her beam: teal motes of light, a summoning circle wheeling at the scythe's tip
+// (two, turning opposite ways), rings of sound racing down the beam, and music notes.
+function buildMikuBeamFx() {
+  const motes = buildPuffs(500, 0x16b4aa);
+  motes.group.children[0].material.uniforms.diffuse.value.multiplyScalar(1.7);
+  scene.add(motes.group);
+  const tex = runeTexture();
+  const circles = [1.4, 2.4].map(() => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(MIKU_TEAL).multiplyScalar(4), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+  const ringGeo = new THREE.TorusGeometry(1, 0.045, 6, 40);
+  const pulses = Array.from({ length: 12 }, () => {
+    const m = new THREE.Mesh(ringGeo, additive(new THREE.Color(MIKU_TEAL).multiplyScalar(2), 0));
+    m.visible = false;
+    scene.add(m);
+    return { mesh: m, t: 1, life: 0.5, from: new THREE.Vector3(), dir: new THREE.Vector3(), max: 0 };
+  });
+  const noteTex = [noteTexture('♪'), noteTexture('♫')];
+  const notes = Array.from({ length: 40 }, (_, i) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: noteTex[i % 2], color: new THREE.Color(i % 3 ? MIKU_TEAL : MIKU_MINT).multiplyScalar(2.5), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    s.visible = false;
+    scene.add(s);
+    return { sprite: s, pos: new THREE.Vector3(), vel: new THREE.Vector3(), t: 1, life: 1, size: 0.4, spin: 0, axis: new THREE.Vector3(), swirl: 0 };
+  });
+  return { motes, circles, pulses, notes, pulseT: 0, noteT: 0 };
+}
+
+// A music note of light, thrown from `at` at `vel`, curling round `axis` if it has one.
+function emitNote(at, vel, life = 0.8, size = 0.45, axis = null, swirl = 0) {
+  const fx = showdownKit.mikuFx;
+  const n = fx.notes.find((x) => x.t >= x.life) || fx.notes[0];
+  Object.assign(n, { t: 0, life, size, swirl, spin: (Math.random() - 0.5) * 4 });
+  n.pos.copy(at);
+  n.vel.copy(vel);
+  if (axis) n.axis.copy(axis); else n.axis.set(0, 0, 0);
+  n.sprite.visible = true;
+}
+
+// A ring of sound from the tip, racing out along the beam as far as it reaches.
+function emitPulse(from, dir, max) {
+  const fx = showdownKit.mikuFx;
+  const p = fx.pulses.find((x) => x.t >= x.life) || fx.pulses[0];
+  Object.assign(p, { t: 0, life: 0.45, max });
+  p.from.copy(from);
+  p.dir.copy(dir);
+  p.mesh.visible = true;
+}
+
+function updateMikuBeamFx(dt) {
+  const fx = showdownKit.mikuFx;
+  if (!fx) return;
+  fx.motes.update(dt);
+  for (const p of fx.pulses) {
+    if (p.t >= p.life) continue;
+    p.t += dt;
+    const u = Math.min(1, p.t / p.life);
+    const d = Math.min(p.max, 1.5 + u * 70);
+    p.mesh.position.copy(p.from).addScaledVector(p.dir, d);
+    p.mesh.lookAt(sdU.copy(p.mesh.position).add(p.dir));
+    p.mesh.scale.setScalar(0.35 + u * 1.3);
+    p.mesh.material.opacity = (1 - u) * 0.55;
+    if (u >= 1 || d >= p.max) { p.t = p.life; p.mesh.visible = false; }
+  }
+  for (const n of fx.notes) {
+    if (n.t >= n.life) continue;
+    n.t += dt;
+    const u = n.t / n.life;
+    // Curling round the beam as they go.
+    if (n.swirl) n.vel.applyAxisAngle(n.axis, n.swirl * dt);
+    n.pos.addScaledVector(n.vel, dt);
+    n.sprite.position.copy(n.pos);
+    n.sprite.material.rotation += n.spin * dt;
+    const near = Math.min(1, n.pos.distanceTo(camera.position) / 3);
+    n.sprite.scale.setScalar(n.size * near * (u < 0.15 ? u / 0.15 : 1) * (1 + u * 0.4));
+    n.sprite.material.opacity = 1 - u * u;
+    if (u >= 1) n.sprite.visible = false;
+  }
 }
 
 // Teto's jets: red disks of light shed downwards from her drills, swelling as they fall.
@@ -757,7 +870,7 @@ function buildMegaKit() {
         vec2 cell = floor(vec2(vW.x * 4.0, vW.y * 4.0));
         float h = hash(cell);
         float s = fract(vW.z * (0.05 + h * 0.06) + uTime * (3.0 + h * 4.0) + h * 7.0);
-        float streak = smoothstep(0.0, 0.08, s) * smoothstep(0.55, 0.08, s);
+        float streak = smoothstep(0.0, 0.08, s) * (1.0 - smoothstep(0.08, 0.55, s));
         float wave = 0.5 + 0.5 * sin(vW.z * 0.4 + uTime * 30.0);
         float flick = 0.88 + 0.12 * sin(uTime * 73.0);
         vec3 col = mix(vec3(1.4, 0.3, 0.55), vec3(2.6, 2.3, 2.4), 0.35 + 0.5 * streak + 0.15 * wave);
@@ -961,7 +1074,7 @@ function buildShowdownKit() {
   const tetoLight = new THREE.PointLight(0xff3d7a, 0, 14, 1.6);
   scene.add(tetoLight);
   // Miku's light: at the scythe's tip while the beam's up, and where it lands.
-  const beamLights = [new THREE.PointLight(0x7fc4ff, 0, 16, 1.5), new THREE.PointLight(0x7fc4ff, 0, 18, 1.5)];
+  const beamLights = [new THREE.PointLight(MIKU_TEAL, 0, 16, 1.5), new THREE.PointLight(MIKU_TEAL, 0, 18, 1.5)];
   scene.add(...beamLights);
   const scythe = buildScythe();
   return {
@@ -977,11 +1090,12 @@ function buildShowdownKit() {
     disks: buildJetDisks(60),
     finale: buildFinaleKit(),
     mega: buildMegaKit(),
-    streaks: [glowOrb(0xbfe6ff, 1), glowOrb(0xbfe6ff, 1)],
-    cracks: [buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0x4da0ff)],
+    streaks: [glowOrb(MIKU_TEAL, 1), glowOrb(MIKU_TEAL, 1)],
+    cracks: [buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, 0xff2d6f), buildCrack(crackTex, MIKU_TEAL)],
     orbs: [glowOrb(0xff4d7a, 0.4), glowOrb(0xff4d7a, 0.4)],
     bigOrb: glowOrb(0xff86b0, 1),
-    tipOrb: glowOrb(0x6fb6ff, 0.4),
+    tipOrb: glowOrb(MIKU_TEAL, 0.4),
+    mikuFx: buildMikuBeamFx(),
     blast: glowOrb(0xffffff, 1),
     rocks: Array.from({ length: 8 }, buildBoulder),
     homing: Array.from({ length: 12 }, () => ({ sprite: glowOrb(0xff4d86, 0.55), pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, age: 0 })),
@@ -1047,7 +1161,7 @@ function explode(at, color, size = 1) {
   k.blast.userData = { t: 0, size: 1.5 + size * 2.5 };
   k.blast.visible = true;
   // Teto's fire is red, Miku's blue.
-  const fire = k.blast.material.color.r > k.blast.material.color.b ? k.jets : k.flames;
+  const fire = k.blast.material.color.r > k.blast.material.color.b ? k.jets : k.mikuFx.motes;
   for (let i = 0; i < 40 * size; i++) {
     const v = sdW.set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize().multiplyScalar(3 + Math.random() * 7 * size);
     fire.emit(at, v, { life: 0.45 + Math.random() * 0.3, size: 0.5 + Math.random() * 0.6 * size, grow: 2.2, alpha: 0.9 });
@@ -1855,6 +1969,7 @@ function leaveArena() {
 function updateShowdownFx(dt) {
   const k = showdownKit;
   updateArenaFx(dt);
+  updateMikuBeamFx(dt);
   for (const s of k.shocks) {
     if (s.t >= s.life) continue;
     s.t += dt;
@@ -3230,15 +3345,35 @@ function updateLightBeam(dt) {
     scar.position.copy(player.pos).setY(SHOWDOWN.arena.y + 0.03);
     scar.scale.setScalar(1 + u * 4);
     scar.material.opacity = u * (0.6 + Math.random() * 0.4);
-    for (let i = 0; i < 3; i++) {
+    const fx = k.mikuFx;
+    // Her aura: teal fire rising off her, the light of it streaming up her hair.
+    for (let i = 0; i < 4; i++) {
       const a = Math.random() * Math.PI * 2;
-      k.flames.emit(sdW.copy(player.pos).add(sdU.set(Math.cos(a) * 0.6, Math.random() * 1.5, Math.sin(a) * 0.6)), sdU.set(0, 2 + u * 2, 0), { life: 0.4, size: 0.25, grow: 1, alpha: 0.7 });
+      fx.motes.emit(sdW.copy(player.pos).add(sdU.set(Math.cos(a) * 0.6, Math.random() * 1.5, Math.sin(a) * 0.6)), sdU.set(0, 2 + u * 3, 0), { life: 0.45, size: 0.28, grow: 1, alpha: 0.75 });
     }
-    if (!fight.beamWound && fight.beamT > B.charge * 0.45) { fight.beamWound = true; Sfx.forge(); shockwave(player.pos, 3, 0x7fc4ff, 0.4); }
+    if (!fight.beamWound && fight.beamT > B.charge * 0.45) { fight.beamWound = true; Sfx.forge(); shockwave(player.pos, 3, MIKU_TEAL, 0.4); }
     player.shake = Math.max(player.shake, u * 0.08);
-    for (let i = 0; i < 3; i++) {
-      const from = sdW.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(1.4 + Math.random());
-      k.flames.emit(sdU.copy(tip).add(from), from.multiplyScalar(-1 / 0.22), { life: 0.22, size: 0.1, grow: 0.3, alpha: 1 });
+    // Light pouring into the blade from all round.
+    for (let i = 0; i < 5; i++) {
+      const from = sdW.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(1.4 + Math.random() * 1.5);
+      fx.motes.emit(sdU.copy(tip).add(from), from.multiplyScalar(-1 / 0.25), { life: 0.25, size: 0.1, grow: 0.3, alpha: 1 });
+    }
+    // The summoning circle opening at the tip, facing where she aims.
+    const aimDir = sdX.copy(aimAt).sub(tip).normalize();
+    fx.circles.forEach((c, i) => {
+      c.visible = true;
+      c.position.copy(tip).addScaledVector(aimDir, 0.25 + i * 0.35);
+      c.lookAt(sdU.copy(c.position).add(aimDir));
+      c.rotateZ(game.time * (i ? -3 : 4.5));
+      c.scale.setScalar((i ? 1.8 : 1.1) * smooth(u));
+      c.material.opacity = u;
+    });
+    // Notes of light circling her, faster as it builds.
+    fx.noteT -= dt;
+    if (fx.noteT <= 0) {
+      fx.noteT = 0.06;
+      const a = Math.random() * Math.PI * 2;
+      emitNote(sdU.copy(player.pos).add(sdW.set(Math.cos(a) * 1.1, 0.3 + Math.random() * 1.2, Math.sin(a) * 1.1)), sdW.set(-Math.sin(a) * 3, 1.2, Math.cos(a) * 3), 0.7, 0.3 + Math.random() * 0.2, sdX.set(0, 1, 0), 4);
     }
     return;
   }
@@ -3254,8 +3389,13 @@ function updateLightBeam(dt) {
     player.shake = Math.max(player.shake, 0.3);
     k.tipOrb.visible = false;
     fight.beamCd = B.cooldown;
-    // A ring of light thrown off her as it goes.
-    shockwave(player.pos, 4, 0x9fd8ff, 0.5);
+    // A ring of light thrown off her as it goes, and a burst of notes.
+    shockwave(player.pos, 4, MIKU_MINT, 0.5);
+    shockwave(player.pos, 7, MIKU_TEAL, 0.8);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      emitNote(tip, sdW.set(Math.cos(a) * 3, 1.5 + Math.random() * 2, Math.sin(a) * 3), 0.8, 0.32);
+    }
   }
   const bm = fight.beam;
   bm.t += dt;
@@ -3282,8 +3422,29 @@ function updateLightBeam(dt) {
   hitFlare.scale.set(12 * swell, 0.35 * swell + 0.01, 1);
   hitFlare.visible = true;
   // Sparks pouring off where it lands, motes of light streaming along it.
-  for (let i = 0; i < 4; i++) k.flames.emit(bm.end, sdW.set((Math.random() - 0.5) * 9, Math.random() * 6, (Math.random() - 0.5) * 9), { life: 0.3, size: 0.25, grow: 1, alpha: 0.95 });
-  for (let i = 0; i < 3; i++) k.flames.emit(sdU.copy(tip).addScaledVector(bm.dir, Math.random() * len), sdW.copy(bm.dir).multiplyScalar(12), { life: 0.2, size: 0.12, grow: 0.5, alpha: 1 });
+  const fx = k.mikuFx;
+  for (let i = 0; i < 6; i++) fx.motes.emit(bm.end, sdW.set((Math.random() - 0.5) * 10, Math.random() * 7, (Math.random() - 0.5) * 10), { life: 0.35, size: 0.3, grow: 1, alpha: 0.95 });
+  for (let i = 0; i < 5; i++) fx.motes.emit(sdU.copy(tip).addScaledVector(bm.dir, Math.random() * len), sdW.copy(bm.dir).multiplyScalar(14), { life: 0.2, size: 0.14, grow: 0.5, alpha: 1 });
+  // The circle at the tip wheeling flat out, rings of sound racing down the beam, notes
+  // curling round it all the way along, and bursting off where it lands.
+  fx.circles.forEach((c, i) => {
+    c.visible = swell > 0.02;
+    c.position.copy(tip).addScaledVector(bm.dir, 0.25 + i * 0.45);
+    c.lookAt(sdU.copy(c.position).add(bm.dir));
+    c.rotateZ(game.time * (i ? -7 : 10));
+    c.scale.setScalar((i ? 2 : 1.2) * (0.95 + Math.random() * 0.1) * Math.max(swell, 0.01));
+    c.material.opacity = swell;
+  });
+  fx.pulseT -= dt;
+  if (fx.pulseT <= 0 && swell > 0.3) { fx.pulseT = 0.055; emitPulse(tip, bm.dir, len); }
+  fx.noteT -= dt;
+  if (fx.noteT <= 0 && swell > 0.3) {
+    fx.noteT = 0.035;
+    const side = sdX.crossVectors(bm.dir, sdY.set(0, 1, 0)).normalize().multiplyScalar(0.7);
+    side.applyAxisAngle(bm.dir, Math.random() * Math.PI * 2);
+    emitNote(sdU.copy(tip).add(side), sdW.copy(bm.dir).multiplyScalar(22 + Math.random() * 8).add(side.multiplyScalar(1.5)), Math.min(0.9, len / 26), 0.35 + Math.random() * 0.25, bm.dir, 9);
+    if (Math.random() < 0.5) emitNote(bm.end, sdW.set((Math.random() - 0.5) * 8, 2 + Math.random() * 5, (Math.random() - 0.5) * 8), 0.7, 0.5);
+  }
   if (!onTeto && Math.random() < dt * 20) k.debris.emit(sdU.copy(bm.end).setY(SHOWDOWN.arena.y + 0.1), sdW.set((Math.random() - 0.5) * 4, 3 + Math.random() * 3, (Math.random() - 0.5) * 4), { life: 0.8, size: 0.5, grow: 2, alpha: 0.7, fall: 9 });
   player.shake = Math.max(player.shake, 0.08 * swell);
   // Burning her while it's on her.
@@ -3296,7 +3457,8 @@ function updateLightBeam(dt) {
   // And it goes out with a bang.
   if (bm.t >= B.hold && !bm.boom) {
     bm.boom = true;
-    explode(bm.end.clone(), 0x7fc4ff, 1.4);
+    explode(bm.end.clone(), MIKU_TEAL, 1.4);
+    for (let i = 0; i < 16; i++) emitNote(bm.end, sdW.set((Math.random() - 0.5) * 12, 3 + Math.random() * 6, (Math.random() - 0.5) * 12), 1.1, 0.6);
     if (bm.burned) { damageTeto(B.damage * 0.25, true); fight.hitStop = 0.15; }
     const scar = k.cracks[2];
     scar.position.copy(bm.end).setY(SHOWDOWN.arena.y + 0.03);
@@ -3329,6 +3491,7 @@ function endLightBeam() {
   fight.beamT = -1;
   for (const l of k.beamLights) l.intensity = 0;
   for (const o of k.streaks) o.visible = false;
+  for (const c of k.mikuFx.circles) c.visible = false;
 }
 
 // The camera during the fight, after the usual follow camera (game.js): big moments kick the
