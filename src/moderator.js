@@ -62,7 +62,7 @@ function renderMod() {
   const section = (title, body) => `<h3>${title}</h3>${body}`;
   $('mod').innerHTML = `
     <header class="room-head">
-      <p class="room-kicker">Hollow Snow</p>
+      <p class="room-kicker">Frostmourne</p>
       <h2>Moderator</h2>
     </header>
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>

@@ -1,10 +1,10 @@
-# Hollow Snow
+# Frostmourne
 
 A third-person survival game in a vast frozen, fog-bound forest. Your plane goes down in the Hollow, a crater the locals call the Death Crater, with walls nobody has ever climbed out of. You're Miku. The intro opens in the cabin, across the table from Teto, before the engine goes up and the door tears away; you're thrown out, crash down through a tree and wake in the snow. The intro and the story's scenes always play through. Find the axe, cut wood, build a fire before the cold takes you, and work out how to get out. Wolves roam the forest. The world is generated in code and stretches a kilometre in every direction from its centre, with mountains around the edge.
 
 The way out was left by Dr. Ilse Varga, a weather scientist stranded here in 1980. She worked out that the Breath, a column of warm air rising from the crater's centre, could carry a hot air balloon over the rim. She hid ten balloon parts at ten sites around the crater, each under a red flag with a page of her journal. Find all ten, bring them and 10 planks to her launch frame at the Breath, and get ready to fly out. This is part one of the story; it ends at the balloon.
 
-Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it. The game saves itself every time you sit down by a campfire, and **Load last save** on the title screen picks up from there.
+Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it. The game saves itself every time you sit down by a campfire, and **Load last save** on the title screen picks up from there. The title screen shows Miku and Teto (the image is in `assets/title.jpg`) with its own piano theme. Out in the forest you hear the wind in layers, gusts whistling through the pines and ice cracking far off, under a slow, lonely piano; Teto's fight keeps its own music.
 
 | Input | Action |
 | --- | --- |
@@ -38,6 +38,7 @@ On the map: click to set a waypoint, scroll to zoom, drag to pan, C to centre on
 - **A campfire** costs 5 planks. Stand within a few metres of it to warm up, or sit by it (C) to heal quickly and save the game. You can't sit down in a fight: not for a few seconds after a blow either way, with a wolf charging or close by, or with a hare you're hunting still bolting nearby.
 - **Wolves** wander in packs. They'll stop and watch you if you come near, and bolt if you get too close. Once in a long while one charges with a growl; dodge, or hit it with an arrow or the axe to send it running.
 - **Wolves** have health now: two arrows or three axe blows. A wounded wolf can only limp, so it's easy to finish off. Skin a dead one for a pelt and meat.
+- **Wolves move like wolves**: their legs keep pace with the ground at any speed, they lean into turns and slow for tight ones instead of spinning on the spot, follow the slope they're on, steer round trees, and turn and slink off rather than backing away.
 - **Snow hares** are everywhere, still in their brown coats so they stand out on the snow. They freeze, then bolt in zig-zags, and they're easier to get close to if you creep or stand still with the bow up. A full draw drops one; a light shot wounds it and it limps away slowly. Take a hare for meat and a pelt, and cook raw meat at a fire.
 - **Gear** cuts how fast the cold gets to you: a parka, fur mittens and a hood crafted from hare pelts, and a wolf-pelt cloak. Snowshoes make you faster.
 - **The wreck** comes down somewhere different each run. Its smoke column shows above the treetops. Teto is off its nose, still strapped into her torn-off seat and out cold. Nothing you do wakes her, but light a fire beside her and, once you've found another site or two, she'll come round and wander off on her own.

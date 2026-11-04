@@ -73,11 +73,11 @@ function animatedModel(file, materialFor) {
 const WOLF = {
   count: 9, // how many roam around her at once
   spawnMin: 40, spawnMax: 80, despawn: 150,
-  walk: 1.5, run: 8.5, creep: 0.8,
+  walk: 1.3, run: 7, creep: 0.8,
   watch: 22, // closer than this, they stop and watch her
   flee: 9, // closer than this, they run
   length: 1.5, // nose to tail, in metres
-  charge: 9.5, // running speed when it attacks
+  charge: 8, // running speed when it attacks
   bite: 18, // health lost to a bite
   attackChance: 0.12, // how often a wolf that starts watching her charges instead
   attackCooldown: [70, 150], // seconds before any wolf may attack again
@@ -128,6 +128,10 @@ function buildWolfModel() {
   holder.add(model.root);
   return { holder, root: model.root, clips: model.clips };
 }
+// How far each animation carries the wolf in one loop of it, in metres, to keep its paws
+// planted: the walk and run are played faster or slower to match how fast it is going.
+const WOLF_STRIDE = { walk: 1.0, run: 2.4, creep: 0.5 };
+const sdProbe = new THREE.Vector3();
 // The model faces -Z; this turns its nose to +Z, the game's forward.
 const WOLF_TURN = Math.PI;
 
@@ -161,12 +165,26 @@ class Wolf {
     scene.add(this.holder);
   }
 
+  // Blends to another animation. Everything else fades out together, so however fast it
+  // changes its mind the weights never add up to more than one whole wolf.
   play(name) {
     if (this.anim === name) return;
+    if (!this.weights) this.weights = {};
     const next = this.actions[name];
-    next.reset().play();
-    if (this.anim) this.actions[this.anim].crossFadeTo(next, 0.35, false);
+    if (!(this.weights[name] > 0)) { next.reset().play(); this.weights[name] = this.anim ? 0 : 1; }
     this.anim = name;
+  }
+
+  // Each frame: the current animation's share rises, the others' fall, always summing to one.
+  blend(dt) {
+    const k = 1 - Math.exp(-dt / 0.12);
+    let sum = 0;
+    for (const key in this.weights) {
+      this.weights[key] += ((key === this.anim ? 1 : 0) - this.weights[key]) * k;
+      if (key !== this.anim && this.weights[key] < 0.01) { this.weights[key] = 0; this.actions[key].stop(); delete this.weights[key]; continue; }
+      sum += this.weights[key];
+    }
+    for (const key in this.weights) this.actions[key].setEffectiveWeight(this.weights[key] / sum);
   }
 
   setState(state, timer) {
@@ -239,8 +257,9 @@ class Wolf {
       anim = 'creep';
     } else if (this.state === 'watch') {
       want = toPlayer;
-      // Edge away if she's a little close, otherwise hold still and stare.
-      if (dist < 14) { speed = -WOLF.creep; anim = 'creep'; }
+      // If she's a little close it turns and slinks off a few paces (never backwards), then
+      // turns round again to hold still and stare.
+      if (dist < 14) { want = toPlayer + Math.PI; speed = WOLF.walk; anim = 'walk'; }
     } else if (this.state === 'wander') {
       want = Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z);
       speed = WOLF.walk;
@@ -250,9 +269,31 @@ class Wolf {
       anim = 'sit';
     }
     const fast = this.state === 'flee' || this.state === 'attack' || this.state === 'hunt';
+    // A tree or rock in the way: swing round it, committing to one side for a moment, rather
+    // than grinding into it.
+    if (speed > 0.5) {
+      this.avoidT = Math.max(0, (this.avoidT || 0) - dt);
+      const look = 1.2 + speed * 0.18;
+      sdProbe.set(this.pos.x + Math.sin(this.heading) * look, 0, this.pos.z + Math.cos(this.heading) * look);
+      const bx = sdProbe.x, bz = sdProbe.z;
+      pushOutOfColliders(sdProbe, 0.55);
+      if (Math.hypot(sdProbe.x - bx, sdProbe.z - bz) > 0.02) {
+        // Turn the way the obstacle pushed the probe.
+        const side = Math.sign(Math.cos(this.heading) * (sdProbe.x - bx) - Math.sin(this.heading) * (sdProbe.z - bz)) || 1;
+        this.avoidSide = this.avoidT > 0 ? this.avoidSide : side;
+        this.avoidT = 0.6;
+      }
+      if (this.avoidT > 0) want = this.heading + this.avoidSide * 1.1;
+    }
+    // Turning at a limited rate, so a running wolf carves an arc instead of spinning on the
+    // spot, and slows into a tight turn.
     const turn = Math.atan2(Math.sin(want - this.heading), Math.cos(want - this.heading));
-    this.heading += turn * (1 - Math.exp(-(fast ? 6 : 3) * dt));
-    this.speed += (speed - this.speed) * (1 - Math.exp(-5 * dt));
+    const rate = fast ? 3.4 : 2.2;
+    const step = clamp(turn * (1 - Math.exp(-6 * dt)), -rate * dt, rate * dt);
+    this.heading += step;
+    speed *= 1 - 0.55 * Math.min(1, Math.abs(turn) / 1.6);
+    this.speed += (speed - this.speed) * (1 - Math.exp(-(speed > this.speed ? 3 : 5) * dt));
+    this.turnRate = step / Math.max(dt, 1e-4);
     this.pos.x += Math.sin(this.heading) * this.speed * dt;
     this.pos.z += Math.cos(this.heading) * this.speed * dt;
     pushOutOfColliders(this.pos, 0.45);
@@ -261,20 +302,36 @@ class Wolf {
     if (r > WORLD_RADIUS - 5) { this.pos.x *= (WORLD_RADIUS - 5) / r; this.pos.z *= (WORLD_RADIUS - 5) / r; this.target.set(0, 0, 0); }
     this.pos.y = groundHeight(this.pos.x, this.pos.z);
 
+    // Slowing to a stop, a running wolf drops to a walk before it stands, rather than
+    // galloping on the spot.
+    if (anim === 'idle' && this.speed > 0.6) anim = 'walk';
+    if (anim === 'run' && this.speed < WOLF.walk * 1.6) anim = 'walk';
     this.play(anim);
-    if (anim === 'walk') this.actions.walk.timeScale = Math.max(0.4, Math.abs(this.speed) / WOLF.walk);
-    if (anim === 'creep') this.actions.creep.timeScale = this.state === 'feed' ? 0.12 : Math.max(0.4, Math.abs(this.speed) / WOLF.creep);
-    if (this.actions.run) this.actions.run.timeScale = this.wounded ? 0.55 : 1;
+    // Its legs keep pace with the ground: each animation plays as fast as its stride needs
+    // for the speed it's actually going, so its paws don't skate across the snow.
+    const pace = (name) => Math.abs(this.speed) * this.actions[name].getClip().duration / WOLF_STRIDE[name];
+    this.actions.walk.timeScale = clamp(pace('walk'), 0.5, 2.4);
+    this.actions.run.timeScale = clamp(pace('run'), 0.8, 2.4);
+    this.actions.creep.timeScale = this.state === 'feed' ? 0.12 : clamp(pace('creep'), 0.4, 2);
+    this.blend(dt);
     this.mixer.update(dt);
+    // Its body follows the slope it's on, nose up a rise and down a dip, standing on the
+    // snow under both its fore and hind paws; and it leans into its turns when it's running.
+    const fx = Math.sin(this.heading) * 0.6, fz = Math.cos(this.heading) * 0.6;
+    const front = groundHeight(this.pos.x + fx, this.pos.z + fz), back = groundHeight(this.pos.x - fx, this.pos.z - fz);
+    const pitch = -Math.atan2(front - back, 1.2);
+    const bank = clamp(-this.turnRate * this.speed * 0.035, -0.3, 0.3);
+    this.pitch = lerp(this.pitch || 0, pitch, 1 - Math.exp(-10 * dt));
+    this.bank = lerp(this.bank || 0, bank, 1 - Math.exp(-6 * dt));
     this.holder.position.copy(this.pos);
-    this.holder.rotation.y = this.heading;
+    this.holder.position.y = Math.min(front, back) + Math.abs(front - back) * 0.35;
+    this.holder.rotation.order = 'YXZ';
+    this.holder.rotation.set(this.pitch, this.heading, this.bank);
     // A wounded wolf favours one leg: a dip and a lurch with every other stride.
     if (this.wounded && Math.abs(this.speed) > 0.3) {
       this.limpT = (this.limpT || 0) + dt * Math.abs(this.speed) * 1.6;
       this.holder.position.y -= Math.max(0, Math.sin(this.limpT)) * 0.08;
-      this.holder.rotation.z = Math.sin(this.limpT) * 0.08;
-    } else {
-      this.holder.rotation.z = 0;
+      this.holder.rotation.z += Math.sin(this.limpT) * 0.08;
     }
   }
 

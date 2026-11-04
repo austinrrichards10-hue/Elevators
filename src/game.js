@@ -99,9 +99,15 @@ function saveLoadout() {
 
 // The character room has its own track, and so does the fight with Teto (showdown.js); the
 // forest has only its wind.
+// The music for where she is: the boss fight's own, the character room's music box, the title
+// theme, or, out in the wilds, a slow lonely piano under the wind.
 function updateMusic() {
-  Sfx.playMusic(game.state === 'room' ? 'room' : showdownMusic());
+  const boss = showdownMusic();
+  const quiet = showdown.stage !== 'none' && showdown.stage !== 'done';
+  Sfx.playMusic(boss || (game.state === 'room' ? 'room' : game.state === 'title' ? 'title' : game.state === 'playing' && !quiet ? 'wilds' : null));
 }
+// Browsers keep sound off until the page is clicked: the first click on the title starts its theme.
+addEventListener('pointerdown', () => { if (game.state === 'title' && !Sfx.ctx) { Sfx.init(); updateMusic(); } }, { once: true });
 
 function renderMute() {
   document.querySelectorAll('.mute-toggle').forEach((button) => {
