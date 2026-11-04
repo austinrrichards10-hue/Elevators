@@ -472,11 +472,18 @@ function buildArena() {
     const x = (rand() - 0.5) * 160, z = far + 18 + rand() * 70;
     place(x, z, 2.2);
   }
+  // Only the trees round the clearing itself cast shadows (the shadows only reach that far
+  // anyway); the rest, out on the banks and past the balloon, are drawn once, not twice.
+  // Deep in the forest, where the fog hides most of them, there are fewer.
   kit.species.forEach((s, k) => {
-    if (!per[k].length) return;
-    const bark = makeInstances(s.geo.bark, s.bark, per[k], true, true);
-    if (bark) group.add(bark);
-    if (s.leaves) { const leaves = makeInstances(s.geo.boughs, s.leaves, per[k], true, true); if (leaves) group.add(leaves); }
+    const all = per[k].filter((p) => { const d = arenaOpenDistance(p.x, p.z); return d < 9 || rand() < (d < 26 ? 0.6 : 0.3); });
+    const near = all.filter((p) => arenaOpenDistance(p.x, p.z) < 9), far = all.filter((p) => arenaOpenDistance(p.x, p.z) >= 9);
+    for (const [list, shadow] of [[near, true], [far, false]]) {
+      if (!list.length) continue;
+      const bark = makeInstances(s.geo.bark, s.bark, list, shadow, true);
+      if (bark) group.add(bark);
+      if (s.leaves) { const leaves = makeInstances(s.geo.boughs, s.leaves, list, shadow, true); if (leaves) group.add(leaves); }
+    }
   });
   arenaFx = buildArenaDressing(group);
   group.visible = false;
@@ -955,25 +962,57 @@ function buildHeavySnow() {
     base[i * 3 + 2] = Math.random() * box.w;
     speed[i] = 2.2 + Math.random() * 2.4;
   }
+  // Every flake is moved on the graphics card: falling at its own speed, blown on the wind,
+  // wobbling, and wrapped round a box that follows the camera. Nothing to do per flake here.
+  const seed = new Float32Array(count);
+  for (let i = 0; i < count; i++) seed[i] = i;
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-  const points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.1, map: TEX.softDot, transparent: true, depthWrite: false, color: 0xffffff, opacity: 0.95 }));
+  geo.setAttribute('position', new THREE.BufferAttribute(base, 3));
+  geo.setAttribute('aSpeed', new THREE.BufferAttribute(speed, 1));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+      uMap: { value: TEX.softDot }, uTime: { value: 0 }, uWind: { value: 0 }, uSize: { value: 0.1 }, uScale: { value: 400 },
+      uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(box.w, box.h, box.w) }, uOpacity: { value: 0.95 },
+    }]),
+    transparent: true, depthWrite: false, fog: true,
+    vertexShader: `
+      attribute float aSpeed; attribute float aSeed;
+      uniform float uTime; uniform float uWind; uniform float uSize; uniform float uScale;
+      uniform vec3 uCenter; uniform vec3 uBox;
+      #include <fog_pars_vertex>
+      void main() {
+        vec3 p = position;
+        p.x += uWind + sin(uTime * 1.3 + aSeed) * 0.46;
+        p.y -= uTime * aSpeed;
+        p.z += uTime * 0.8 + sin(uTime * 0.9 + aSeed * 1.7) * 0.55;
+        p = uCenter + mod(p - uCenter, uBox) - uBox * 0.5;
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = uSize * (uScale / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `
+      uniform sampler2D uMap; uniform float uOpacity;
+      #include <fog_pars_fragment>
+      void main() {
+        vec4 t = texture2D(uMap, gl_PointCoord);
+        gl_FragColor = vec4(t.rgb, t.a * uOpacity);
+        #include <fog_fragment>
+      }`,
+  });
+  const points = new THREE.Points(geo, mat);
   points.frustumCulled = false;
   points.visible = false;
   scene.add(points);
-  const wrap = (v, size) => ((v % size) + size) % size;
+  let wind = 0;
   points.userData.update = (dt, time, center) => {
-    const out = geo.attributes.position.array;
-    const gust = 4 + Math.sin(time * 0.4) * 2.2;
-    for (let i = 0; i < count; i++) {
-      base[i * 3] += (gust + Math.sin(time * 1.3 + i) * 0.6) * dt;
-      base[i * 3 + 1] -= speed[i] * dt;
-      base[i * 3 + 2] += (0.8 + Math.cos(time * 0.9 + i * 1.7) * 0.5) * dt;
-      out[i * 3] = center.x + wrap(base[i * 3] - center.x, box.w) - box.w / 2;
-      out[i * 3 + 1] = center.y + wrap(base[i * 3 + 1] - center.y, box.h) - box.h / 2;
-      out[i * 3 + 2] = center.z + wrap(base[i * 3 + 2] - center.z, box.w) - box.w / 2;
-    }
-    geo.attributes.position.needsUpdate = true;
+    wind += (4 + Math.sin(time * 0.4) * 2.2) * dt;
+    const u = mat.uniforms;
+    u.uTime.value = time % 2000;
+    u.uWind.value = wind % 4400;
+    u.uCenter.value.copy(center);
+    u.uScale.value = renderer.domElement.height / 2;
   };
   return points;
 }
@@ -1888,6 +1927,7 @@ function enterArena() {
   const s = showdownScene, A = SHOWDOWN.arena, k = showdownKit;
   s.inArena = true;
   k.arena.visible = true;
+  world.setGroundHidden(true);
   k.snow.visible = true;
   scene.fog.density = A.fog;
   for (const b of s.bullets) if (b.mesh) { scene.remove(b.mesh); b.mesh = null; }
@@ -1949,6 +1989,7 @@ function clearFightFx() {
 function leaveArena() {
   const k = showdownKit;
   k.arena.visible = false;
+  world.setGroundHidden(false);
   k.snow.visible = false;
   if (k.farBalloon) k.farBalloon.visible = false;
   k.tetoLight.intensity = 0;
@@ -4547,6 +4588,7 @@ function updateShowdown(dt) {
 }
 
 function resetShowdown() {
+  world.setGroundHidden(false);
   if (!showdownKit) return;
   const k = showdownKit;
   if (activeScene && showdownScene) endScene();

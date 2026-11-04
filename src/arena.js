@@ -1,10 +1,9 @@
 // The boss arena, dressed: the clearing stays flat for the fight, but round it the snow rises
-// into banks and ridges with the forest climbing them, a ring of old runestones stands at its
-// edges, ice crystals jut from the snow, and red veins run under
-// the clearing floor. Overhead a moon, an aurora and a ring of jagged peaks; low mist and
-// embers drift through it. All of it answers to Teto: the angrier she gets, the more the
-// runes and veins burn, the crystals and the moon redden, the aurora turns to blood, lightning
-// walks the peaks, and in her last stage meteors come down into the clearing.
+// into banks and ridges with the forest climbing them, ice crystals jut from the snow, and red
+// veins run under the clearing floor, with a ring of jagged peaks far off and low mist and
+// embers drifting through. All of it answers to Teto: the angrier she gets, the more the veins
+// burn, the crystals and peaks redden, lightning walks the peaks, and in her last stage
+// meteors come down into the clearing.
 
 let arenaFx = null;
 
@@ -52,25 +51,6 @@ function buildArenaTerrain() {
   return mesh;
 }
 
-// Glyphs carved down a standing stone, white on black, for its glow.
-function runeStripTexture() {
-  const c = document.createElement('canvas');
-  c.width = 64; c.height = 256;
-  const g = c.getContext('2d');
-  const rand = seededRandom(91);
-  g.fillStyle = '#000'; g.fillRect(0, 0, 64, 256);
-  g.strokeStyle = '#fff'; g.lineWidth = 3; g.lineCap = 'round';
-  g.shadowColor = '#fff'; g.shadowBlur = 6;
-  for (let y = 30; y < 236; y += 30) {
-    g.beginPath();
-    for (let j = 0; j < 3; j++) { g.moveTo(32 + (rand() - 0.5) * 30, y + (rand() - 0.5) * 22); g.lineTo(32 + (rand() - 0.5) * 30, y + (rand() - 0.5) * 22); }
-    g.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 // Red veins under the ice of the clearing floor.
 function veinTexture() {
   const c = document.createElement('canvas');
@@ -95,124 +75,43 @@ function veinTexture() {
   return tex;
 }
 
-function moonTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d');
-  const rand = seededRandom(5);
-  const grad = g.createRadialGradient(110, 110, 10, 128, 128, 120);
-  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.85, '#d9dde8'); grad.addColorStop(1, 'rgba(200,205,220,0)');
-  g.fillStyle = grad; g.beginPath(); g.arc(128, 128, 120, 0, Math.PI * 2); g.fill();
-  for (let i = 0; i < 26; i++) {
-    const a = rand() * 6.28, r = rand() * 90, s = 4 + rand() * 16;
-    g.fillStyle = `rgba(120,125,145,${0.15 + rand() * 0.25})`;
-    g.beginPath(); g.arc(128 + Math.cos(a) * r, 128 + Math.sin(a) * r, s, 0, Math.PI * 2); g.fill();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function auroraMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0x3dffb0) }, uColor2: { value: new THREE.Color(0x6a7bff) }, uOpacity: { value: 0.6 }, uPhase: { value: 0 } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-    vertexShader: `
-      varying vec2 vUv;
-      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `
-      uniform float uTime; uniform vec3 uColor; uniform vec3 uColor2; uniform float uOpacity; uniform float uPhase;
-      varying vec2 vUv;
-      void main() {
-        float x = vUv.x * 40.0 + uPhase;
-        float curtain = 0.55 + 0.45 * sin(x * 1.7 + uTime * 0.6) * sin(x * 0.53 - uTime * 0.31);
-        float rays = 0.6 + 0.4 * sin(x * 9.0 + uTime * 1.3 + sin(x * 2.0) * 2.0);
-        float fall = smoothstep(0.0, 0.12, vUv.y) * pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.6);
-        float ends = smoothstep(0.0, 0.15, vUv.x) * (1.0 - smoothstep(0.85, 1.0, vUv.x));
-        vec3 col = mix(uColor, uColor2, vUv.y) * 1.6;
-        gl_FragColor = vec4(col, uOpacity * curtain * rays * fall * ends);
-      }`,
-  });
-}
-
 // Everything the arena adds to its group, built once with the rest of the kit.
 function buildArenaDressing(group) {
   const A = SHOWDOWN.arena, back = -A.length / 2, front = A.length / 2;
   const rand = seededRandom(777);
-  const fx = { stones: [], crystals: [], level: 0, flare: 0, lightningT: 6, meteorT: 3, meteors: [], flash: 0 };
+  const fx = { crystals: [], level: 0, flare: 0, lightningT: 6, meteorT: 3, meteors: [], flash: 0 };
   group.add(buildArenaTerrain());
-
-  // The runestones: a line down each side of the clearing, leaning a little, snow on top.
-  const runeTex = runeStripTexture();
-  fx.runeMat = new THREE.MeshStandardMaterial({ color: 0x3b3f4a, roughness: 0.92, flatShading: true, emissive: 0xff2d55, emissiveMap: runeTex, emissiveIntensity: 0.4 });
-  const stoneGeo = new THREE.BoxGeometry(1, 1, 1, 1, 4, 1).translate(0, 0.5, 0);
-  const sp = stoneGeo.attributes.position;
-  for (let i = 0; i < sp.count; i++) { const y = sp.getY(i); sp.setX(i, sp.getX(i) * (1 - 0.28 * y)); sp.setZ(i, sp.getZ(i) * (1 - 0.2 * y)); }
-  stoneGeo.computeVertexNormals();
-  const capMat = new THREE.MeshStandardMaterial({ color: 0xf0f3fb, roughness: 1 });
-  const capGeo = new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
-  const stone = (x, z, h, w, faceIn) => {
-    const m = new THREE.Mesh(stoneGeo, fx.runeMat);
-    m.scale.set(w, h, w * 0.6);
-    m.position.set(x, arenaHeight(x, z) - 0.2, z);
-    m.rotation.set((rand() - 0.5) * 0.12, faceIn, (rand() - 0.5) * 0.14);
-    m.castShadow = true;
-    const cap = new THREE.Mesh(capGeo, capMat);
-    cap.scale.set(0.75, 0.25 / h, 0.8);
-    cap.position.y = 1;
-    m.add(cap);
-    group.add(m);
-    fx.stones.push(m);
-  };
-  for (let z = back + 4; z < front - 3; z += 8 + rand() * 3) {
-    for (const side of [-1, 1]) stone(side * (A.half + 2 + rand() * 0.8), z + rand() * 2, 2.6 + rand() * 1.8, 0.9 + rand() * 0.4, side * Math.PI / 2);
-  }
 
   // Ice crystals in clusters along the edges and up on the banks.
   fx.iceMat = new THREE.MeshStandardMaterial({ color: 0xa8dcff, emissive: 0x2a7fff, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.88, flatShading: true });
   const shard = new THREE.OctahedronGeometry(1, 0).translate(0, 1, 0);
+  // All of them in one draw.
+  const place = new THREE.Object3D(), mats = [];
   for (let i = 0; i < 26; i++) {
     const side = rand() < 0.5 ? -1 : 1;
     const x = side * (A.half + 3 + rand() * 9), z = lerp(back - 4, front + 14, rand());
     const base = arenaHeight(x, z);
     const n = 3 + Math.floor(rand() * 5);
     for (let j = 0; j < n; j++) {
-      const m = new THREE.Mesh(shard, fx.iceMat);
       const s = 0.25 + rand() * 0.35;
-      m.scale.set(s, s * (2.5 + rand() * 3), s);
-      m.position.set(x + (rand() - 0.5) * 1.6, base - 0.3, z + (rand() - 0.5) * 1.6);
-      m.rotation.set((rand() - 0.5) * 0.9, rand() * 6.28, (rand() - 0.5) * 0.9);
-      group.add(m);
-      fx.crystals.push(m);
+      place.scale.set(s, s * (2.5 + rand() * 3), s);
+      place.position.set(x + (rand() - 0.5) * 1.6, base - 0.3, z + (rand() - 0.5) * 1.6);
+      place.rotation.set((rand() - 0.5) * 0.9, rand() * 6.28, (rand() - 0.5) * 0.9);
+      place.updateMatrix();
+      mats.push(place.matrix.clone());
     }
   }
+  const ice = new THREE.InstancedMesh(shard, fx.iceMat, mats.length);
+  mats.forEach((m, i) => ice.setMatrixAt(i, m));
+  ice.frustumCulled = false;
+  group.add(ice);
+  fx.crystals.push(ice);
 
   // The veins under the clearing floor.
   fx.veins = new THREE.Mesh(new THREE.PlaneGeometry(A.half * 2 + 2, A.length + 4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: veinTexture(), color: new THREE.Color(0xff2d55).multiplyScalar(2.5), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   fx.veins.position.y = 0.02;
   group.add(fx.veins);
 
-  // The sky: the moon with its halo, the aurora, the peaks all round.
-  fx.moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTexture(), color: 0xe8eeff, transparent: true, depthWrite: false, fog: false }));
-  fx.moon.position.set(-140, 190, 560);
-  fx.moon.scale.setScalar(70);
-  fx.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0x9fb8ff, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-  fx.halo.position.copy(fx.moon.position);
-  fx.halo.scale.setScalar(300);
-  group.add(fx.halo, fx.moon);
-  fx.aurora = [0, 1, 2].map((i) => {
-    const geo = new THREE.PlaneGeometry(700, 110, 80, 1);
-    const ap = geo.attributes.position;
-    for (let v = 0; v < ap.count; v++) {
-      const x = ap.getX(v), y = ap.getY(v);
-      ap.setXYZ(v, x, 150 + i * 28 + y + Math.sin(x * 0.006 + i) * 14, 380 + i * 60 + Math.sin(x * 0.009 + i * 2) * 70);
-    }
-    const m = new THREE.Mesh(geo, auroraMaterial());
-    m.material.uniforms.uPhase.value = i * 13;
-    m.frustumCulled = false;
-    group.add(m);
-    return m;
-  });
   // Peaks: a jagged ring far off, snow on their tops, faded into the sky.
   const ring = new THREE.CylinderGeometry(560, 560, 1, 160, 6, true).translate(0, 0.5, 0);
   const rp = ring.attributes.position, rc = new Float32Array(rp.count * 3);
@@ -237,9 +136,6 @@ function buildArenaDressing(group) {
     scene.add(line);
     return line;
   });
-  fx.flashLight = new THREE.DirectionalLight(0xffc0d8, 0);
-  fx.flashLight.position.set(-60, 120, 200);
-  group.add(fx.flashLight);
   // Low mist rolling over the snow.
   fx.mist = buildPuffs(70, 0xdfe8ff);
   scene.add(fx.mist.group);
@@ -266,20 +162,9 @@ function updateArenaFx(dt) {
   fx.level = lerp(fx.level, want, 1 - Math.exp(-dt * 1.5));
   fx.flare = Math.max(0, fx.flare - dt * 0.6);
   const L = fx.level, pulse = 0.75 + 0.25 * Math.sin(game.time * (2 + L * 4));
-  fx.runeMat.emissiveIntensity = (0.35 + L * 2.4) * pulse + fx.flare * 4;
   fx.iceMat.emissive.setRGB(lerp(0.16, 1, L), lerp(0.5, 0.12, L), lerp(1, 0.25, L));
   fx.iceMat.emissiveIntensity = 0.5 + L * 0.8 + fx.flare * 2;
   fx.veins.material.opacity = Math.min(1, L * 0.75 * (0.7 + 0.3 * Math.sin(game.time * 3.1)) + fx.flare * 0.6);
-  fx.moon.material.color.setRGB(lerp(0.91, 1, L), lerp(0.93, 0.35, L), lerp(1, 0.35, L));
-  fx.halo.material.color.setRGB(lerp(0.62, 1, L), lerp(0.72, 0.2, L), lerp(1, 0.3, L));
-  fx.halo.material.opacity = 0.3 + L * 0.25 + fx.flash * 0.4;
-  for (const a of fx.aurora) {
-    const u = a.material.uniforms;
-    u.uTime.value = game.time * (1 + L);
-    u.uColor.value.setRGB(lerp(0.24, 1, L), lerp(1, 0.12, L), lerp(0.69, 0.3, L));
-    u.uColor2.value.setRGB(lerp(0.42, 0.55, L), lerp(0.48, 0.05, L), lerp(1, 0.4, L));
-    u.uOpacity.value = 0.45 + L * 0.35 + fx.flash * 0.5;
-  }
   // Mist low over the snow, drifting across the clearing.
   if (Math.random() < dt * 4) {
     const at = sdV.set((Math.random() - 0.5) * A.half * 2.4, A.y + 0.3, player.pos.z + (Math.random() - 0.3) * 40);
@@ -292,7 +177,8 @@ function updateArenaFx(dt) {
   }
   // Lightning walking the peaks.
   fx.flash = Math.max(0, fx.flash - dt * 3);
-  fx.flashLight.intensity = fx.flash * 3;
+  // The flash lights up the peaks, which redden with her rage.
+  fx.peaks.material.color.setRGB(1 + fx.flash * 1.5 + L * 0.3, 1 + fx.flash * 1.2 - L * 0.25, 1 + fx.flash * 1.3 - L * 0.2);
   for (const b of fx.bolts) if (b.visible && fx.flash < 0.5) b.visible = false;
   if (L > 0.35) {
     fx.lightningT -= dt;

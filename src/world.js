@@ -535,12 +535,14 @@ function createTiles(scene) {
     vertexColors: true,
   });
   const tiles = new Map();
+  // While the fight is up in the sky the forest below is out of sight, so it isn't drawn at all.
+  let hidden = false;
   const distance = (tx, tz, focus) => Math.hypot((tx + 0.5) * TILE - focus.x, (tz + 0.5) * TILE - focus.z);
 
   const build = (tx, tz) => {
     const forest = plantTile(kit, tx, tz);
     const meshes = [buildTerrainTile(tx * TILE, tz * TILE, terrainMat), ...forest.meshes];
-    for (const mesh of meshes) scene.add(mesh);
+    for (const mesh of meshes) { mesh.visible = !hidden; scene.add(mesh); }
     tiles.set(`${tx},${tz}`, { tx, tz, meshes, trees: forest.trees });
   };
   const drop = (key, tile) => {
@@ -571,6 +573,11 @@ function createTiles(scene) {
       for (const { tx, tz } of wanted.slice(0, budget)) build(tx, tz);
       const keep = Math.max(UNLOAD_RADIUS, radius + 50);
       for (const [key, tile] of tiles) if (distance(tile.tx, tile.tz, focus) > keep) drop(key, tile);
+    },
+
+    setHidden(v) {
+      hidden = v;
+      for (const tile of tiles.values()) for (const mesh of tile.meshes) mesh.visible = !v;
     },
 
     // The standing tree whose trunk is nearest (x, z), if one is within `reach` of its bark.
@@ -716,6 +723,7 @@ function buildMountains(scene) {
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   scene.add(mesh);
+  return mesh;
 }
 
 /* ---------- Landmarks ---------- */
@@ -835,7 +843,7 @@ function buildWorld(renderer, scene) {
   scene.add(sun, sun.target);
   const sunOffset = new THREE.Vector3(-0.42, 0.72, 0.55).normalize().multiplyScalar(85);
 
-  buildMountains(scene);
+  const mountains = buildMountains(scene);
   const tiles = createTiles(scene);
   tiles.stream(LANDMARKS.start, Infinity);
   const updateSnow = buildSnow(scene);
@@ -851,6 +859,14 @@ function buildWorld(renderer, scene) {
     // jump such as a teleport. `radius` reaches further out for views from the air.
     stream(focus, budget = 1, radius) {
       tiles.stream(focus, budget, radius);
+    },
+    // Hides the forest floor and trees (and their snow) while the fight is up in the sky.
+    setGroundHidden(v) {
+      tiles.setHidden(v);
+      mountains.visible = !v;
+      // The wreck too, smouldering far below.
+      if (typeof wreck !== 'undefined' && wreck.group) wreck.group.visible = !v;
+      for (const material of weatherMaterials) material.visible = !v;
     },
     findTree: tiles.findTree,
     treesNear: tiles.treesNear,
