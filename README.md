@@ -24,7 +24,8 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 | Space | Dodge |
 | N | Mute |
 | ` or F2 | Moderator menu |
-| P or Esc | Pause, with a way back to the main menu |
+| P | In Tokyo: her phone. Elsewhere: pause |
+| Esc | Pause, with a way back to the main menu |
 
 Arrows fly further the longer you draw, drop with gravity and stick in the snow and the trees.
 
@@ -86,8 +87,18 @@ The balloon carries her over the clouds and out across the sea for a long while,
 - **The stage** is a rhythm game: notes fall down four lanes, charted from the song's own melody, and you hit D F J K as they cross the line. Your accuracy, combo and the crowd's hype decide the fame and pay. Before every busk and gig you choose the song from a setlist (1-9, or Enter for the one you've played least). There are eight songs to unlock as she grows (Snowdrop Heart, Summer Ramune, Paper Plane Promise, Neon Sakura Drive, Pastel Rain, Harajuku Heartbeat, Midnight Train Home, Starlight Runway), plus one for the Dome. Each has real Japanese lyrics, shown karaoke-style with the English under them. Miku sings them in a synthesized vocaloid-style voice built from vowel formants, with consonants, a little scoop into each note, vibrato and an echo. When the crowd's hype is high the board goes into fever.
 - **The music in the city** follows the clock: bright pop in the daytime, a late-night piano after dark.
 - **The story**: Old Gen the fisherman, Haru the busker, Mrs. Ishida's capsule hotel. A scout from Starlight Production, an audition, and three girls who need a fourth: Aoi, Kotone and Mirai. You name the group. Stages from an 80-person basement to a TV show, a beach festival and a 10,000-seat arena, one show a day. And on every screen, another rookie climbing just as fast: Teto. You meet her backstage, and again on the beach the night before the Idol Summit at the Tokyo Dome.
-- **The Tokyo Dome**: the searchlights outside, the countdown, rising up through the stage into 55,000 penlights, lasers, fire and confetti, the song written for that one night. Then the lights go red. That's the end of part two: Miku and Teto face to face, the rematch about to begin.
-- **J** opens her phone in the city: fame, the next goal, and every stage with when its doors open. Rest in your capsule (later your apartment) to sleep until morning or until the evening.
+- **The Tokyo Dome**: the searchlights outside, the countdown, rising up through the stage under the white cable-net roof. Around 12,000 fans fill the field and the tiers of the stands, each one jumping on the beat with a penlight that sways in the verses, pumps in the choruses and rolls round the bowl in a wave. The colours follow the song: teal for her, a rainbow running round the stands, white sparkles in the bridge, gold for the last chorus. Above them a ring of moving lights and a lighting truss, laser fans off the stage, followspots from the back of the bowl, an LED ribbon round the upper deck. A giant LED wall shows the words she's singing, and screens either side show her live from a camera on stage. There are flame cannons on every chorus, a waterfall of sparks and confetti for the finale, and a camera down among the crowd. Then the lights go red and half the Dome turns Teto's colour. That's the end of part two: Miku and Teto face to face, the rematch about to begin.
+- **The phone (P in the city)**, with seven apps:
+  - **Messages**: everyone she's met texts her as the story moves (a banner pops up when someone does), and you can reply. "Where do I go?" tells you where to go and sets the guide arrow there.
+  - **Quests**: every quest she's on and every new lead, with its progress, its reward and a live arrow and distance as you walk, and **Track** to make the guide follow it.
+  - **Map**: the city map.
+  - **StarTube**: film a song wherever you are (you sing it as a rhythm game, and the better you sing, the more people watch), or post a quick clip, two uploads a day. Views keep coming in over the following days, even while she sleeps, and turn into fame a little at a time, with a bonus at 1,000, 10,000, 100,000 and a million views.
+  - **Chirp**: one post a day, for fame and followers.
+  - **Schedule**: today's busking, uploads and post, the next goal, and every stage with when its doors open (J opens straight to it).
+  - **Settings**: the wallpaper and the size of the interface.
+- **Other ways to grow fame** besides quests and shows: StarTube videos, Chirp posts, and fans who stop her in the street (a gold star over them) for an autograph, a selfie or a few lines of a song, up to six a day.
+- **Phone wallpapers**: put PNG pictures in the `phone-wallpapers` folder, named `1.png`, `2.png`, `3.png`... and they appear in the phone's Settings. Opened straight from disk, the browser can't look inside a folder, so the game tries those numbers in order until one is missing. Served from a web server, any name works. Settings also has a **Load pictures…** button for any picture, and the one you pick is remembered. The folder has a note in it explaining all this.
+- **The interface** scales with the window, so it stays readable on big screens, and can be made bigger or smaller in the phone's Settings. Rest in your capsule (later your apartment) to sleep until morning or until the evening.
 
 ## The Ember Blade
 
@@ -130,6 +141,8 @@ src/
   city.js        Tokyo: its streets, people and talking
   citydecor.js   Tokyo's parks, street trees, traffic, roads and landmarks
   citynav.js     The guiding beacon and arrow, and the city map
+  phone.js       The phone (P): messages, quests, map, StarTube, Chirp, wallpapers; fans; interface scale
+  dome.js        Inside the Tokyo Dome: the crowd and their penlights, the lights, lasers and screens
   idol.js        Part two's story: fame, quests, the group, Teto
   stage.js       Busking and the stages, the voyage over the sea, the Tokyo Dome
   songs.js       The idol songs, their lyrics and the synthesized voice

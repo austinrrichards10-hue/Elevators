@@ -144,8 +144,8 @@ function neonTexture(text, color, bg = '#0b0d18') {
     g.font = 'bold 54px "Yu Gothic", "Meiryo", sans-serif';
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.shadowColor = color; g.shadowBlur = 18; g.fillStyle = color;
-    g.fillText(text, 128, 50);
-    g.shadowBlur = 0; g.fillStyle = '#ffffff'; g.globalAlpha = 0.85; g.fillText(text, 128, 50);
+    g.fillText(text, 128, 50, 240);
+    g.shadowBlur = 0; g.fillStyle = '#ffffff'; g.globalAlpha = 0.85; g.fillText(text, 128, 50, 240);
   });
 }
 
@@ -284,7 +284,8 @@ function buildCity() {
   // Signs over shopfronts, in neon at night.
   const signText = [['ラーメン', '#ff5a6a'], ['カラオケ', '#5ad8ff'], ['COFFEE', '#ffd36a'], ['ゲーム', '#b47aff'], ['居酒屋', '#ff9a4a'], ['BOOKS', '#7affc0'], ['ホテル', '#ff6ad0'], ['寿司', '#ffe07a'], ['MUSIC', '#5affd8'], ['24H', '#9ab0ff']];
   let si = 0;
-  for (const [cx, cz, w, h, d] of towers) {
+  for (const [cx, cz, w, h, d, y0] of towers) {
+    if (y0) continue; // the set-back top storeys: a sign up there would hang in the air
     if (cz > 150 || Math.abs(cx) > 140 || rand() < 0.35) continue;
     const [text, color] = signText[si++ % signText.length];
     const mat = new THREE.MeshBasicMaterial({ map: neonTexture(text, color), toneMapped: false });
@@ -307,10 +308,29 @@ function buildCity() {
   screenCanvas.width = 512; screenCanvas.height = 288;
   const screenTex = new THREE.CanvasTexture(screenCanvas);
   screenTex.colorSpace = THREE.SRGBColorSpace;
-  const screen = add(new THREE.PlaneGeometry(24, 13.5), new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }), 0, 17, -3.9);
-  screen.rotation.y = Math.PI;
-  screen.castShadow = false;
-  add(new THREE.BoxGeometry(26, 15.5, 1), std(0x1d1f26), 0, 17, -3.3);
+  // The screen stands on two steel legs at the north edge of the square, with the picture on
+  // both faces, so from the street behind it's a screen too and not a black slab in the sky.
+  const SZ = -9, screenMat = new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false });
+  const front = add(new THREE.PlaneGeometry(24, 13.5), screenMat, 0, 16, SZ - 0.52);
+  front.rotation.y = Math.PI;
+  front.castShadow = false;
+  const backGeo = new THREE.PlaneGeometry(24, 13.5);
+  add(backGeo, screenMat, 0, 16, SZ + 0.52).castShadow = false;
+  const steel = std(0x3a3e48, { metalness: 0.7, roughness: 0.35 });
+  add(new THREE.BoxGeometry(25.4, 14.9, 1), std(0x1d1f26), 0, 16, SZ);
+  add(new THREE.BoxGeometry(26.4, 0.5, 1.4), steel, 0, 23.6, SZ);
+  add(new THREE.BoxGeometry(26.4, 0.5, 1.4), steel, 0, 8.4, SZ);
+  for (const s of [-1, 1]) {
+    add(new THREE.BoxGeometry(1.2, 23.8, 1.2), steel, s * 13.4, 11.9, SZ);
+    add(new THREE.BoxGeometry(2.6, 0.4, 2.6), steel, s * 13.4, 0.2, SZ);
+    rect(s * 13.4 - 0.8, s * 13.4 + 0.8, SZ - 0.8, SZ + 0.8);
+    // Diagonal braces between the legs and the frame.
+    const brace = add(new THREE.BoxGeometry(0.25, 6, 0.25), steel, s * 11.9, 5.6, SZ);
+    brace.rotation.z = s * 0.5;
+  }
+  // A row of little lights along the top edge, and the square's name under the screen.
+  for (let i = 0; i < 14; i++) add(new THREE.SphereGeometry(0.12, 6, 4), new THREE.MeshBasicMaterial({ color: 0xfff0c8, toneMapped: false }), -12 + i * (24 / 13), 23.95, SZ - 0.6).castShadow = false;
+  add(new THREE.PlaneGeometry(6.4, 2.4), new THREE.MeshBasicMaterial({ map: neonTexture('駅前広場', '#bff6ff', '#0c1a24'), toneMapped: false }), 0, 6.95, SZ - 0.72).rotation.y = Math.PI;
   city.screen = { canvas: screenCanvas, tex: screenTex, mode: 'ad', t: 0 };
   // The shopping arcade: a covered street hung with red lanterns.
   const lanternMat = new THREE.MeshStandardMaterial({ color: 0xd8302f, emissive: 0xff4a2a, emissiveIntensity: 0.8, roughness: 0.6 });
@@ -681,6 +701,7 @@ function updateCity(dt) {
   if (thing && pressed) thing.use();
   updateIdol(dt);
   updateNav();
+  updatePhone(dt);
   // The city's music follows the clock: bright pop by day, a late-night piano after dark.
   if (!show.active && (Sfx.trackName === 'city' || Sfx.trackName === 'cityNight')) Sfx.playMusic(cityMusic());
 }
@@ -790,7 +811,8 @@ function loadCity(data) {
 
 function cityKey(code) {
   if (!city.active) return false;
-  if (code === 'KeyJ') { showIdolLog(); return true; }
+  if (code === 'KeyP') { togglePhone(); return true; }
+  if (code === 'KeyJ') { togglePhone('schedule'); return true; }
   return false;
 }
 

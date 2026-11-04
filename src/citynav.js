@@ -4,7 +4,8 @@
 // and the goal marked.
 
 // Where the current objective is: a person, a thing to find, a door. Null if it's anywhere.
-function idolTarget() {
+function idolTarget(untracked) {
+  if (!untracked) { const tt = trackedTarget(); if (tt) return tt; }
   const f = (k) => !!idol.flags[k];
   const npc = (id) => { const n = city.named[id]; return n && !n.hidden ? { x: n.person.x, z: n.person.z, label: n.name } : null; };
   const find = (id) => { const t = FINDS.find((q) => q.id === id); return t ? { x: t.x, z: t.z, label: 'Here' } : null; };

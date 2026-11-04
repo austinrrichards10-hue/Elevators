@@ -183,6 +183,7 @@ function idolHasNews(id) {
     kotone: has('joined') && (!has('charmDone') || (has('domeAnnounced') && !has('kotoneHeart'))),
     mirai: has('joined') && (!has('lyricsDone') || (has('domeAnnounced') && !has('miraiHeart'))),
     rina: has('joined') && fameLevel() >= 5 && !has('radioDone'),
+    fan: fans.active,
   };
   return !!q[id];
 }
@@ -901,9 +902,9 @@ function idolScreen() {
 }
 
 /* ---------- Saving ---------- */
-function saveIdol() { return { fame: idol.fame, yen: idol.yen, flags: idol.flags, groupName: idol.groupName, gigs: idol.gigs, gigDay: idol.gigDay, items: idol.items, buskDay: idol.buskDay, buskCount: idol.buskCount, lastShowDay: idol.lastShowDay }; }
+function saveIdol() { return { fame: idol.fame, yen: idol.yen, flags: idol.flags, groupName: idol.groupName, gigs: idol.gigs, gigDay: idol.gigDay, items: idol.items, buskDay: idol.buskDay, buskCount: idol.buskCount, lastShowDay: idol.lastShowDay, played: idol.played, videos: idol.videos, chat: idol.chat, seen: idol.seen, tracked: idol.tracked, posts: idol.posts, postDay: idol.postDay, lastPost: idol.lastPost, uploadDay: idol.uploadDay, uploads: idol.uploads, viewFame: idol.viewFame, fanDay: idol.fanDay, fanCount: idol.fanCount }; }
 function loadIdol(d) { if (!d) return; Object.assign(idol, d); idol.objective = ''; }
 function resetIdol() {
-  Object.assign(idol, { fame: 0, yen: 0, chapter: 'arrival', flags: {}, groupName: 'SNOWDROP', gigs: {}, gigDay: {}, buskDay: 0, buskCount: 0, items: {}, objective: '', logOpen: false });
+  Object.assign(idol, { fame: 0, yen: 0, chapter: 'arrival', flags: {}, groupName: 'SNOWDROP', gigs: {}, gigDay: {}, buskDay: 0, buskCount: 0, items: {}, objective: '', logOpen: false, played: {}, videos: [], chat: {}, seen: {}, tracked: null, posts: 0, postDay: 0, lastPost: null, uploadDay: 0, uploads: 0, viewFame: 0, fanDay: 0, fanCount: 0 });
   if (city.named) for (const id of Object.keys(city.named)) hideNpc(id, false);
 }

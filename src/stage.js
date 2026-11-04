@@ -155,6 +155,7 @@ function runPerformance(opts, after) {
   Sfx.playMusic(null);
   const P = { t: 0, phase: 'intro', res: null, shot: 0, beat: 0, flash: 0, hype: 0.5, set, opts, after, back, energy: 0 };
   show.active = P;
+  show.lastSong = opts.song;
   document.body.classList.add('on-stage');
   caption(`${opts.name}${opts.kind === 'gig' ? ` · ${(opts.cap || 0).toLocaleString()} people` : ''}`, 'place');
   Sfx.cheer(set.busk ? 0.4 : 1);
@@ -415,105 +416,6 @@ function goToDome() {
   playScene({ update: (dt) => updateDome(dt) });
 }
 
-function buildDomeSet() {
-  const g = new THREE.Group();
-  g.position.set(DOME_AT.x, 0, DOME_AT.z);
-  city.group.add(g);
-  const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, envMapIntensity: 0.05, ...extra });
-  // The bowl: a vast roof overhead, the stands all round, the field in the middle.
-  const roof = new THREE.Mesh(new THREE.SphereGeometry(110, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2), std(0x0a0b12, { side: THREE.BackSide }));
-  roof.scale.y = 0.35;
-  g.add(roof);
-  const field = new THREE.Mesh(new THREE.CircleGeometry(110, 48).rotateX(-Math.PI / 2), std(0x101218));
-  g.add(field);
-  const stands = new THREE.Mesh(new THREE.CylinderGeometry(108, 60, 26, 64, 1, true).translate(0, 13, 0), std(0x14151e, { side: THREE.DoubleSide }));
-  g.add(stands);
-  // The main stage at one end, a long runway out to a centre stage, and Teto's stage opposite.
-  const stageZ = 40;
-  const deck = (w, d, x, z, h = 1.2) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), std(0x1a1a22, { metalness: 0.4 })); m.position.set(x, h / 2, z); g.add(m); return m; };
-  deck(34, 12, 0, stageZ);
-  deck(4, 60, 0, 10);
-  deck(12, 12, 0, -14);
-  deck(20, 10, 0, -40);
-  const edgeMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2.5), toneMapped: false });
-  const teal = edgeMat(0x39d5c8), red = edgeMat(0xff2d55);
-  for (const [w, x, z, m] of [[34, 0, stageZ - 6, teal], [4, 0, -20, teal], [20, 0, -35, red]]) { const e = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.06), m); e.position.set(x, 1.22, z); g.add(e); }
-  // Giant screens either side of the main stage.
-  const screens = [];
-  for (const s of [-1, 1]) {
-    const c = document.createElement('canvas'); c.width = 512; c.height = 288;
-    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(22, 12.4), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
-    m.position.set(s * 30, 14, stageZ + 4); m.rotation.y = Math.PI + s * 0.3;
-    g.add(m);
-    screens.push({ canvas: c, tex });
-  }
-  // Fifty-five thousand penlights: the field and the stands, every one a point of light.
-  const n = 24000, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), seat = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    let x, y, z;
-    if (i < 6000) { x = (Math.random() - 0.5) * 70; z = -60 + Math.random() * 90; if (Math.abs(x) < 4 || (Math.abs(x) < 8 && z < -8 && z > -20)) x += Math.sign(x || 1) * 6; y = 2; }
-    else {
-      // Round the stands, except behind the main stage.
-      let a = 0;
-      do { a = Math.random() * Math.PI * 2; } while (Math.cos(a) > 0.55);
-      const r = 62 + Math.random() * 44; x = Math.sin(a) * r; z = Math.cos(a) * r; y = 3 + (r - 62) * 0.55;
-    }
-    pos.set([x, y, z], i * 3);
-    seat[i] = Math.random();
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const lights = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.55, map: TEX.softDot, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
-  lights.frustumCulled = false;
-  g.add(lights);
-  // Lasers and beams from the roof.
-  const lasers = [];
-  for (let i = 0; i < 16; i++) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 140, 6, 1, true).translate(0, -70, 0), new THREE.MeshBasicMaterial({ color: 0x39d5c8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-    m.position.set((i - 7.5) * 4, 36, stageZ - 2);
-    g.add(m);
-    lasers.push(m);
-  }
-  const beamGeo = new THREE.ConeGeometry(3, 30, 18, 1, true).translate(0, -15, 0);
-  const beams = [];
-  for (let i = 0; i < 10; i++) {
-    const m = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
-    m.position.set((i - 4.5) * 7, 30, stageZ - 4);
-    g.add(m);
-    beams.push(m);
-  }
-  const band = buildCrowdIn(g, 3);
-  for (const [k, x] of [['aoi', -3], ['kotone', 3], ['mirai', -5.5]]) { const p = addPerson(band, LOOKS[k]); p.x = x; p.z = stageZ - 1; p.yaw = Math.PI; }
-  const fill = new THREE.PointLight(0xd0f0ff, 0, 60, 1.2);
-  fill.position.set(0, 14, stageZ - 14);
-  g.add(fill);
-  const tetoLight = new THREE.PointLight(0xff3d6a, 0, 40, 1.4);
-  g.add(tetoLight);
-  // Confetti for the last chorus: thousands of scraps of teal, pink, white and gold.
-  const cn = 2600, cpos = new Float32Array(cn * 3), ccol = new Float32Array(cn * 3), cvel = new Float32Array(cn * 3);
-  const cc = [[0.22, 0.84, 0.78], [1, 0.54, 0.72], [1, 1, 1], [1, 0.85, 0.4]];
-  for (let i = 0; i < cn; i++) { cpos.set([0, -50, 0], i * 3); ccol.set(cc[i % 4].map((v) => v * 1.6), i * 3); }
-  const cgeo = new THREE.BufferGeometry();
-  cgeo.setAttribute('position', new THREE.BufferAttribute(cpos, 3));
-  cgeo.setAttribute('color', new THREE.BufferAttribute(ccol, 3));
-  const confetti = new THREE.Points(cgeo, new THREE.PointsMaterial({ size: 0.22, vertexColors: true, toneMapped: false }));
-  confetti.frustumCulled = false;
-  g.add(confetti);
-  // Flame cannons along the front of the stage.
-  const flames = buildPuffs(240, 0xff9a40);
-  flames.group.children[0].material.uniforms.diffuse.value.multiplyScalar(2.4);
-  scene.add(flames.group);
-  // Smoke for Teto's entrance, and a red spotlight that finds her.
-  const smoke = buildPuffs(120, 0x3a2a34);
-  scene.add(smoke.group);
-  const spot = new THREE.Mesh(new THREE.ConeGeometry(4, 40, 24, 1, true).translate(0, -20, 0), new THREE.MeshBasicMaterial({ color: 0xff2d55, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
-  spot.position.set(0, 36, -40);
-  g.add(spot);
-  return { g, stageZ, screens, lights, seat, lasers, beams, band, fill, tetoLight, confetti, cvel, flames, smoke, spot };
-}
-
 // The night: the crowd outside, the walk up from under the stage, the song of her life, and
 // then the lights go red.
 const DOME = { rise: 7, song: 12, after: 0, teto: 0 };
@@ -589,6 +491,8 @@ function updateDome(dt) {
     domeLights(dt, D, 1, 'teal');
     stageCamera(dt, { beat: D.beat || 0, phase: 'song', set: { busk: false }, t });
     if (Math.floor((D.beat || 0) / 8) % 5 === 3) { camera.position.set(DOME_AT.x + Math.sin(t * 0.1) * 40, CITY.y + 30, DOME_AT.z - 20); camera.lookAt(DOME_AT.x, CITY.y, DOME_AT.z + 20); setFov(62); }
+    // And from in among the crowd, through a forest of penlights.
+    else if (Math.floor((D.beat || 0) / 8) % 5 === 4) { camera.position.set(DOME_AT.x + 9 + Math.sin(t * 0.2) * 2, CITY.y + 2.1, DOME_AT.z + 4); camera.lookAt(player.pos.x, player.pos.y + 1.6, player.pos.z); setFov(50); }
     poseCrowd(S.band, dt);
   } else {
     // After the song: the cheer, and then the lights cut out. Red. Her laugh.
@@ -598,51 +502,6 @@ function updateDome(dt) {
   }
   if (S.band) { for (const p of S.band.people) { p.bob = Math.abs(Math.sin((D.beat || t * 2) * Math.PI)) * 0.08; p.cheer = D.phase === 'song' && Math.floor((D.beat || 0) / 8) % 2 ? 1 : 0; } poseCrowd(S.band, dt); }
   D.flash = Math.max(0, (D.flash || 0) - dt * 4);
-}
-
-// The lights, in her colour or in Teto's, or split between the two.
-function domeLights(dt, D, level, mode) {
-  const S = D.set, beat = D.beat || D.t * 2;
-  const col = S.lights.geometry.attributes.color.array, pos = S.lights.geometry.attributes.position.array, n = col.length / 3;
-  const split = mode === 'split' ? 1 : 0, red = mode === 'red' ? 1 : 0;
-  // A wave rolling round the stands.
-  for (let i = 0; i < n; i++) {
-    const wave = 0.65 + 0.35 * Math.sin(beat * Math.PI * 0.5 + S.seat[i] * 6.28 + pos[i * 3] * 0.05);
-    const tetoSide = red || (split && pos[i * 3 + 2] < -5);
-    const b = level * wave * 2.2;
-    if (tetoSide) col.set([1.0 * b, 0.18 * b, 0.32 * b], i * 3);
-    else col.set([0.22 * b, 0.84 * b, 0.78 * b], i * 3);
-  }
-  S.lights.geometry.attributes.color.needsUpdate = true;
-  S.lasers.forEach((m, i) => {
-    m.material.opacity = level > 0.6 ? 0.35 + (D.flash || 0) * 0.3 : 0;
-    m.material.color.setHex(red ? 0xff2d55 : i % 2 ? 0x39d5c8 : 0xffffff);
-    m.rotation.z = Math.sin(beat * Math.PI * 0.25 + i * 0.4) * 0.6;
-    m.rotation.x = -0.5 + Math.sin(beat * Math.PI * 0.125 + i) * 0.3;
-  });
-  S.beams.forEach((m, i) => {
-    m.material.opacity = level * (0.03 + (D.flash || 0) * 0.05);
-    m.material.color.setHex(red ? 0xff3d6a : 0xd8fff8);
-    m.rotation.z = Math.sin(beat * Math.PI * 0.5 + i) * 0.4;
-  });
-  S.fill.intensity = level * (6 + (D.flash || 0) * 6);
-  // Fireworks off the stage on the big moments.
-  if (level > 0.8 && !red && Math.random() < dt * (D.phase === 'after' ? 4 : 0.7)) {
-    burst(new THREE.Vector3(DOME_AT.x + (Math.random() - 0.5) * 34, CITY.y + 2 + Math.random() * 3, DOME_AT.z + S.stageZ + 2), [0x39d5c8, 0xffffff, 0xb4fff2][Math.floor(Math.random() * 3)], 40, 10);
-  }
-  // The screens: her face, then Teto's.
-  if (Math.floor(D.t * 6) !== D.lastScreen) {
-    D.lastScreen = Math.floor(D.t * 6);
-    for (const sc of S.screens) {
-      const g = sc.canvas.getContext('2d');
-      g.fillStyle = red ? '#12020a' : '#031014'; g.fillRect(0, 0, 512, 288);
-      g.fillStyle = red ? '#ff2d55' : '#c8fff6'; g.font = 'bold 90px sans-serif'; g.textAlign = 'center';
-      if (D.count) { g.font = 'bold 200px sans-serif'; g.fillText(String(D.count), 256, 210); sc.tex.needsUpdate = true; continue; }
-      g.fillText(red ? 'TETO' : 'MIKU', 256, 160);
-      g.font = '24px sans-serif'; g.fillStyle = '#fff'; g.fillText(red ? 'CRIMSON RECORDS' : G(), 256, 215);
-      sc.tex.needsUpdate = true;
-    }
-  }
 }
 
 // Teto rises at the far end of the runway, and they meet in the middle.

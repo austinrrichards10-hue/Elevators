@@ -244,7 +244,7 @@ const songLayouts = {};
 function layoutSong(id) {
   if (songLayouts[id]) return songLayouts[id];
   const S = SONGS[id];
-  const events = [], chart = [], lines = [];
+  const events = [], chart = [], lines = [], sections = [];
   let bar = 0, keyShift = 0;
   const seen = {};
   const note = (step, oct = 0) => {
@@ -323,6 +323,7 @@ function layoutSong(id) {
         sing(notes, wordsFor('pre'));
       }
     }
+    sections.push({ name, beat: bar * 4, end: (bar + sec.bars) * 4 });
     if (sec.riser) events.push([(bar + sec.bars - 2) * 4, 'riser', 8]);
     if (sec.crash) events.push([bar * 4, 'crash']);
     // Instrumental bits still give the hands something to do: the kick on the one and three.
@@ -332,7 +333,7 @@ function layoutSong(id) {
   events.push([bar * 4, 'crash']);
   events.sort((a, b) => a[0] - b[0]);
   chart.sort((a, b) => a.beat - b.beat);
-  const layout = { id, events, chart, lines, beats: bar * 4 + 2, seconds: (bar * 4 + 2) * 60 / S.bpm, bpm: S.bpm };
+  const layout = { id, events, chart, lines, sections, beats: bar * 4 + 2, seconds: (bar * 4 + 2) * 60 / S.bpm, bpm: S.bpm };
   songLayouts[id] = layout;
   return layout;
 }
