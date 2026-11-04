@@ -1290,6 +1290,18 @@ function balloonRestoreWorld() {
 function balloonReachEnding(skipped) {
   const s = balloonScene;
   if (!s || balloon.phase === 'ending') return;
+  // Flying away from Teto's clearing, the story goes on: out over the sea to the city (stage.js).
+  if (showdown.stage === 'leaving') {
+    balloon.phase = 'ending';
+    survival.tool = s.tool;
+    endScene();
+    if (balloonWind) { balloonWind.stop(); balloonWind = null; }
+    balloonModel.group.visible = false;
+    $('subtitle').classList.remove('on');
+    subtitles.length = 0;
+    startVoyage();
+    return;
+  }
   if (skipped) {
     // Straight to the last shot, the dawn already up.
     balloonSetupDawn();

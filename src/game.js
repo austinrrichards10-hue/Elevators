@@ -741,7 +741,7 @@ function updatePlayer(dt) {
   step /= mod.speed;
   if (!player.dodge) {
     player.stepDist += step;
-    if (player.stepDist > 1.1) { player.stepDist = 0; Sfx.step(); leaveFootprint(); }
+    if (player.stepDist > 1.1) { player.stepDist = 0; if (cityActive()) cityStep(); else { Sfx.step(); leaveFootprint(); } }
   }
   if (!player.dodge) turnBody(dt, move, moving);
 

@@ -65,13 +65,13 @@ function updateSky(dt) {
   const { light, dusk } = daylight(h);
   dayNight.light = light;
   // The forest's own sky and light; Teto's arena, the balloon's flight and the scenes see to their own.
-  const free = game.state === 'playing' && !arenaActive() && !activeScene;
+  const free = !arenaActive() && (cityActive() || (game.state === 'playing' && !activeScene));
   if (!dayNight.stars) dayNight.stars = buildStars();
   dayNight.stars.position.copy(camera.position);
   dayNight.stars.material.opacity = free ? (1 - light) * 0.95 : 0;
   if (!free) {
     // Back to the plain grey day the rest of the game was made in, once.
-    if (dayNight.wasFree && (arenaActive() || activeScene)) {
+    if (dayNight.wasFree && (arenaActive() || (activeScene && !cityActive()))) {
       dayNight.wasFree = false;
       resetGrade();
       const sky = world.sky.material.uniforms;

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="src/crimson.css">
 <link rel="stylesheet" href="src/balloon.css">
 <link rel="stylesheet" href="src/showdown.css">
+<link rel="stylesheet" href="src/city.css">
 </head>
 <body>
 <canvas id="view"></canvas>
@@ -25,6 +26,7 @@
   <div id="note"></div>
   <div id="objective"></div>
   <div id="clock"></div>
+  <div id="fame"><span class="fame-level">Lv 1</span><span class="fame-title">Nobody</span><div class="fame-bar"><i></i></div><span class="fame-num"></span></div>
   <div id="decor" class="hidden"></div>
   <div id="compass" class="hidden"></div>
   <canvas id="minimap" class="hidden" width="180" height="180"></canvas>
@@ -64,6 +66,10 @@
 </div>
 <div id="flash"></div>
 <div id="sleep-fade"></div>
+<div id="talk" class="hidden"><div class="talk-name"></div><div class="talk-text"></div><div class="talk-choices"></div><div class="talk-more">E</div></div>
+<div id="gig-result" class="hidden"></div>
+<div id="levelup"></div>
+<div id="idol-log" class="hidden"></div>
 
 <section id="title" class="screen">
   <div class="title-card">
@@ -199,7 +205,11 @@
 <script src="src/items.js"></script>
 <script src="src/daynight.js"></script>
 <script src="src/build.js"></script>
+<script src="src/songs.js"></script>
+<script src="src/rhythm.js"></script>
 <script src="src/city.js"></script>
+<script src="src/idol.js"></script>
+<script src="src/stage.js"></script>
 <script src="src/story.js"></script>
 <script src="src/map.js"></script>
 <script src="src/katana.js"></script>
