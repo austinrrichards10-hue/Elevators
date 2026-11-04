@@ -212,7 +212,7 @@ class Wolf {
       this.setState('flee', 4 + Math.random() * 3);
       if (dist < 60) Sfx.wolfYelp(1 - dist / 60);
     } else if (dist < WOLF.watch && (this.state === 'wander' || this.state === 'idle' || this.state === 'sit')) {
-      if (wolfAttack.cooldown <= 0 && !wolves.some((w) => w.state === 'attack') && Math.random() < WOLF.attackChance) this.charge();
+      if (wolfAttack.cooldown <= 0 && !wolves.some((w) => w.state === 'attack') && Math.random() < WOLF.attackChance * (dayNight.isNight() ? 2.5 : 1)) this.charge();
       else this.setState('watch', 3 + Math.random() * 4);
     } else if (this.state === 'wander' && (this.huntCheck -= dt) <= 0) {
       // A hare in the open catches its eye now and then, and it gives chase.

@@ -32,6 +32,10 @@ function saveGame() {
     crimson: { phase: crimson.phase, sitesLeft: crimson.sitesLeft, noticed: crimson.noticed },
     balloon: balloon.assembled,
     showdown: { stage: showdown.stage, shortHair: showdown.shortHair, injured: showdown.injured },
+    builds: saveBuilds(),
+    time: { t: dayNight.t, day: dayNight.day },
+    needs: { hunger: needs.hunger, thirst: needs.thirst },
+    city: saveCity(),
   };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -82,6 +86,9 @@ function loadGame() {
   // Shot and not yet patched, the balloon still sags.
   balloon.sag = showdown.stage === 'injured' || showdown.stage === 'repair' ? 1 : 0;
   lootFoodSlot();
+  loadBuilds(data.builds);
+  if (data.time) { dayNight.t = data.time.t; dayNight.day = data.time.day; }
+  if (data.needs) Object.assign(needs, data.needs);
   player.pos.set(data.player.x, groundHeight(data.player.x, data.player.z), data.player.z);
   player.yaw = player.bodyYaw = data.player.yaw || 0;
   world.stream(player.pos, Infinity);
@@ -89,6 +96,8 @@ function loadGame() {
   poseAvatar(1 / 60, new THREE.Vector3(), false);
   avatar.reset();
   beginPlay(false);
+  // Saved in the city: straight back to its streets (city.js).
+  if (data.city && data.city.active) { loadCity(data.city); return; }
   say('Back by the fire.', 2.5);
 }
 

@@ -151,3 +151,23 @@ body.mod-hide-hud #hud, body.mod-hide-hud #subtitle { display: none; }
 #hurt.on { opacity: 1; transition: none; }
 #note { position: absolute; left: 50%; bottom: 96px; transform: translate(-50%, 6px); max-width: min(520px, 80vw); padding: 9px 18px; border: 1px solid rgba(238, 241, 255, .22); border-radius: 8px; background: rgba(10, 14, 34, .72); font-size: 16px; font-style: italic; text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
 #note.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- Hunger, thirst, the clock, the cabin's decorating list ---------- */
+.hunger i { background: linear-gradient(90deg, #b8742a, #f0c070); }
+.thirst i { background: linear-gradient(90deg, #2a8fb8, #8fe4ff); }
+.vital.needs .bar { height: 5px; }
+#clock { position: absolute; top: 22px; right: 26px; padding: 6px 14px; border-radius: 8px; background: rgba(10, 14, 34, .55); font-size: 14px; letter-spacing: .06em; text-shadow: 0 1px 3px #0a0e22; display: flex; align-items: center; gap: 8px; }
+#clock:empty { display: none; }
+#clock i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+#clock i.sun { background: radial-gradient(circle, #fff6c8, #ffb040); box-shadow: 0 0 8px #ffc060; }
+#clock i.moon { background: radial-gradient(circle at 35% 35%, #f4f6ff, #a8b4d8); box-shadow: 0 0 8px #8ea6ff; }
+#decor { position: absolute; right: 26px; top: 70px; width: min(330px, 80vw); padding: 14px 16px; border-radius: 12px; background: linear-gradient(180deg, rgba(36, 26, 20, .92), rgba(20, 14, 12, .92)); border: 1px solid rgba(255, 206, 150, .28); pointer-events: none; }
+#decor h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .3em; text-transform: uppercase; color: #ffd6a0; }
+#decor ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+#decor li { display: grid; grid-template-columns: 26px 1fr; column-gap: 8px; opacity: .55; font-size: 14px; }
+#decor li.ready { opacity: 1; }
+#decor li kbd { grid-row: span 2; align-self: center; text-align: center; }
+#decor li span { font-size: 12px; opacity: .8; }
+#decor .hint { margin: 10px 0 0; font-size: 12px; opacity: .7; }
+#sleep-fade { position: fixed; inset: 0; background: #04050c; opacity: 0; pointer-events: none; transition: opacity .8s ease; }
+#sleep-fade.on { opacity: 1; }

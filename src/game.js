@@ -162,6 +162,9 @@ addEventListener('keydown', (e) => {
   if (game.state === 'cutscene' || game.state === 'scene') return;
   if (e.code === 'Backquote' || e.code === 'F2') { e.preventDefault(); toggleMod(); return; }
   if (game.state !== 'playing') return;
+  // Placing something, or decorating the cabin (build.js); talking and the city (city.js).
+  if (buildKey(e.code)) return;
+  if (cityKey(e.code)) return;
   cheatKey(e.code);
   // The field book: her map, journal and pack.
   const page = { KeyM: 'map', KeyJ: 'journal', KeyI: 'pack' }[e.code];
@@ -189,6 +192,8 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('mousedown', (e) => {
   if (game.state !== 'playing') return;
   if (document.pointerLockElement !== canvas) lockPointer();
+  if (placingClick(e.button)) return;
+  if (cityClick(e.button)) return;
   if (survival.sitting) { standUp(); return; }
   // In the fight her hands are full of her scythe (showdown.js).
   if (arenaActive()) { showdownClick(e.button); return; }
@@ -262,6 +267,9 @@ function resetRun() {
   resetCrimson();
   resetBalloon();
   resetShowdown();
+  resetBuilds();
+  resetDayNight();
+  resetCity();
   for (const k in keys) keys[k] = false;
   aiming = false;
   cancelDraw();
@@ -352,6 +360,8 @@ $('dead-retry').addEventListener('click', () => {
 const DEATHS = {
   cold: ['The cold took you', 'Out here, a fire is the difference between morning and never.'],
   wolf: ['The wolves took you', 'They were hungry, and you were alone.'],
+  hunger: ['Hunger took you', 'Out here you eat what you can catch, or nothing at all.'],
+  thirst: ['Thirst took you', 'Snow everywhere, and none of it melted. A fire and a cup would have done it.'],
   teto: ['Teto took you', 'She\'s still laughing. Get up and make her stop.'],
 };
 
@@ -714,7 +724,7 @@ function updatePlayer(dt) {
     step = speed * dt;
   }
   // In Teto's clearing the trunks and rocks of the real forest don't apply (showdown.js).
-  if (!mod.noclip && !arenaActive()) pushOutOfColliders(player.pos, 0.34);
+  if (!mod.noclip && !arenaActive() && !cityActive()) pushOutOfColliders(player.pos, 0.34);
 
   const r = Math.hypot(player.pos.x, player.pos.z);
   if (r > WORLD_RADIUS) {
@@ -724,6 +734,8 @@ function updatePlayer(dt) {
   player.pos.y = groundHeight(player.pos.x, player.pos.z);
   // The fight keeps her inside Teto's clearing (showdown.js).
   showdownClamp(player.pos);
+  // In the city she walks its streets instead (city.js).
+  cityClamp(player.pos);
 
   // Faster movement keeps the same stride length, so the legs speed up with it.
   step /= mod.speed;
@@ -1036,6 +1048,8 @@ function update(dt) {
   updatePlayer(dt);
   updateCamera(dt);
   updateHud();
+  // In the city: its streets, its people, the stage (city.js). The forest is far behind her.
+  if (cityActive()) { updateCity(dt); updateDayNight(dt); return; }
   updateArrows(dt);
   // Nothing of the real forest reaches Teto's clearing.
   if (!arenaActive()) updateWolves(dt);
@@ -1050,6 +1064,8 @@ function update(dt) {
   updateCrimson(dt);
   updateBalloon(dt);
   updateShowdown(dt);
+  updateBuild(dt);
+  updateDayNight(dt);
 }
 
 // Slow drift in front of her on the title screen, so the skin choice shows.

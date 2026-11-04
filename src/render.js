@@ -34,11 +34,11 @@ function createPipeline(renderer, scene, camera) {
     }`, { tInput: { value: null }, uDir: { value: new THREE.Vector2() } });
 
   const composite = pass(`
-    uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uTime; varying vec2 vUv;
+    uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uTime; uniform vec3 uGrade; varying vec2 vUv;
     vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
-      vec3 c = texture2D(tScene, vUv).rgb + texture2D(tBloom, vUv).rgb * 0.75;
+      vec3 c = (texture2D(tScene, vUv).rgb + texture2D(tBloom, vUv).rgb * 0.75) * uGrade;
       c = aces(c * 0.92);
       // Cool the shadows slightly and lift the contrast.
       float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -49,7 +49,7 @@ function createPipeline(renderer, scene, camera) {
       c = pow(c, vec3(1.0 / 2.2));
       c += (hash(vUv * 917.0 + fract(uTime) * 61.0) - 0.5) * 0.018;
       gl_FragColor = vec4(c, 1.0);
-    }`, { tScene: { value: main.texture }, tBloom: { value: bloomA.texture }, uTime: { value: 0 } });
+    }`, { tScene: { value: main.texture }, tBloom: { value: bloomA.texture }, uTime: { value: 0 }, uGrade: { value: new THREE.Vector3(1, 1, 1) } });
 
   const drawTo = (material, target) => {
     quad.material = material;
@@ -110,5 +110,7 @@ function createPipeline(renderer, scene, camera) {
     renderer.setRenderTarget(null);
   }
 
-  return { render, resize, compile };
+  // The grade over everything: day, dusk and night (daynight.js).
+  const grade = composite.uniforms.uGrade.value;
+  return { render, resize, compile, grade };
 }

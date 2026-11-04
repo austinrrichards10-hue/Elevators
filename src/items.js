@@ -305,6 +305,7 @@ function useItem(id) {
   survival.health = Math.min(100, survival.health + (d.heal || 0));
   survival.warmth = Math.min(100, survival.warmth + (d.warm || 0));
   if (d.stamina) player.stamina = 100;
+  feed(d);
   if (d.kind === 'drink') Sfx.itemDrink();
   else if (id === 'warmer') Sfx.itemShake();
   else if (d.kind === 'med') Sfx.itemUnwrap();
@@ -337,7 +338,9 @@ function lootBestMeal() {
     const d = ITEMS[id];
     const heal = Math.min(d.heal || 0, hurt), warm = Math.min(d.warm || 0, cold);
     const waste = (d.heal || 0) - heal + (d.warm || 0) - warm;
-    const score = heal * (survival.health < 40 ? 2.2 : 1) + warm * (survival.warmth < 35 ? 2.2 : 1) + (d.stamina ? tired * 0.08 : 0) - waste * 0.35;
+    // Hungry or thirsty counts too (daynight.js).
+    const fill = d.kind === 'food' ? Math.min(d.food || 18 + (d.heal || 0) * 0.9, 100 - needs.hunger) : d.kind === 'drink' ? Math.min(45, 100 - needs.thirst) : 0;
+    const score = heal * (survival.health < 40 ? 2.2 : 1) + warm * (survival.warmth < 35 ? 2.2 : 1) + (d.stamina ? tired * 0.08 : 0) - waste * 0.35 + fill * (needs.hunger < 40 || needs.thirst < 40 ? 1.6 : 0.8);
     if (score > bestScore) { best = id; bestScore = score; }
   }
   return best;

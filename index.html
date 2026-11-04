@@ -24,12 +24,16 @@
   <div id="toast"></div>
   <div id="note"></div>
   <div id="objective"></div>
+  <div id="clock"></div>
+  <div id="decor" class="hidden"></div>
   <div id="compass" class="hidden"></div>
   <canvas id="minimap" class="hidden" width="180" height="180"></canvas>
   <div id="binoculars" class="hidden"></div>
   <div id="vitals">
     <div class="vital"><label>Health</label><div class="bar hp"><i id="hp-fill"></i></div></div>
     <div class="vital" id="warmth"><label>Warmth</label><div class="bar warmth"><i id="warmth-fill"></i></div></div>
+    <div class="vital needs"><label>Hunger</label><div class="bar hunger"><i id="hunger-fill"></i></div></div>
+    <div class="vital needs"><label>Thirst</label><div class="bar thirst"><i id="thirst-fill"></i></div></div>
     <div class="bar stamina"><i id="stamina-fill"></i></div>
   </div>
   <div id="hotbar">
@@ -59,6 +63,7 @@
   <div id="cine-caption"></div>
 </div>
 <div id="flash"></div>
+<div id="sleep-fade"></div>
 
 <section id="title" class="screen">
   <div class="title-card">
@@ -89,6 +94,8 @@
       <li><b>I</b> pack</li>
       <li><b>F</b> eat</li>
       <li><b>C</b> sit by a fire</li>
+      <li><b>R</b> turn what you're building</li>
+      <li><b>B · X</b> decorate · pick up (in your cabin)</li>
       <li><b>Z</b> binoculars</li>
       <li><b>N</b> mute</li>
       <li><b>Shift</b> sprint</li>
@@ -190,6 +197,9 @@
 <script src="src/rabbits.js"></script>
 <script src="src/survival.js"></script>
 <script src="src/items.js"></script>
+<script src="src/daynight.js"></script>
+<script src="src/build.js"></script>
+<script src="src/city.js"></script>
 <script src="src/story.js"></script>
 <script src="src/map.js"></script>
 <script src="src/katana.js"></script>

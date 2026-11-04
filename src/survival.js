@@ -456,6 +456,8 @@ function craft(index) {
   const recipe = shownRecipes()[index];
   if (!recipe) return;
   if (!canCraft(recipe)) { toast(`Need ${costText(recipe.cost)}`); return; }
+  // Things to build are placed first, and paid for when she sets them down (build.js).
+  if (recipe.place) { setCrafting(false); recipe.place(); return; }
   for (const [id, n] of Object.entries(recipe.cost)) {
     if (id === 'planks') survival.planks -= n;
     else packTake(id, n);
@@ -582,7 +584,7 @@ function updateSurvival(dt) {
     survival.warmth = Math.min(100, survival.warmth + heat * dt);
     if (nearFire) survival.health = Math.min(100, survival.health + 2 * dt);
   } else if (!mod.noCold) {
-    survival.warmth = Math.max(0, survival.warmth - SURVIVAL.warmthDrain * gearCold() * dt);
+    survival.warmth = Math.max(0, survival.warmth - SURVIVAL.warmthDrain * gearCold() * nightCold() * dt);
   }
   if (survival.warmth <= 0 && !mod.noCold) {
     survival.health -= SURVIVAL.freezeDamage * dt;

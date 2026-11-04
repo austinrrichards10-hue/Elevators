@@ -870,6 +870,8 @@ function buildWorld(renderer, scene) {
     },
     findTree: tiles.findTree,
     treesNear: tiles.treesNear,
+    // For the day and night (daynight.js).
+    sun, sky, sunOffset,
     fellTree: tiles.fellTree,
     // A fresh forest for a new run: felled trees grow back and the clearings are rebuilt.
     resetForest() {
