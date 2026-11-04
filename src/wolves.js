@@ -2,7 +2,7 @@
 // howl, watch her warily when she comes close and bolt if she gets too near. Rarely, one
 // charges and bites. Now and then one runs down a hare. Arrows and the axe wound them and
 // send them running; two or three good hits bring one down, and she can skin it.
-// "Wolf with Animations" by 3DHaupt (CC BY-NC-SA 4.0); see the README.
+// The wolf itself is built in code (wolfmodel.js).
 
 /* ---------- Loading an animated model ---------- */
 // Builds a fresh copy of a glTF node tree each call, with skinned meshes and animation
@@ -91,49 +91,10 @@ const WOLF = {
   hunt: 0.3, // chance a wandering wolf that notices a hare goes after it
 };
 
-let wolfFile = null;
-let wolfMaterials = null;
-// The model's own size and facing, measured once so every wolf can be fitted to WOLF.length.
-let wolfFit = null;
-
-function wolfMaterial(meshIndex, name) {
-  if (!wolfMaterials) {
-    const tex = (i) => wolfFile.texture(i);
-    wolfMaterials = {
-      fur: new THREE.MeshStandardMaterial({ map: tex(0), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1, color: 0xd8d8d8 }),
-      body: new THREE.MeshStandardMaterial({ map: tex(3), roughness: 0.95, color: 0xd0d0d0 }),
-      eyes: new THREE.MeshStandardMaterial({ map: tex(6), emissive: 0x6a5a20, roughness: 0.3 }),
-      dark: new THREE.MeshStandardMaterial({ color: 0x24201e, roughness: 0.7 }),
-    };
-  }
-  if (/^Plane/.test(name)) return null; // a ground plane in the file, not part of the wolf
-  if (/fur/.test(name)) return wolfMaterials.fur;
-  if (/eyes/.test(name)) return wolfMaterials.eyes;
-  if (/Wolf1/.test(name)) return wolfMaterials.body;
-  return wolfMaterials.dark;
-}
-
-function buildWolfModel() {
-  if (!wolfFile) wolfFile = readGlb(WOLF_GLB);
-  const model = animatedModel(wolfFile, wolfMaterial);
-  if (!wolfFit) {
-    const box = new THREE.Box3().setFromObject(model.root, true);
-    const size = box.getSize(new THREE.Vector3());
-    wolfFit = { scale: WOLF.length / size.z, lift: -box.min.y };
-  }
-  const holder = new THREE.Group();
-  model.root.scale.setScalar(wolfFit.scale);
-  model.root.position.y = wolfFit.lift * wolfFit.scale;
-  model.root.rotation.y = WOLF_TURN;
-  holder.add(model.root);
-  return { holder, root: model.root, clips: model.clips };
-}
 // How far each animation carries the wolf in one loop of it, in metres, to keep its paws
 // planted: the walk and run are played faster or slower to match how fast it is going.
 const WOLF_STRIDE = { walk: 1.0, run: 2.4, creep: 0.5 };
 const sdProbe = new THREE.Vector3();
-// The model faces -Z; this turns its nose to +Z, the game's forward.
-const WOLF_TURN = Math.PI;
 
 // Where a wolf can be struck, in its own frame (+Z forward, metres): the body is a capsule
 // from rump to shoulders, the head a ball out in front.
@@ -141,13 +102,11 @@ const WOLF_BODY = { rump: -0.45, shoulders: 0.45, y: 0.5, r: 0.27, head: { z: 0.
 
 class Wolf {
   constructor(x, z) {
-    const model = buildWolfModel();
+    // Its body and its gaits (wolfmodel.js), driven like animation clips.
+    const model = buildProceduralWolf();
     this.holder = model.holder;
-    this.mixer = new THREE.AnimationMixer(model.root);
-    this.actions = {};
-    for (const [key, clip] of Object.entries({ run: '01_Run', walk: '02_walk', creep: '03_creep', idle: '04_Idle', sit: '05_site' })) {
-      this.actions[key] = this.mixer.clipAction(model.clips[clip]);
-    }
+    this.mixer = model.mixer;
+    this.actions = model.actions;
     this.pos = new THREE.Vector3(x, groundHeight(x, z), z);
     this.heading = Math.random() * Math.PI * 2;
     this.speed = 0;
