@@ -1,6 +1,6 @@
 // The boss arena, dressed: the clearing stays flat for the fight, but round it the snow rises
 // into banks and ridges with the forest climbing them, a ring of old runestones stands at its
-// edges with a gate at the far end, ice crystals jut from the snow, and red veins run under
+// edges, ice crystals jut from the snow, and red veins run under
 // the clearing floor. Overhead a moon, an aurora and a ring of jagged peaks; low mist and
 // embers drift through it. All of it answers to Teto: the angrier she gets, the more the
 // runes and veins burn, the crystals and the moon redden, the aurora turns to blood, lightning
@@ -167,13 +167,6 @@ function buildArenaDressing(group) {
   for (let z = back + 4; z < front - 3; z += 8 + rand() * 3) {
     for (const side of [-1, 1]) stone(side * (A.half + 2 + rand() * 0.8), z + rand() * 2, 2.6 + rand() * 1.8, 0.9 + rand() * 0.4, side * Math.PI / 2);
   }
-  // The gate at the far end, where she makes her stand: two great pillars and a lintel.
-  for (const side of [-1, 1]) stone(side * (A.half + 1.6), front + 1.5, 8, 1.8, 0);
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(A.half * 2 + 6, 1.1, 1.4), fx.runeMat);
-  lintel.position.set(0, 8.2, front + 1.5);
-  lintel.rotation.z = 0.03;
-  lintel.castShadow = true;
-  group.add(lintel);
 
   // Ice crystals in clusters along the edges and up on the banks.
   fx.iceMat = new THREE.MeshStandardMaterial({ color: 0xa8dcff, emissive: 0x2a7fff, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.88, flatShading: true });

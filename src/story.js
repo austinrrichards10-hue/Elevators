@@ -114,6 +114,8 @@ function storyClock(seconds) {
 /* ---------- Banner ---------- */
 // A site's title card, big and centred, fading after a few seconds.
 function showBanner(kicker, title, sub = '') {
+  // Up in Teto's arena the forest's place names don't apply (the fight has its own banners).
+  if (typeof showdownKit !== 'undefined' && showdownKit && arenaActive()) return;
   const el = $('banner');
   el.querySelector('.banner-kicker').textContent = kicker || '';
   el.querySelector('.banner-title').textContent = title || '';
