@@ -85,20 +85,16 @@ const Sfx = {
     return osc;
   },
 
-  // The mountain: a deep rumble of wind under everything, two drifting layers of it moving
-  // across the stereo field, fine snow hissing on it, and now and then a gust that rises,
-  // whistles through the pines and dies away, or the far-off crack of ice.
+  // The mountain: a soft breath of wind that swells and almost dies away again (never a
+  // steady roar or hiss), and now and then a gust that rises, whistles through the pines and
+  // dies away, or the far-off crack of ice. Mostly it's quiet.
   startAmbience() {
-    const rumble = this.noiseBed(this.ambient, { freq: 160, level: 0.16 });
-    this.lfo(rumble.gain.gain, 0.05, 0.06);
-    for (const [pan, rate, freq] of [[-0.6, 0.07, 380], [0.6, 0.11, 520]]) {
-      const layer = this.noiseBed(this.ambient, { type: 'bandpass', freq, q: 0.8, level: 0.05, pan });
-      this.lfo(layer.filter.frequency, rate, freq * 0.45);
-      this.lfo(layer.gain.gain, rate * 0.7, 0.025);
+    for (const [pan, rate, freq] of [[-0.5, 0.045, 330], [0.5, 0.07, 460]]) {
+      const layer = this.noiseBed(this.ambient, { type: 'bandpass', freq, q: 1.1, level: 0.016, pan });
+      this.lfo(layer.filter.frequency, rate * 1.3, freq * 0.35);
+      this.lfo(layer.gain.gain, rate, 0.015);
       this.lfo(layer.panner.pan, rate * 0.3, 0.3);
     }
-    const hiss = this.noiseBed(this.ambient, { type: 'highpass', freq: 5200, level: 0.012 });
-    this.lfo(hiss.gain.gain, 0.13, 0.006);
     const later = (min, max, fn) => setTimeout(() => { fn(); later(min, max, fn); }, (min + Math.random() * (max - min)) * 1000);
     later(5, 13, () => this.gust());
     later(18, 45, () => this.iceCrack());

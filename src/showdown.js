@@ -426,7 +426,8 @@ function buildArena() {
   const A = SHOWDOWN.arena;
   const group = new THREE.Group();
   group.position.set(0, A.y, 0);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400, 1, 1).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: TEX.snow.color, normalMap: TEX.snow.normal, roughnessMap: TEX.snow.rough, color: 0xf0f3fb }));
+  // The far snow, a little below the arena's own terrain (arena.js), which rises in banks round the clearing.
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400, 1, 1).rotateX(-Math.PI / 2).translate(0, -0.3, 0), new THREE.MeshStandardMaterial({ map: TEX.snow.color, normalMap: TEX.snow.normal, roughnessMap: TEX.snow.rough, color: 0xf0f3fb }));
   ground.receiveShadow = true;
   group.add(ground);
   const kit = buildForestKit();
@@ -440,7 +441,7 @@ function buildArena() {
     for (; k < kit.species.length - 1; k++) { pick -= kit.species[k].weight; if (pick <= 0) break; }
     const s = kit.species[k];
     const size = lerp(s.size[0], s.size[1], rand()) * grow;
-    per[k].push({ x, y: 0, z, ry: rand() * 6.28, rx: 0, rz: 0, sx: size, sy: size * (0.9 + rand() * 0.3), sz: size, tint: new THREE.Color().setScalar(lerp(s.tint[0], s.tint[1], rand())) });
+    per[k].push({ x, y: arenaHeight(x, z) - 0.15, z, ry: rand() * 6.28, rx: 0, rz: 0, sx: size, sy: size * (0.9 + rand() * 0.3), sz: size, tint: new THREE.Color().setScalar(lerp(s.tint[0], s.tint[1], rand())) });
   };
   const back = -A.length / 2, front = A.length / 2, far = front + A.balloon;
   for (let i = 0; i < 2600; i++) {
@@ -477,6 +478,7 @@ function buildArena() {
     if (bark) group.add(bark);
     if (s.leaves) { const leaves = makeInstances(s.geo.boughs, s.leaves, per[k], true, true); if (leaves) group.add(leaves); }
   });
+  arenaFx = buildArenaDressing(group);
   group.visible = false;
   scene.add(group);
   return group;
@@ -1823,6 +1825,7 @@ function clearFightFx() {
   const F = k.finale;
   for (const m of [...F.rings, ...F.bolts, F.target]) m.visible = false;
   for (const m of [...k.mega.circles, ...k.mega.pillars, k.mega.fill]) m.visible = false;
+  clearArenaHazards();
   fight.megaGlare = 0;
   k.mega.lastGlare = 0;
   $('mega-glare').style.opacity = 0;
@@ -1851,6 +1854,7 @@ function leaveArena() {
 // The fight's effects, each frame: shockwaves, the flash, cracks fading, the heavy snow.
 function updateShowdownFx(dt) {
   const k = showdownKit;
+  updateArenaFx(dt);
   for (const s of k.shocks) {
     if (s.t >= s.life) continue;
     s.t += dt;
@@ -1923,6 +1927,7 @@ function startFight() {
   caption('');
   showScythe(true);
   renderTetoBar(true);
+  phaseBanner('Teto, the Crimson Storm', 'Final battle');
 }
 
 // Back to the start after a loss, when there's no save to go back to.
@@ -2113,6 +2118,9 @@ function startRage(stage) {
   tetoSays(SHOWDOWN.rage[stage].line, 2.6);
   Sfx.tracks.teto.intensity = stage;
   fight.fovKick = -6;
+  arenaAwaken();
+  if (stage === 1) phaseBanner('Red Sky', 'Phase two');
+  else phaseBanner('Meteorfall', 'Final phase');
 }
 
 function updateRage(dt) {
@@ -3705,7 +3713,13 @@ function updateFinale(dt) {
   ambushOnce('clear', F.clear, () => { $('flash').className = ''; });
   ambushOnce('won', F.won, () => tetoSays(showdownLine('won'), 2.2));
   ambushOnce('laugh', F.laugh, () => Sfx.tetoLaugh());
-  ambushOnce('leave', F.leave, () => { s.jet = Sfx.jet(); s.jet.set(0.9, 0.2); Sfx.whoosh(1.6); shockwave(t.pos, 8, 0xff2d55, 0.6); });
+  ambushOnce('leave', F.leave, () => {
+    s.jet = Sfx.jet(); s.jet.set(0.9, 0.2); Sfx.whoosh(1.6); shockwave(t.pos, 8, 0xff2d55, 0.6);
+    // Her jets fade into the distance as she goes, and are gone: never left roaring on.
+    const jet = s.jet;
+    setTimeout(() => jet.set(0, 1.5), 1200);
+    setTimeout(() => { jet.stop(); if (s.jet === jet) s.jet = null; }, 3000);
+  });
 
   // The crater: smoke and embers rising off it, the scythe's light dying.
   if (time > F.white) {
