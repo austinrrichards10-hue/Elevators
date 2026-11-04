@@ -130,7 +130,7 @@ function idolSetup() {
   npc('rina', 'DJ Rina', 26, -42, -Math.PI / 2, talkRina);
   // The lost cat, and the other things to find.
   idol.cat = buildCat();
-  idol.cat.position.set(92, 0, 74);
+  idol.cat.position.set(-46, 0.2, 90);
   city.group.add(idol.cat);
   // The places.
   citySpot({ x: 2, z: -22, r: 3, label: () => buskLabel(), use: busk, active: () => has('metHaru') });
@@ -140,7 +140,13 @@ function idolSetup() {
   for (const [id, v] of Object.entries(VENUES)) citySpot({ x: v.door.x, z: v.door.z, r: 3, label: () => venueLabel(id), use: () => tryGig(id), active: () => has('joined') && id !== 'tv' });
   citySpot({ x: VENUES.tv.door.x, z: VENUES.tv.door.z - 4, r: 3, label: () => venueLabel('tv'), use: () => tryGig('tv'), active: () => has('tvBooked') && !idol.gigs.tv });
   citySpot({ x: -2, z: -6, r: 3, label: () => 'Press E to take the train to the Tokyo Dome', use: goToDome, active: () => has('domeReady') });
-  for (const f of FINDS) citySpot({ x: f.x, z: f.z, r: 1.8, label: () => f.label, use: () => takeFind(f), active: () => f.active() && !idol.items[f.id] });
+  for (const f of FINDS) {
+    citySpot({ x: f.x, z: f.z, r: 1.8, label: () => f.label, use: () => takeFind(f), active: () => f.active() && !idol.items[f.id] });
+    // A sparkle over it, so it can be found.
+    f.glint = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0xfff0a0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    f.glint.position.set(f.x, f.id === 'kite' ? 3.4 : 0.9, f.z);
+    city.group.add(f.glint);
+  }
   buildPosters();
   refreshIdolWorld();
 }
@@ -288,20 +294,20 @@ function talkIshida(n) {
       ['Mrs. Ishida', 'Haru sent you? Then you can\'t pay either. Wonderful.'],
       ['Mrs. Ishida', 'I\'m sorry, dear. I\'m not myself. Mochi, my cat, she got out last night and she hasn\'t come home. White, fat, a grey patch on one ear. She hides when she\'s frightened.'],
       ['Miku', 'I\'ll look for her.'],
-      ['Mrs. Ishida', 'You would? ...Bring her home, and the capsule\'s yours for as long as you need it. Try the alleys behind the big blocks. She likes the warm air from the vents.'],
+      ['Mrs. Ishida', 'You would? ...Bring her home, and the capsule\'s yours for as long as you need it. Try the little green park up past the arcade. She loves sunning herself by the playground.'],
     ], { with: 'ishida', then: () => { flag('catQuest'); refreshIdolWorld(); setObjective(); } });
     return;
   }
   if (has('catFound') && !has('room')) {
     talk([
       ['Mrs. Ishida', 'Mochi! Oh, you silly, silly girl. Where were you?'],
-      ['Miku', 'Behind the arcade, curled up on a warm vent, glaring at a pigeon.'],
+      ['Miku', 'In the green park, curled up in the sun by the slide, glaring at a pigeon.'],
       ['Mrs. Ishida', 'That\'s my girl. And you. Capsule eleven, top row. It\'s yours. Free. Don\'t argue.'],
       ['Mrs. Ishida', 'Sleep there when you need to, and come and go as you like. Rest there until the evening, too, if you want the square at its busiest.'],
     ], { with: 'ishida', then: () => { flag('room'); addFame(60, 'found Mochi'); addYen(1000); setObjective(); } });
     return;
   }
-  if (!has('catFound')) { talk([['Mrs. Ishida', 'Any sign of Mochi? The alleys, dear. Behind the big blocks, where the vents blow warm.']], { with: 'ishida' }); return; }
+  if (!has('catFound')) { talk([['Mrs. Ishida', 'Any sign of Mochi? The green park, dear, past the arcade, by the playground.']], { with: 'ishida' }); return; }
   const lines = has('joined') ? ['You\'ve got an apartment from the agency now, they tell me. Capsule eleven misses you. So does Mochi.', 'I put your poster up in the lobby. Don\'t let it go to your head.'] : ['Capsule eleven is made up. Sleep well, dear.', 'Mochi\'s forgiven you for carrying her. Mostly.'];
   talk([['Mrs. Ishida', lines[Math.floor(game.time / 15) % lines.length]]], { with: 'ishida' });
 }
@@ -658,16 +664,16 @@ function prepDone() { return has('aoiHeart') && has('kotoneHeart') && has('mirai
 
 /* ---------- Things to find ---------- */
 const FINDS = [
-  { id: 'kite', label: 'Press E to free the red-tailed kite from the tree', x: 75, z: -116.5, active: () => has('kite') && !has('kentaDone') },
+  { id: 'kite', label: 'Press E to free the red-tailed kite from the tree', x: 72, z: -116.5, active: () => has('kite') && !has('kentaDone') },
   { id: 'charm', label: 'Press E to pick up the little cat charm', x: -57, z: 44, active: () => has('charm') && !has('charmDone') },
-  { id: 'bouquet1', label: 'Press E to pick up a bouquet in blue paper', x: -88, z: -60, active: () => has('flowers') && !has('flowersDone') },
-  { id: 'bouquet2', label: 'Press E to pick up a bouquet in blue paper', x: 36, z: 24, active: () => has('flowers') && !has('flowersDone') },
-  { id: 'bouquet3', label: 'Press E to pick up a bouquet in blue paper', x: 88, z: 96, active: () => has('flowers') && !has('flowersDone') },
-  { id: 'bouquet4', label: 'Press E to pick up a bouquet in blue paper', x: -30, z: 120, active: () => has('flowers') && !has('flowersDone') },
+  { id: 'bouquet1', label: 'Press E to pick up a bouquet in blue paper', x: -88, z: -50, active: () => has('flowers') && !has('flowersDone') },
+  { id: 'bouquet2', label: 'Press E to pick up a bouquet in blue paper', x: 30, z: 0, active: () => has('flowers') && !has('flowersDone') },
+  { id: 'bouquet3', label: 'Press E to pick up a bouquet in blue paper', x: 88, z: 100, active: () => has('flowers') && !has('flowersDone') },
+  { id: 'bouquet4', label: 'Press E to pick up a bouquet in blue paper', x: -30, z: 100, active: () => has('flowers') && !has('flowersDone') },
   { id: 'insp1', label: 'Press E to look out at the sea', x: -60, z: -160, active: () => has('lyrics') && !has('lyricsDone'), say: 'The sea goes on and on. Like starting over.' },
   { id: 'insp2', label: 'Press E to sit by the fountain', x: 0, z: -31, active: () => has('lyrics') && !has('lyricsDone'), say: 'Everyone passing by at once, and none of them stopping. Except sometimes.' },
   { id: 'insp3', label: 'Press E to look up into the cherry blossom', x: -97, z: -114, active: () => has('lyrics') && !has('lyricsDone'), say: 'Something beautiful that won\'t last. Better look now.' },
-  { id: 'cat', label: 'Press E to pick up the white cat', x: 92, z: 74, active: () => has('catQuest') && !has('catFound') },
+  { id: 'cat', label: 'Press E to pick up the white cat', x: -46, z: 90, active: () => has('catQuest') && !has('catFound') },
 ];
 function flowersHeld() { return ['bouquet1', 'bouquet2', 'bouquet3', 'bouquet4'].filter((k) => idol.items[k]).length; }
 function inspirationHeld() { return ['insp1', 'insp2', 'insp3'].filter((k) => idol.items[k]).length; }
@@ -817,7 +823,7 @@ function spawnTetoBeach() {
 function currentObjective() {
   if (!has('metGen')) return 'Talk to the old fisherman on the beach';
   if (!has('metHaru')) return 'Head up into the city, to the station square';
-  if (has('catQuest') && !has('catFound')) return 'Find Mrs. Ishida\'s cat, Mochi, in the alleys behind the big blocks';
+  if (has('catQuest') && !has('catFound')) return 'Find Mrs. Ishida\'s cat, Mochi, in the green park north of Sakura Park';
   if (has('catFound') && !has('room')) return 'Bring Mochi home to Mrs. Ishida';
   if (!has('room')) return 'Find Mrs. Ishida\'s capsule hotel by the shopping arcade';
   if (idol.flags.ramen !== undefined && idol.flags.ramen < 3) return `Deliver Taisho's ramen (${idol.flags.ramen}/3): Mr. Sato, Mrs. Kimura, Yuto`;
@@ -882,6 +888,7 @@ function updateIdol(dt) {
   // The first sight of Teto's face, on the screen over the square.
   if (fameLevel() >= 4 && has('joined') && !has('sawTeto') && Math.hypot(player.pos.x, player.pos.z + 22) < 18) sawTetoScene();
   if (!idol.objective) setObjective();
+  for (const f of FINDS) if (f.glint) { const on = f.active() && !idol.items[f.id]; f.glint.visible = on; if (on) f.glint.scale.setScalar(0.6 + Math.abs(Math.sin(game.time * 3 + f.x)) * 0.6); }
   // Kanade's message after the scout, the ramen and so on, all keep the objective current.
   idol.announced -= dt;
 }

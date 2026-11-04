@@ -79,7 +79,7 @@ At the end she goes up on her jets and rains bullets down while you flip and car
 
 The balloon carries her over the clouds and out across the sea for a long while, until a coastline appears: a city without end. She comes down on a beach at its edge with nothing, not even a single yen.
 
-- **The city**: a seaside promenade under cherry trees, a grid of streets under towers lit window by window at night, a station square with a giant screen, a shopping arcade hung with lanterns, live houses, the agency's office, and on the skyline to the north, the Tokyo Dome. People walk the pavements. Anyone with a star over their head has something to say (E to talk).
+- **The city**: Sakura Park (a pond with koi, a red arched bridge, stone lanterns and a little shrine) and a green park with a playground, trees down every pavement, zebra crossings and traffic lights, cars on the move, shopfronts with awnings, rooftops crowded with water tanks and aerials, and on the horizon Mt. Fuji, a red-and-white broadcast tower and a bridge across the bay lit up at night. Also: a seaside promenade under cherry trees, a grid of streets under towers lit window by window at night, a station square with a giant screen, a shopping arcade hung with lanterns, live houses, the agency's office, and on the skyline to the north, the Tokyo Dome. People walk the pavements. Anyone with a star over their head has something to say (E to talk).
 - **Fame** is how far she's come, from Nobody to Superstar. It grows by helping people (a lost cat, a stuck kite, ramen deliveries, lost bouquets, a honeymoon photo), by busking in the square in the evening (three times a day), and above all on stage.
 - **The stage** is a rhythm game: notes fall down four lanes, charted from the song's own melody, and you hit D F J K as they cross the line. Your accuracy, combo and the crowd's hype decide the fame and pay. The songs are original, synthesized J-pop in the classic idol style (a sung-sounding lead stands in for a voice until Miku's own is added).
 - **The story**: Old Gen the fisherman, Haru the busker, Mrs. Ishida's capsule hotel. A scout from Starlight Production, an audition, and three girls who need a fourth: Aoi, Kotone and Mirai. You name the group. Stages from an 80-person basement to a TV show, a beach festival and a 10,000-seat arena, one show a day. And on every screen, another rookie climbing just as fast: Teto. You meet her backstage, and again on the beach the night before the Idol Summit at the Tokyo Dome.
@@ -125,6 +125,7 @@ src/
   build.js       Placing campfires, tents and the log cabin, and decorating it
   wolfmodel.js   The wolf, built in code, and its gaits
   city.js        Tokyo: its streets, people and talking
+  citydecor.js   Tokyo's parks, street trees, traffic, roads and landmarks
   idol.js        Part two's story: fame, quests, the group, Teto
   stage.js       Busking and the stages, the voyage over the sea, the Tokyo Dome
   songs.js       The idol songs, synthesized

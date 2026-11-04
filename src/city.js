@@ -58,6 +58,17 @@ function buildingMaterial() {
           vec3 glass = mix(vec3(0.16, 0.2, 0.28), vec3(0.45, 0.55, 0.7), uDay * (0.4 + 0.6 * f.y));
           vec3 warm = mix(vec3(1.0, 0.78, 0.45), vec3(0.75, 0.88, 1.0), hash(vec3(cell.yx, 3.0)));
           col = mix(col, glass + warm * lit * (1.0 - uDay) * 1.6, win);
+          // At street level: shopfronts. Big panes lit warm inside, thin mullions, and an
+          // awning in the shop's own colour over them.
+          float gy = vW.y - 3000.0;
+          if (gy < 4.6) {
+            float shop = hash(vec3(floor(u / 7.0), 7.0, floor(vW.x * 0.007 + vW.z * 0.011)));
+            vec3 awning = mix(mix(vec3(0.75, 0.16, 0.18), vec3(0.15, 0.45, 0.6), step(0.33, shop)), vec3(0.85, 0.62, 0.2), step(0.66, shop));
+            float mull = step(0.06, fract(u / 3.5));
+            vec3 inside = mix(vec3(0.95, 0.82, 0.6), vec3(0.7, 0.9, 1.0), step(0.5, hash(vec3(floor(u / 7.0), 3.0, 1.0))));
+            vec3 front = mix(vec3(0.08, 0.09, 0.11), inside * (0.35 + 1.1 * (1.0 - uDay)) * 0.8 + vec3(0.12, 0.14, 0.18) * uDay, mull * step(0.25, gy) * step(gy, 3.4));
+            col = gy > 3.8 ? awning * (0.4 + 0.6 * uDay + 0.25) : front;
+          }
         }
         gl_FragColor = vec4(col, 1.0);
         #include <fog_fragment>
@@ -118,7 +129,7 @@ function buildCity() {
   const rand = seededRandom(2026);
   const avenues = [-120, -60, 0, 60, 120], streets = [-112, -50, 0, 50, 100, 146];
   // The station square and the arcade are kept open.
-  const open = (x, z) => (Math.abs(x) < 28 && z > -48 && z < -4) || (x > -66 && x < -54 && z > -46 && z < 96);
+  const open = (x, z) => (Math.abs(x) < 28 && z > -48 && z < -4) || (x > -66 && x < -54 && z > -46 && z < 96) || inPark(x, z, 4);
   for (let i = 0; i < avenues.length - 1; i++) {
     for (let j = 0; j < streets.length - 1; j++) {
       const bx0 = avenues[i] + 6, bx1 = avenues[i + 1] - 6, bz0 = streets[j] + 6, bz1 = streets[j + 1] - 6;
@@ -144,19 +155,38 @@ function buildCity() {
   for (const side of [-1, 1]) for (let z = -100; z <= 160; z += 24) towers.push([side * (146 + rand() * 6), z, 16, 30 + rand() * 60, 18]);
   // Round the Dome: the towers of Bunkyo, standing back from its plaza.
   for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2; if (Math.cos(a) < -0.55) continue; towers.push([CITY.dome.x + Math.sin(a) * (220 + rand() * 40), CITY.dome.z + Math.cos(a) * (220 + rand() * 40), 26, 40 + rand() * 90, 26]); }
+  // Tall towers step back as they rise, with a slimmer top storey on top of them.
+  const base = towers.length;
+  for (let i = 0; i < base; i++) { const [x, z, w, h, d] = towers[i]; if (h > 38 && rand() < 0.7) towers.push([x, z, w * (0.55 + rand() * 0.2), h * (0.25 + rand() * 0.25), d * (0.55 + rand() * 0.2), h]); }
   const tGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const tMesh = new THREE.InstancedMesh(tGeo, buildingMaterial(), towers.length);
   const m4 = new THREE.Matrix4(), tint = new THREE.Color();
-  const palette = [0x9aa3b5, 0xb8b2a6, 0x7c8798, 0xc9c3b8, 0x6f7a8c, 0xa69c92, 0x8d9db0];
-  towers.forEach(([x, z, w, h, d], i) => {
-    m4.makeScale(w, h, d).setPosition(x, 0, z);
+  const palette = [0x9aa3b5, 0xb8b2a6, 0x7c8798, 0xc9c3b8, 0x6f7a8c, 0xa69c92, 0x8d9db0, 0x5f7a9a, 0xd8cfc0];
+  towers.forEach(([x, z, w, h, d, y0], i) => {
+    m4.makeScale(w, h, d).setPosition(x, y0 || 0, z);
     tMesh.setMatrixAt(i, m4);
-    tMesh.setColorAt(i, tint.setHex(palette[i % palette.length]));
+    tMesh.setColorAt(i, tint.setHex(palette[(i * 7) % palette.length]));
   });
+  // Roofs: water tanks, air-conditioning units, and on the tallest an aerial with a red light.
+  const tanks = [], units = [], aerials = [];
+  for (const [x, z, w, h, d, y0] of towers) {
+    const top = (y0 || 0) + h;
+    if (z > 300 || rand() < 0.35) continue;
+    for (let k = 0; k < 2 + Math.floor(rand() * 3); k++) units.push([x + (rand() - 0.5) * w * 0.7, top, z + (rand() - 0.5) * d * 0.7, rand() * 3, 1]);
+    if (rand() < 0.5) tanks.push([x + (rand() - 0.5) * w * 0.5, top, z + (rand() - 0.5) * d * 0.5, 0, 1]);
+    if (top > 70) aerials.push([x, top, z, 0, 1]);
+  }
+  const roofStd = new THREE.MeshStandardMaterial({ color: 0x8a8e96, roughness: 0.6, metalness: 0.4 });
+  instanced(G, new THREE.BoxGeometry(1.6, 1, 1.2).translate(0, 0.5, 0), roofStd, units);
+  instanced(G, new THREE.CylinderGeometry(1.2, 1.2, 2.4, 10).translate(0, 2.2, 0), new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.8 }), tanks);
+  instanced(G, new THREE.CylinderGeometry(0.1, 0.2, 14, 5).translate(0, 7, 0), roofStd, aerials);
+  city.aerialLights = aerials.map(([x, y, z]) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0xff3030, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.set(x, y + 14.2, z); s.scale.setScalar(3); G.add(s); return s; });
   tMesh.frustumCulled = false;
   G.add(tMesh);
   city.towers = tMesh;
   rect(-200, B.x0, -200, 400); rect(B.x1, 200, -200, 400); rect(-200, 200, B.z1, 400);
+  // Parks, street trees, road markings, traffic, landmarks (citydecor.js).
+  city.decor = buildCityDecor(G, rand, rect);
   // Signs over shopfronts, in neon at night.
   const signText = [['ラーメン', '#ff5a6a'], ['カラオケ', '#5ad8ff'], ['COFFEE', '#ffd36a'], ['ゲーム', '#b47aff'], ['居酒屋', '#ff9a4a'], ['BOOKS', '#7affc0'], ['ホテル', '#ff6ad0'], ['寿司', '#ffe07a'], ['MUSIC', '#5affd8'], ['24H', '#9ab0ff']];
   let si = 0;
@@ -217,13 +247,10 @@ function buildCity() {
   city.petals.group.children[0].material.uniforms.diffuse.value.multiplyScalar(1.3);
   scene.add(city.petals.group);
   // The seawall and steps down to the beach, a lifeguard tower, a row of beach huts.
-  add(new THREE.BoxGeometry(260, 0.8, 1.2), std(0xb8b2a6), 0, 0.4, -122);
+  // A low kerb of a seawall she can step over anywhere, with wide stone steps down to the sand.
+  add(new THREE.BoxGeometry(3200, 0.3, 1.2), std(0xb8b2a6), 0, 0.15, -122);
   for (let x = -110; x <= 110; x += 44) add(new THREE.BoxGeometry(6, 0.4, 3), std(0xa8a296), x, 0.2, -123.5).castShadow = false;
-  for (let x = -110; x <= 110; x += 1.3) if (Math.abs(((x + 110) % 44) - 0) > 3.5) rect(x - 0.65, x + 0.65, -122.6, -121.4);
   add(new THREE.BoxGeometry(2.4, 0.2, 2.4), std(0xe8e2d0), 40, 3, -148); add(new THREE.BoxGeometry(0.2, 3, 0.2), std(0xe8e2d0), 40, 1.5, -148);
-  // Vending machines, glowing.
-  const vend = new THREE.MeshStandardMaterial({ color: 0xe8edf5, emissive: 0x88b8ff, emissiveIntensity: 0.6 });
-  for (const [x, z] of [[-6, -48], [24, -8], [-66, 40], [64, -60], [6, 52], [-24, 98]]) { add(new THREE.BoxGeometry(1.1, 1.9, 0.8), vend, x, 0.95, z); rect(x - 0.6, x + 0.6, z - 0.45, z + 0.45); }
   // The Tokyo Dome on the skyline: a vast white cushion of a roof, ringed with light at night.
   const domeGeo = new THREE.SphereGeometry(1, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2);
   city.domeFar = new THREE.Mesh(domeGeo, new THREE.MeshStandardMaterial({ color: 0xf2f4f8, roughness: 0.5, emissive: 0x6a7aa0, emissiveIntensity: 0.15 }));
@@ -417,6 +444,8 @@ function talk(lines, { choices = null, with: who = null, then = null } = {}) {
   playScene({
     update(dt) {
       poseAvatar(dt, cityV.set(0, 0, 0), false);
+      // Her skin follows her rig only when it's simulated: without this she'd be left behind.
+      avatar.simulate(dt);
       updateCityAmbient(dt);
       updateTalk(dt);
       if (n) {
@@ -531,8 +560,13 @@ function updateCityAmbient(dt) {
   for (const m of city.signs) m.color.setScalar(0.45 + night * 0.75);
   city.domeRing.material.color.setHSL((game.time * 0.05) % 1, 0.8, 0.35 + night * 0.35);
   scene.fog.color.setRGB(lerp(0.06, 0.66, k), lerp(0.08, 0.74, k), lerp(0.16, 0.86, k));
-  scene.fog.density = 0.0032;
+  scene.fog.density = 0.0017;
   poseCrowd(city.crowd, dt);
+  updateCityDecor(dt);
+  if (city.aerialLights) { const on = Math.floor(game.time * 0.9) % 2 === 0; for (const s of city.aerialLights) s.material.opacity = on ? 1 : 0.15; }
+  // No bow in the city: she left the wilds behind.
+  bowModel.group.visible = false;
+  if (balloonModel) balloonModel.group.visible = false;
   for (const n of Object.values(city.named)) {
     n.marker.position.set(n.person.x, 2.15 + Math.sin(game.time * 3) * 0.06, n.person.z);
     n.marker.visible = !n.hidden && idolHasNews(n.id);
@@ -620,10 +654,13 @@ function enterCity(at = CITY.landing) {
   document.body.classList.add('in-city');
   player.pos.set(at.x, CITY.y, at.z);
   player.yaw = player.bodyYaw = at.yaw !== undefined ? at.yaw : 0;
-  scene.fog.density = 0.0032;
+  scene.fog.density = 0.0017;
   survival.tool = 'bow';
   avatar.setVisible(true);
   idolSetup();
+  // Her balloon, lying where it came down on the beach.
+  if (!city.balloon && balloonModel) { city.balloon = balloonModel.group.clone(true); city.balloon.visible = true; city.group.add(city.balloon); }
+  if (city.balloon && !city.voyaging) { city.balloon.position.set(CITY.landing.x - 4, 0, CITY.landing.z - 3); city.balloon.rotation.set(0, 0.4, 0); }
   Sfx.playMusic('city');
 }
 
@@ -633,6 +670,7 @@ function leaveCity() {
   city.group.visible = false;
   world.setGroundHidden(false);
   document.body.classList.remove('in-city');
+  bowModel.group.visible = true;
   scene.fog.density = FOG_DENSITY;
   scene.fog.color.setHex(FOG_COLOR);
 }

@@ -312,6 +312,8 @@ function finishPerformance() {
   show.active = null;
   player.pos.set(P.back.x, CITY.y, P.back.z);
   player.yaw = player.bodyYaw = P.back.yaw;
+  poseAvatar(1 / 60, cityV.set(0, 0, 0), false);
+  avatar.simulate(1 / 60);
   endScene();
   Sfx.playMusic('city');
   if (P.fame) { addFame(P.fame, P.opts.kind === 'gig' ? P.opts.name : 'busking'); addYen(P.yen); }
@@ -322,11 +324,14 @@ function finishPerformance() {
 /* ---------- The voyage ---------- */
 // Leaving the crater behind: up through the clouds, out over the sea for a long while, and
 // then a coastline, a city without end, and a beach to come down on.
-const VOYAGE = { sea: 4, city: 16, descend: 30, land: 38, end: 42 };
+const VOYAGE = { sea: 3, city: 8, descend: 14, land: 19, end: 21.5 };
 function startVoyage() {
+  if (city.voyaging) return;
+  city.voyaging = true;
   buildCity();
   city.group.visible = true;
   world.setGroundHidden(true);
+  if (city.balloon) { city.group.remove(city.balloon); city.balloon = null; }
   const balloon = balloonModel.group.clone(true);
   // The original is hidden as it leaves the crater; this copy is the one that crosses the sea.
   balloon.visible = true;
@@ -363,10 +368,9 @@ function startVoyage() {
       else { camera.position.set(B.x + 14, CITY.y + 2 + B.y * 0.5, B.z - 16); camera.lookAt(B.x, CITY.y + B.y + 4, B.z); }
       setFov(50);
       once('c1', 1, () => caption('Days later. Somewhere over the sea.', 'place'));
-      once('c2', 5, () => caption('(The crater is gone behind the clouds. So is Teto. So is everything.)', 'thought'));
-      once('c3', 10, () => caption('(I have no map. No food left. Just wind, and water, and the burner hissing.)', 'thought'));
+      once('c2', 3.5, () => caption('(The crater is gone behind the clouds. So is Teto. Just wind, water, and the burner hissing.)', 'thought'));
       once('c4', VOYAGE.city, () => { caption('Land.', 'place'); Sfx.dawnChime(); });
-      once('c5', VOYAGE.city + 4, () => caption('(A city. A city that goes on and on, all the way to the edge of the sky.)', 'thought'));
+      once('c5', VOYAGE.city + 2.5, () => caption('(A city. A city that goes on and on, all the way to the edge of the sky.)', 'thought'));
       once('c6', VOYAGE.descend, () => caption('(Down. Gently. Please, gently...)', 'thought'));
       once('land', VOYAGE.land, () => { caption(''); Sfx.snowSlam(); burst(new THREE.Vector3(B.x, CITY.y + 0.4, B.z), 0xe6d3a8, 40, 5); });
       once('fade', VOYAGE.land + 1.5, () => $('sleep-fade').classList.add('on'));
@@ -375,6 +379,7 @@ function startVoyage() {
         $('sleep-fade').classList.remove('on');
         balloon.position.set(CITY.landing.x - 4, 0, CITY.landing.z - 3);
         city.balloon = balloon;
+        city.voyaging = false;
         game.state = 'playing';
         enterCity({ x: CITY.landing.x + 1, z: CITY.landing.z + 3, yaw: 0 });
         $('hud').classList.remove('hidden');
