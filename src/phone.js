@@ -374,7 +374,8 @@ function buildPhone() {
   el.className = 'hidden';
   el.innerHTML = '<div class="ph-screen"><div class="ph-status"><b class="ph-time"></b><span class="ph-icons">▂▄▆ 🔋</span></div><div class="ph-body"></div><button class="ph-home" title="Home"></button></div>';
   document.body.appendChild(el);
-  el.addEventListener('click', phoneClick);
+  // Pressed, not clicked: a press can't be lost when the screen refreshes under the cursor.
+  el.addEventListener('pointerdown', (e) => { if (e.button === 0) phoneClick(e); });
   el.addEventListener('mousedown', (e) => e.stopPropagation());
   phone.el = el;
   // Clicking the world puts the phone away.
@@ -581,6 +582,7 @@ function updatePhone(dt) {
       }
       phone.el.querySelector('.ph-time').textContent = dayNight.clock();
     } else if (phone.app === 'map') { const c = phone.el.querySelector('canvas'); if (c) drawCityMap(c, null); }
-    else if (phone.app === 'home' || phone.app === 'startube') { const s = phone.el.querySelector('.ph-scroll'); const top = s ? s.scrollTop : 0; renderPhone(); const s2 = phone.el.querySelector('.ph-scroll'); if (s2) s2.scrollTop = top; }
+    else if (phone.app === 'home') { const c = phone.el.querySelector('.ph-clock'); if (c) c.textContent = dayNight.clock(); phone.el.querySelector('.ph-time').textContent = dayNight.clock(); }
+    else if (phone.app === 'startube' && (phone.slow = (phone.slow || 0) + 1) % 15 === 0) { const s = phone.el.querySelector('.ph-scroll'); const top = s ? s.scrollTop : 0; renderPhone(); const s2 = phone.el.querySelector('.ph-scroll'); if (s2) s2.scrollTop = top; }
   }
 }

@@ -83,7 +83,7 @@ function buildingMaterial() {
           float flick = 0.85 + 0.15 * hash(vec3(bayN + seed * 3.0, floorN, 7.0));
           vec3 warm = mix(vec3(1.0, 0.8, 0.52), vec3(0.78, 0.9, 1.0), step(0.7, hash(vec3(floorN, bayN + seed, 3.0))));
           if (hash(vec3(bayN + seed * 3.0, floorN, 11.0)) > 0.96) warm = vec3(0.5, 0.6, 1.0); // a television
-          vec3 night = warm * lit * flick * (1.0 - uDay) * 1.7;
+          vec3 night = warm * lit * flick * (1.0 - uDay) * 0.8;
           // Glass: the sky reflected in it, brighter at a glancing angle.
           float fres = pow(1.0 - max(dot(V, n), 0.0), 2.5);
           vec3 refl = mix(uSky * 0.55, uSky * 1.25 + 0.1, fres) * (0.25 + 0.75 * uDay);
@@ -130,7 +130,7 @@ function buildingMaterial() {
             vec3 awning = shop < 0.25 ? vec3(0.82, 0.18, 0.2) : shop < 0.5 ? vec3(0.12, 0.5, 0.62) : shop < 0.75 ? vec3(0.95, 0.68, 0.18) : vec3(0.28, 0.55, 0.3);
             float mull = step(0.05, fract(u / 3.5));
             vec3 inside = mix(vec3(0.98, 0.84, 0.62), vec3(0.75, 0.92, 1.0), step(0.5, hash(vec3(floor(u / 7.0), 3.0, 1.0))));
-            vec3 front = mix(vec3(0.07, 0.08, 0.1), inside * (0.45 + 1.2 * (1.0 - uDay)) * 0.85 + refl * 0.3, mull * step(0.25, y) * step(y, 3.4));
+            vec3 front = mix(vec3(0.07, 0.08, 0.1), inside * (0.4 + 0.55 * (1.0 - uDay)) * 0.8 + refl * 0.3, mull * step(0.25, y) * step(y, 3.4));
             float stripe = step(0.5, fract(u / 1.2));
             col = y > 3.8 ? mix(awning, awning * 1.25 + 0.1, stripe) * (0.5 + 0.6 * uDay) : front;
           }
@@ -247,6 +247,7 @@ function buildCity() {
   }
   // The buildings she can go into (interiors.js).
   buildLots(G, towers, rect);
+  buildTokyo(G, towers, rand, rect);
   // A wall of towers along the north edge, so the city goes on beyond where she can walk.
   for (let x = -140; x <= 140; x += 22) towers.push([x, 162 + rand() * 6, 18, 40 + rand() * 80, 14]);
   for (let x = -200; x <= 200; x += 30) towers.push([x, 230 + rand() * 60, 24, 60 + rand() * 120, 24]);
@@ -410,19 +411,33 @@ function buildCrowd(count) {
     hair: new THREE.SphereGeometry(0.145, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62),
     // Faces, and for the girls: a flared skirt, long hair down the back, two tails (or one
     // ponytail), a bow.
-    eyeL: new THREE.SphereGeometry(0.026, 8, 6).scale(1, 1.45, 0.55),
-    eyeR: new THREE.SphereGeometry(0.026, 8, 6).scale(1, 1.45, 0.55),
+    eyeL: new THREE.SphereGeometry(0.022, 8, 6).scale(0.9, 1.5, 0.5),
+    eyeR: new THREE.SphereGeometry(0.022, 8, 6).scale(0.9, 1.5, 0.5),
     skirt: new THREE.CylinderGeometry(0.19, 0.31, 0.36, 16, 1, true).translate(0, -0.16, 0),
     hairLong: new THREE.CylinderGeometry(0.15, 0.12, 0.5, 12, 1, true, Math.PI * 0.6, Math.PI * 0.8).translate(0, -0.22, 0),
     tailL: new THREE.CylinderGeometry(0.09, 0.03, 0.78, 10).translate(0, -0.37, 0),
     tailR: new THREE.CylinderGeometry(0.09, 0.03, 0.78, 10).translate(0, -0.37, 0),
     bow: new THREE.BoxGeometry(0.2, 0.08, 0.05),
+    // Everyone: a neck, hands, shoes, a fringe, a mouth. Some: boots, a suit jacket and tie,
+    // a bag.
+    neck: new THREE.CylinderGeometry(0.045, 0.05, 0.14, 8).translate(0, 0.07, 0),
+    handL: new THREE.SphereGeometry(0.045, 8, 6).scale(0.85, 1.25, 0.75),
+    handR: new THREE.SphereGeometry(0.045, 8, 6).scale(0.85, 1.25, 0.75),
+    shoeL: new THREE.BoxGeometry(0.11, 0.08, 0.24).translate(0, 0.04, 0.04),
+    shoeR: new THREE.BoxGeometry(0.11, 0.08, 0.24).translate(0, 0.04, 0.04),
+    bootL: new THREE.CylinderGeometry(0.072, 0.066, 0.44, 10).translate(0, 0.22, 0),
+    bootR: new THREE.CylinderGeometry(0.072, 0.066, 0.44, 10).translate(0, 0.22, 0),
+    bangs: new THREE.SphereGeometry(0.152, 18, 6, Math.PI / 2 - 0.75, 1.5, Math.PI * 0.18, Math.PI * 0.17),
+    mouth: new THREE.SphereGeometry(0.016, 6, 4).scale(1.6, 0.45, 0.4),
+    coat: new THREE.CylinderGeometry(0.205, 0.2, 0.7, 14, 1, true, 0.35, Math.PI * 2 - 0.7).scale(1, 1, 0.64).translate(0, 0.27, 0),
+    tie: new THREE.BoxGeometry(0.05, 0.32, 0.02),
+    bag: new THREE.BoxGeometry(0.3, 0.22, 0.09),
   };
   const meshes = {};
   for (const [k, geo] of Object.entries(parts)) {
-    const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: k.startsWith('eye') ? 0.3 : 0.8, side: k === 'skirt' || k === 'hairLong' ? THREE.DoubleSide : THREE.FrontSide }), count);
+    const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: k.startsWith('eye') ? 0.25 : k === 'bag' || k.startsWith('shoe') || k.startsWith('boot') ? 0.45 : 0.8, side: k === 'skirt' || k === 'hairLong' || k === 'coat' || k === 'bangs' ? THREE.DoubleSide : THREE.FrontSide }), count);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    m.castShadow = true;
+    m.castShadow = ['body', 'legL', 'legR', 'head', 'hair', 'skirt', 'coat', 'hairLong'].includes(k);
     m.frustumCulled = false;
     m.count = 0;
     city.group.add(m);
@@ -448,6 +463,9 @@ function addPerson(crowd, look) {
   const set = (k, hex) => crowd.meshes[k].setColorAt(i, c.setHex(hex));
   set('legL', look.legs); set('legR', look.legs); set('body', look.top); set('armL', look.top); set('armR', look.top); set('head', look.skin); set('hair', look.hair);
   set('eyeL', look.eyes || 0x1a1a24); set('eyeR', look.eyes || 0x1a1a24); set('skirt', look.skirt || look.legs); set('hairLong', look.hair); set('tailL', look.hair); set('tailR', look.hair); set('bow', look.bow || look.top);
+  for (const k of ['neck', 'handL', 'handR']) set(k, look.skin);
+  set('shoeL', look.shoes || 0x1a1a1e); set('shoeR', look.shoes || 0x1a1a1e); set('bootL', look.boots || 0x1a1a1e); set('bootR', look.boots || 0x1a1a1e);
+  set('bangs', look.hair); set('mouth', 0xb8606a); set('coat', look.coat || look.top); set('tie', look.tie || 0x8a2a3a); set('bag', look.bag || 0x3a2a24);
   for (const m of Object.values(crowd.meshes)) { m.count = crowd.people.length; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   return p;
 }
@@ -462,6 +480,12 @@ function randomLook(rand = Math.random) {
     look.scale = 0.9 + rand() * 0.08;
     if (rand() < 0.3) look.bow = pick([0xff8ab8, 0xffffff, 0x39d5c8, 0xd8302f]);
   }
+  // Tokyo's office crowd: dark suits, white shirts, a tie; and half the city carries a bag.
+  if (!look.girl && rand() < 0.4) { look.coat = pick([0x22242a, 0x2b3240, 0x3a3e4a, 0x1e2a3e]); look.top = pick([0xf4f4f6, 0xe8eef6, 0xdde6f0]); look.legs = look.coat; look.tie = pick([0x8a2a3a, 0x2a4a8a, 0x3a5a4a, 0x6a4a8a]); look.shoes = 0x14141a; }
+  if (look.girl && rand() < 0.35) look.boots = pick([0x1a1a1e, 0x5a3a2a, 0xf0f0f0]);
+  if (look.girl && rand() < 0.2) look.coat = pick([0xd8c0a0, 0x8a6a4a, 0xe8e2d6]);
+  if (rand() < 0.45) look.bag = pick([0x3a2a24, 0x1a1a1e, 0xd8a0b8, 0x8a6a4a, 0xf0f0f0]);
+  if (!look.shoes) look.shoes = pick([0x1a1a1e, 0xf0f0f0, 0x5a3a2a, 0x2b3a5a]);
   return look;
 }
 
@@ -521,7 +545,7 @@ function poseCrowd(crowd, dt) {
     placePart(M.armR, p.i, rx, y + 0.56 * s, rz, p.yaw, swing + up, s);
     placePart(M.head, p.i, p.x, y + 0.75 * s, p.z, p.yaw, 0, s);
     placePart(M.hair, p.i, p.x, y + 0.77 * s, p.z, p.yaw, p.look.girl ? -0.06 : -0.25, s * (p.look.girl ? 1.04 : 1));
-    poseLook(M, p, y, s, cos, sin);
+    poseLook(M, p, y, s, cos, sin, swing, -swing + (p.cheer > 0 ? up : 0), swing + up);
     p.wave = Math.max(0, p.wave - dt);
   }
   for (const m of Object.values(M)) m.instanceMatrix.needsUpdate = true;
@@ -728,6 +752,7 @@ function updateCity(dt) {
   updateNav();
   updatePhone(dt);
   updateInteriors();
+  updateTokyo(dt);
   // The city's music follows the clock: bright pop by day, a late-night piano after dark.
   if (!show.active && (Sfx.trackName === 'city' || Sfx.trackName === 'cityNight')) Sfx.playMusic(cityMusic());
 }
@@ -876,12 +901,28 @@ function cityOnRoad(x, z) {
 
 // The face and, for the girls, the skirt, the hair and the bow.
 const LOOK_HIDE = -60;
-function poseLook(M, p, y, s, cos, sin) {
+function poseLook(M, p, y, s, cos, sin, swing = 0, armL = 0, armR = 0) {
   const hy = y + 0.75 * s, L = p.look, g = L.girl, i = p.i;
   const at = (fwd, right, up) => [p.x + sin * fwd * s + cos * right * s, hy + up * s, p.z + cos * fwd * s - sin * right * s];
   const hide = (m) => placePart(m, i, p.x, LOOK_HIDE, p.z, 0, 0, 0.0001);
-  let q = at(0.141, 0.047, -0.004); placePart(M.eyeL, i, q[0], q[1], q[2], p.yaw, 0, s);
-  q = at(0.141, -0.047, -0.004); placePart(M.eyeR, i, q[0], q[1], q[2], p.yaw, 0, s);
+  const es = s * (g ? 1.08 : 0.92);
+  let q = at(0.14, 0.055, -0.012); placePart(M.eyeL, i, q[0], q[1], q[2], p.yaw, 0, es);
+  q = at(0.14, -0.055, -0.012); placePart(M.eyeR, i, q[0], q[1], q[2], p.yaw, 0, es);
+  // Hands at the ends of the arms, shoes (or boots) at the ends of the legs, wherever the
+  // swing has taken them.
+  const limb = (m, right, up, len, rx, sc = s) => { const fw = -len * Math.sin(rx), dn = -len * Math.cos(rx); placePart(m, i, p.x + cos * right * s + sin * fw * s, y + (up + dn) * s, p.z - sin * right * s + cos * fw * s, p.yaw, rx, sc); };
+  limb(M.handL, 0.25, 0.56, 0.6, armL); limb(M.handR, -0.25, 0.56, 0.6, armR);
+  const foot = (m, right, rx) => { const fw = -0.8 * Math.sin(rx); placePart(m, i, p.x + cos * right * s + sin * fw * s, y - 0.8 * Math.cos(rx) * s, p.z - sin * right * s + cos * fw * s, p.yaw, 0, s); };
+  if (L.boots) { foot(M.bootL, 0.1, swing); foot(M.bootR, -0.1, -swing); hide(M.shoeL); hide(M.shoeR); }
+  else { foot(M.shoeL, 0.1, swing); foot(M.shoeR, -0.1, -swing); hide(M.bootL); hide(M.bootR); }
+  placePart(M.neck, i, p.x, y + 0.58 * s, p.z, p.yaw, 0, s);
+  q = at(0, 0, 0.005); placePart(M.bangs, i, q[0], q[1], q[2], p.yaw, 0, s * (g ? 1.03 : 0.98));
+  q = at(0.128, 0, -0.06); placePart(M.mouth, i, q[0], q[1], q[2], p.yaw, 0, s);
+  if (L.coat) { placePart(M.coat, i, p.x, y, p.z, p.yaw, 0, s); q = [p.x + sin * 0.115 * s, y + 0.4 * s, p.z + cos * 0.115 * s]; placePart(M.tie, i, q[0], q[1], q[2], p.yaw, 0, s); }
+  else { hide(M.coat); hide(M.tie); }
+  // A bag in the right hand, swinging with it.
+  if (L.bag) { const fw = -0.66 * Math.sin(armR); placePart(M.bag, i, p.x - cos * 0.3 * s + sin * fw * s, y + (0.56 - 0.66 * Math.cos(armR)) * s, p.z + sin * 0.3 * s + cos * fw * s, p.yaw + Math.PI / 2, 0, s); }
+  else hide(M.bag);
   if (!g) { hide(M.skirt); hide(M.hairLong); hide(M.tailL); hide(M.tailR); hide(M.bow); return; }
   placePart(M.skirt, i, p.x, y + 0.06 * s, p.z, p.yaw, 0, s);
   const sway = Math.sin(p.phase * 0.5 + game.time * 1.5) * 0.06;

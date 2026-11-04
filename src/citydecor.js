@@ -211,19 +211,23 @@ function buildCars(G, rand) {
   const cabin = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.6, 2.2).translate(0, 1.3, -0.2), new THREE.MeshStandardMaterial({ color: 0x1c2430, roughness: 0.1, metalness: 0.6 }), n);
   const heads = new THREE.InstancedMesh(new THREE.BoxGeometry(1.5, 0.16, 0.05).translate(0, 0.7, 2.12), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff4d8).multiplyScalar(1.5), toneMapped: false }), n);
   const tails = new THREE.InstancedMesh(new THREE.BoxGeometry(1.5, 0.14, 0.05).translate(0, 0.75, -2.12), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2030).multiplyScalar(1.5), toneMapped: false }), n);
+  // Taxis: every fourth car, black or yellow, with the lit sign on the roof.
+  const roofs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.62, 0.24, 0.32).translate(0, 1.72, -0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffe080).multiplyScalar(1.4), toneMapped: false }), n);
+  roofs.instanceMatrix.setUsage(THREE.DynamicDrawUsage); roofs.frustumCulled = false; G.add(roofs);
   const c = new THREE.Color();
   for (const m of [body, cabin, heads, tails]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.castShadow = m === body; m.frustumCulled = false; G.add(m); }
   const cars = [];
   const avenues = [-120, -60, 0, 60, 120], streets = [-112, -50, 0, 50, 100];
   for (let i = 0; i < n; i++) {
-    body.setColorAt(i, c.setHex(colors[i % colors.length]));
+    const taxi = i % 4 === 1;
+    body.setColorAt(i, c.setHex(taxi ? (i % 8 === 1 ? 0x14161c : 0xf0c030) : colors[i % colors.length]));
     // Each drives one lane down an avenue or along a street, and wraps round at the end.
     const alongZ = i % 2 === 0;
     const line = alongZ ? avenues[1 + (i % 3)] : streets[1 + (i % 4)];
     const dir = (i >> 1) % 2 ? 1 : -1;
-    cars.push({ alongZ, line: line + dir * 2, dir, s: rand() * 260 - 130, speed: 7 + rand() * 4, v: 0 });
+    cars.push({ alongZ, line: line + dir * 2, dir, s: rand() * 260 - 130, speed: 7 + rand() * 4, v: 0, taxi });
   }
-  return { body, cabin, heads, tails, cars, m4: new THREE.Matrix4(), q: new THREE.Quaternion(), e: new THREE.Euler(), p: new THREE.Vector3(), one: new THREE.Vector3(1, 1, 1) };
+  return { body, cabin, heads, tails, roofs, zero: new THREE.Matrix4().makeScale(0, 0, 0), cars, m4: new THREE.Matrix4(), q: new THREE.Quaternion(), e: new THREE.Euler(), p: new THREE.Vector3(), one: new THREE.Vector3(1, 1, 1) };
 }
 
 function updateCars(dt, D) {
@@ -234,7 +238,7 @@ function updateCars(dt, D) {
     // Stop for her if she's standing in the lane just ahead.
     const ahead = car.alongZ ? (player.pos.z - CITY.y * 0 - z) * car.dir : (player.pos.x - x) * car.dir;
     const across = car.alongZ ? Math.abs(player.pos.x - x) : Math.abs(player.pos.z - z);
-    const blocked = !show.active && across < 1.8 && ahead > 0 && ahead < 9;
+    const blocked = (!show.active && across < 1.8 && ahead > 0 && ahead < 9) || scrambleStops(car, x, z);
     car.v += ((blocked ? 0 : car.speed) - car.v) * (1 - Math.exp(-dt * (blocked ? 6 : 1.5)));
     car.s += car.v * car.dir * dt;
     const lo = car.alongZ ? -108 : -118, hi = car.alongZ ? 144 : 118;
@@ -243,8 +247,9 @@ function updateCars(dt, D) {
     C.q.setFromEuler(C.e);
     C.m4.compose(C.p.set(x, 0, z), C.q, C.one);
     for (const m of [C.body, C.cabin, C.heads, C.tails]) m.setMatrixAt(i, C.m4);
+    C.roofs.setMatrixAt(i, car.taxi ? C.m4 : C.zero);
   }
-  for (const m of [C.body, C.cabin, C.heads, C.tails]) m.instanceMatrix.needsUpdate = true;
+  for (const m of [C.body, C.cabin, C.heads, C.tails, C.roofs]) m.instanceMatrix.needsUpdate = true;
 }
 
 // On the horizon: Mt. Fuji to the west, a red-and-white broadcast tower over the rooftops, and a

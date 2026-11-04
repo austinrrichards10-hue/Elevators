@@ -105,6 +105,13 @@ The balloon carries her over the clouds and out across the sea for a long while,
   - **The konbini** sells snacks and things for the stage: throat lozenges warm the crowd up, an energy drink makes the timing kinder, a pack of penlights brings a bigger busking crowd, and Idol Weekly gives a little fame once a day.
   - **Finding people indoors**: the guide arrow, the map and the phone send you to the right door when the person you need is inside.
 - **In the city** Miku has no bow or axe, sprinting costs no stamina, and nobody stands about in the road.
+- **Tokyo itself**:
+  - **The scramble crossing** in front of the station: the traffic stops, the walk signal chirps, and a crowd of forty crosses from every corner at once.
+  - **An elevated commuter railway** runs over the city on a concrete viaduct, with lamps underneath. Silver trains with a green stripe and lit windows rumble across it every minute or so.
+  - **The neon**: vertical signs stacked down the sides of the buildings (karaoke, izakaya, ramen, manga cafe...) and lit billboards on the rooftops, all glowing brighter after dark.
+  - **The side streets** have utility poles with sagging power lines, and the roads have black and yellow taxis with lit roof signs.
+  - **Sakura petals** drift on the air everywhere.
+- **The people** have faces (eyes and a mouth), necks, hands, shoes and fringes, and walk with their arms swinging. Girls wear flared skirts and some wear tall boots, with long hair, bobs, twin tails or ponytails, and bows. Office workers wear suit jackets and ties, and plenty of people carry a bag.
 - **Her hair**, cut short in the fight with Teto, grows back as you play and as she rises, and it's full again by the rematch.
 - **The music in the city** follows the clock: bright pop in the daytime, a late-night piano after dark.
 - **The story**: Old Gen the fisherman, Haru the busker, Mrs. Ishida's capsule hotel. A scout from Starlight Production, an audition, and three girls who need a fourth: Aoi, Kotone and Mirai. You name the group. Stages from an 80-person basement to a TV show, a beach festival and a 10,000-seat arena, one show a day. And on every screen, another rookie climbing just as fast: Teto. You meet her backstage, and again on the beach the night before the Idol Summit at the Tokyo Dome.
@@ -165,6 +172,7 @@ src/
   phone.js       The phone (P): messages, quests, map, StarTube, Chirp, wallpapers; fans; interface scale
   dome.js        Inside the Tokyo Dome: the crowd and their penlights, the lights, lasers and screens
   interiors.js   The buildings she can go into: capsule hotel, agency, apartment, gas station and konbini
+  tokyo.js       The scramble crossing, elevated railway, vertical neon, billboards, power lines and petals
   idol.js        Part two's story: fame, quests, the group, Teto
   stage.js       Busking and the stages, the voyage over the sea, the Tokyo Dome
   songs.js       The idol songs, their lyrics and the synthesized voice
