@@ -4,7 +4,7 @@ A third-person survival game in a vast frozen, fog-bound forest. Your plane goes
 
 The way out was left by Dr. Ilse Varga, a weather scientist stranded here in 1980. She worked out that the Breath, a column of warm air rising from the crater's centre, could carry a hot air balloon over the rim. She hid ten balloon parts at ten sites around the crater, each under a red flag with a page of her journal. Find all ten, bring them and 10 planks to her launch frame at the Breath, and get ready to fly out. This is part one of the story; it ends at the balloon.
 
-Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it. The game saves itself every time you sit down by a campfire, and **Load last save** on the title screen picks up from there. The title screen shows Miku and Teto (the image is in `assets/title.jpg`) with its own piano theme. Out in the forest you hear the wind in layers, gusts whistling through the pines and ice cracking far off, under a slow, lonely piano; Teto's fight keeps its own music.
+**To play, download `game.exe` and double-click it** (Windows). It unpacks the game into a `Frostmourne` folder next to itself and opens it in its own window (with Edge or Chrome). The `phone-wallpapers` and `phone-videos` folders are in there too. Windows may warn that it's from an unknown publisher: choose **More info, Run anyway**. Or open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The Character room on the title screen lets you orbit and zoom around the character to inspect it. The game saves itself every time you sit down by a campfire, and **Load last save** on the title screen picks up from there. The title screen shows Miku and Teto (the image is in `assets/title.jpg`) with its own piano theme. Out in the forest you hear the wind in layers, gusts whistling through the pines and ice cracking far off, under a slow, lonely piano; Teto's fight keeps its own music.
 
 | Input | Action |
 | --- | --- |
@@ -174,6 +174,7 @@ src/
   dome.js        Inside the Tokyo Dome: the crowd and their penlights, the lights, lasers and screens
   interiors.js   The buildings she can go into: capsule hotel, agency, apartment, gas station and konbini
   tokyo.js       The scramble crossing, elevated railway, vertical neon, billboards, power lines and petals
+  tools/         build-exe.ps1 and launcher.cs: build game.exe, the whole game in one Windows program
   idol.js        Part two's story: fame, quests, the group, Teto
   stage.js       Busking and the stages, the voyage over the sea, the Tokyo Dome
   songs.js       The idol songs, their lyrics and the synthesized voice
