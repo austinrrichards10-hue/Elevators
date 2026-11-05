@@ -15,11 +15,11 @@ function buildNorthside(G, towers) {
   const back = NORTH.back = east ? east[1] + east[4] / 2 : 172;
   const DX = NORTH.dx;
   ROOMS.deep.door = { x: DX, z: back + 1.6 };
-  // Plain ground through the gap and along the back, and a plain wall closing it off: from
-  // the street it looks like any gap between buildings.
-  const ground = std(0x44464c);
-  add(new THREE.PlaneGeometry(4, back - NORTH.edge + 4).rotateX(-Math.PI / 2), ground, 3, 0.02, (NORTH.edge + back + 4) / 2);
-  add(new THREE.PlaneGeometry(23.5, 4).rotateX(-Math.PI / 2), ground, 11.75, 0.021, back + 2);
+  // The same paving as every pavement in the city, at the same height.
+  const paving = (w, d) => { const t = paveTexture(); t.repeat.set(w / 3.7, d / 3.7); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }); };
+  const gapLen = back - NORTH.edge + 4;
+  add(new THREE.PlaneGeometry(4, gapLen).rotateX(-Math.PI / 2), paving(4, gapLen), 3, 0.14, (NORTH.edge + back + 4) / 2).receiveShadow = true;
+  add(new THREE.PlaneGeometry(23.5, 4).rotateX(-Math.PI / 2), paving(23.5, 4), 11.75, 0.141, back + 2).receiveShadow = true;
   // Behind the walkway, another ordinary building, windows and shopfronts like all the rest,
   // so looking down the gap just shows more city.
   towers.push([11.5, back + 9.6, 26, 26 + (back % 1) * 30, 11]);
@@ -465,6 +465,56 @@ function probeDeepVideos() {
     }
     renderRemote();
   })();
+  loadSavedTapes();
+}
+
+/* ---------- Tapes that stay ---------- */
+// Videos loaded with the remote are kept in the browser's own storage, so they're there the
+// next time, without loading them again. They can be deleted one by one, or all at once.
+const TAPE_DB = 'frostmourne-tapes';
+function tapeDb() {
+  return new Promise((res, rej) => { const r = indexedDB.open(TAPE_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore('tapes', { keyPath: 'id' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function tapeStore(mode, fn) {
+  const db = await tapeDb();
+  return new Promise((res, rej) => { const tx = db.transaction('tapes', mode); const q = fn(tx.objectStore('tapes')); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); });
+}
+async function loadSavedTapes() {
+  try {
+    const all = (await tapeStore('readonly', (s) => s.getAll())) || [];
+    all.sort((a, b) => a.added - b.added);
+    for (const t of all) if (!deep.list.some((x) => x.id === t.id)) deep.list.push({ id: t.id, name: t.name, src: URL.createObjectURL(t.blob), saved: true });
+    renderRemote();
+  } catch { /* no storage here: tapes last until the page closes */ }
+}
+async function saveTapes(files) {
+  const added = [];
+  for (const f of files) {
+    const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: f.name, src: URL.createObjectURL(f), saved: false };
+    deep.list.push(item); added.push(item);
+    try { await tapeStore('readwrite', (s) => s.put({ id: item.id, name: f.name, blob: f, added: Date.now() })); item.saved = true; } catch { /* too big or no space: plays this time only */ }
+  }
+  renderRemote();
+  return added;
+}
+async function deleteTape(i) {
+  const t = deep.list[i];
+  if (!t || !t.saved) return;
+  if (deep.video && deep.idx === i) stopDeepVideo();
+  try { await tapeStore('readwrite', (s) => s.delete(t.id)); } catch { /* fine */ }
+  URL.revokeObjectURL(t.src);
+  deep.list.splice(i, 1);
+  if (deep.idx > i) deep.idx--;
+  renderRemote();
+}
+async function deleteAllTapes() {
+  if (deep.video && deep.list[deep.idx] && deep.list[deep.idx].saved) stopDeepVideo();
+  try { await tapeStore('readwrite', (s) => s.clear()); } catch { /* fine */ }
+  for (const t of deep.list) if (t.saved) URL.revokeObjectURL(t.src);
+  deep.list = deep.list.filter((t) => !t.saved);
+  deep.idx = 0;
+  deep.confirmAll = false;
+  renderRemote();
 }
 
 function openRemote() {
@@ -478,7 +528,7 @@ function openRemote() {
       e.preventDefault();
       remoteAction(b.dataset.r, b.dataset.i);
     });
-    el.addEventListener('change', (e) => { if (e.target.matches('[data-rpick]')) { for (const f of e.target.files) deep.list.push({ src: URL.createObjectURL(f), name: f.name }); renderRemote(); if (!deep.video && deep.list.length) playDeep(deep.list.length - e.target.files.length); } });
+    el.addEventListener('change', async (e) => { if (!e.target.matches('[data-rpick]')) return; const added = await saveTapes([...e.target.files]); if (!deep.video && added.length) playDeep(deep.list.indexOf(added[0])); });
     el.addEventListener('mousedown', (e) => e.stopPropagation());
   }
   el.classList.remove('hidden');
@@ -493,13 +543,14 @@ function renderRemote() {
   if (!el || el.classList.contains('hidden')) return;
   const v = deep.video;
   el.innerHTML = `<div class="rm-top"><i></i><b>B215</b><span>${v ? (v.paused ? 'PAUSED' : 'PLAYING') : 'NO TAPE'}</span></div>
-    <div class="rm-screen">${deep.list.length ? deep.list.map((x, i) => `<button data-r="play" data-i="${i}" class="${v && deep.idx === i ? 'on' : ''}">${String(i + 1).padStart(2, '0')} · ${x.name.replace(/[<>&"]/g, '')}</button>`).join('') : '<p>No tapes.<br>Put videos in the <b>videos</b> folder (1.mp4, 2.mp4...) or load them.</p>'}</div>
+    <div class="rm-screen">${deep.list.length ? deep.list.map((x, i) => `<div class="rm-row"><button data-r="play" data-i="${i}" class="${v && deep.idx === i ? 'on' : ''}">${String(i + 1).padStart(2, '0')} · ${x.name.replace(/[<>&"]/g, '')}</button>${x.saved ? `<button data-r="del" data-i="${i}" class="rm-del" title="Delete this saved tape">✕</button>` : ''}</div>`).join('') : '<p>No tapes.<br>Put videos in the <b>videos</b> folder (1.mp4, 2.mp4...) or load them. Loaded tapes are kept for next time.</p>'}</div>
     <div class="rm-pad">
       <button data-r="prev" title="Previous">⏮</button><button data-r="toggle" class="big" title="Play / pause (Space)">${v && !v.paused ? '❚❚' : '▶'}</button><button data-r="next" title="Next">⏭</button>
       <button data-r="back" title="Back 10 s">-10</button><button data-r="loop" class="${deep.loop ? 'on' : ''}" title="Loop">⟲</button><button data-r="fwd" title="Forward 10 s">+10</button>
       <button data-r="vdown" title="Quieter">−</button><span class="vol">${Math.round((deep.vol ?? 1) * 100)}</span><button data-r="vup" title="Louder">+</button>
     </div>
     <label class="rm-load">⏏ Load videos…<input type="file" accept="video/*" multiple data-rpick></label>
+    ${deep.list.some((x) => x.saved) ? `<button data-r="delall" class="rm-delall${deep.confirmAll ? ' sure' : ''}">${deep.confirmAll ? 'Tap again to delete all saved tapes' : '🗑 Delete saved tapes'}</button>` : ''}
     <button data-r="stand" class="rm-stand">Stand up</button>`;
 }
 function remoteAction(a, i) {
@@ -514,6 +565,12 @@ function remoteAction(a, i) {
   else if (a === 'loop') { deep.loop = !deep.loop; if (v) v.loop = deep.loop; }
   else if (a === 'vup' || a === 'vdown') { deep.vol = clamp((deep.vol ?? 1) + (a === 'vup' ? 0.1 : -0.1), 0, 1); if (v) v.volume = deep.vol; }
   else if (a === 'stand') { standUpDeep(); lockPointer(); return; }
+  else if (a === 'del') { deleteTape(+i); return; }
+  else if (a === 'delall') {
+    // Two taps: the first asks, the second deletes. It forgets the question after a few seconds.
+    if (deep.confirmAll) { deleteAllTapes(); return; }
+    deep.confirmAll = true; clearTimeout(deep.confirmT); deep.confirmT = setTimeout(() => { deep.confirmAll = false; renderRemote(); }, 4000);
+  }
   setTimeout(renderRemote, 30);
 }
 // The tape goes on the big screen; the drone sinks away under it.
