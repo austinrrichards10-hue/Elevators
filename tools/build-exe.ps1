@@ -7,8 +7,6 @@ if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 $stage = Join-Path $work 'stage'
 New-Item -ItemType Directory -Force $stage | Out-Null
 foreach ($item in @('index.html', 'README.md', 'src', 'models', 'assets', 'phone-wallpapers')) { Copy-Item -Recurse (Join-Path $game $item) $stage }
-New-Item -ItemType Directory -Force (Join-Path $stage 'phone-videos') | Out-Null
-Copy-Item (Join-Path $game 'phone-videos\PUT YOUR VIDEOS HERE.txt') (Join-Path $stage 'phone-videos')
 $zip = Join-Path $work 'game.zip'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)

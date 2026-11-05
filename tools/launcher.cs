@@ -1,6 +1,6 @@
 // Frostmourne: a one-file launcher. The whole game is packed inside this program. The first
 // time it runs (or when it's a newer version), it unpacks the game into a "Frostmourne" folder
-// next to itself, then opens it in its own window. The player's phone wallpapers and videos
+// next to itself, then opens it in its own window. The player's phone wallpapers
 // in that folder are never touched.
 using System;
 using System.Diagnostics;
@@ -44,8 +44,8 @@ static class Launcher
                 string path = Path.GetFullPath(Path.Combine(root, e.FullName));
                 if (!path.StartsWith(full, StringComparison.OrdinalIgnoreCase)) continue;
                 if (e.FullName.EndsWith("/") || e.Name.Length == 0) { Directory.CreateDirectory(path); continue; }
-                // The player's own pictures and videos stay as they are.
-                bool userFolder = e.FullName.StartsWith("phone-wallpapers/") || e.FullName.StartsWith("phone-videos/");
+                // The player's own pictures stay as they are.
+                bool userFolder = e.FullName.StartsWith("phone-wallpapers/");
                 if (userFolder && File.Exists(path)) continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 e.ExtractToFile(path, true);
