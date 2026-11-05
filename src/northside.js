@@ -54,7 +54,8 @@ function northClamp(pos) {
   // Along the back of the tower.
   if (pos.z > N.back + 0.3 && pos.x > N.gx0 - 0.3 && pos.x < N.wx1 + 0.5) {
     pos.x = clamp(pos.x, N.gx0, N.wx1);
-    pos.z = clamp(pos.z, N.back + 0.6, N.back + 3.4);
+    // Off the tower's back wall, except where the gap opens: there she can step back into it.
+    pos.z = clamp(pos.z, pos.x <= N.gx1 ? N.back : N.back + 0.6, N.back + 3.4);
     return true;
   }
   // Through the gap: from the pavement's edge, so the city's own boundary never pushes back.
