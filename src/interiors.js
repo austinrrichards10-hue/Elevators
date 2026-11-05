@@ -21,6 +21,8 @@ const ROOMS = {
   apartment: { name: 'your apartment', w: 12, d: 10, h: 3.3, door: { x: 74, z: -53.6 }, entry: { x: -4, z: -3.8 }, open: () => has('apartment'), locked: 'Maison Hoshizora. Somebody else lives here... for now.' },
   agency: { name: 'Starlight Production', w: 18, d: 16, h: 4.6, door: { x: 62.6, z: -36 }, entry: { x: 0, z: -6.6 }, open: () => true },
   konbini: { name: 'the convenience store', w: 14, d: 12, h: 3.6, door: { x: 103, z: 51.8 }, entry: { x: 0, z: -4.6 }, open: () => true },
+  // Built and entered its own way (northside.js).
+  deep: { name: 'the way out', w: 26, d: 34, h: 11, door: { x: 3, z: 185.2 }, entry: { x: 0, z: -15.4 }, open: () => false, custom: true },
 };
 const ROOM_ORIGIN = { x: 3400, z: 0 };
 Object.keys(ROOMS).forEach((id, i) => { ROOMS[id].x = ROOM_ORIGIN.x + i * 70; ROOMS[id].z = ROOM_ORIGIN.z; ROOMS[id].id = id; });
@@ -102,6 +104,7 @@ function buildInteriors() {
   const tiles = (a, b) => tex(64, 64, (g) => { g.fillStyle = a; g.fillRect(0, 0, 64, 64); g.fillStyle = b; g.fillRect(0, 0, 32, 32); g.fillRect(32, 32, 32, 32); g.strokeStyle = 'rgba(0,0,0,.12)'; g.strokeRect(0, 0, 64, 64); });
   const wood = (c) => tex(128, 128, (g) => { g.fillStyle = c; g.fillRect(0, 0, 128, 128); for (let i = 0; i < 16; i++) { g.fillStyle = `rgba(0,0,0,${0.04 + (i % 3) * 0.03})`; g.fillRect(0, i * 8, 128, 1 + (i % 2)); } });
   for (const R of Object.values(ROOMS)) {
+    if (R.custom) continue;
     const g = new THREE.Group(); g.position.set(R.x, 0, R.z); G.add(g);
     R.g = g; R.rects = [];
     const add = (geo, m, x, y, z, solid = false) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); if (solid) { geo.computeBoundingBox(); const b = geo.boundingBox; R.rects.push({ x0: R.x + x + b.min.x - 0.3, x1: R.x + x + b.max.x + 0.3, z0: R.z + z + b.min.z - 0.3, z1: R.z + z + b.max.z + 0.3 }); } return o; };
@@ -300,6 +303,7 @@ function setupInteriorDoors() {
   if (interior.doors) return;
   interior.doors = true;
   for (const R of Object.values(ROOMS)) {
+    if (R.custom) continue;
     citySpot({ x: R.door.x, z: R.door.z, r: 2.2, label: () => (R.open() ? `Press E to go into ${R.name}` : R.locked || 'Closed'), use: () => { if (R.open()) enterRoom(R.id); else showNote(R.locked || 'It\'s closed.'); }, active: () => !city.inside });
   }
 }
@@ -341,6 +345,7 @@ function cityDoorOut(R) {
   // Doors are on a building face; step out a metre and a half on the street side.
   if (R.id === 'agency') return { x: R.door.x - 1.2, z: R.door.z, yaw: -Math.PI / 2 };
   if (R.id === 'konbini') return { x: R.door.x, z: R.door.z - 1.2, yaw: Math.PI };
+  if (R.custom) return { x: R.door.x, z: R.door.z - 1.4, yaw: Math.PI };
   return { x: R.door.x, z: R.door.z + 1.2, yaw: 0 };
 }
 
@@ -455,7 +460,7 @@ function setStreetVisible(on) {
 // through a wall, the floor or the ceiling.
 function clampRoomCamera() {
   const R = ROOMS[city.inside];
-  if (!R) return;
+  if (!R || R.noClamp) return;
   const c = camera.position, m = 0.35;
   const x = clamp(c.x, R.x - R.w / 2 + m, R.x + R.w / 2 - m), z = clamp(c.z, R.z - R.d / 2 + m, R.z + R.d / 2 - m), y = clamp(c.y, CITY.y + 0.4, CITY.y + R.h - 0.3);
   if (x !== c.x || y !== c.y || z !== c.z) { c.set(x, y, z); camera.updateMatrixWorld(); }

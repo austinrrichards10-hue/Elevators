@@ -46,7 +46,8 @@ static class Launcher
                 if (e.FullName.EndsWith("/") || e.FullName.EndsWith("\\") || e.Name.Length == 0) { Directory.CreateDirectory(path); continue; }
                 // The player's own pictures stay as they are.
                 // Zips made on Windows can use either slash in their paths.
-                bool userFolder = e.FullName.Replace('\\', '/').StartsWith("phone-wallpapers/");
+                string n = e.FullName.Replace('\\', '/');
+                bool userFolder = n.StartsWith("phone-wallpapers/") || n.StartsWith("videos/");
                 if (userFolder && File.Exists(path)) continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 e.ExtractToFile(path, true);

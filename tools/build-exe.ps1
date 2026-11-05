@@ -6,7 +6,7 @@ $work = Join-Path $env:TEMP 'frostmourne-build'
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 $stage = Join-Path $work 'stage'
 New-Item -ItemType Directory -Force $stage | Out-Null
-foreach ($item in @('index.html', 'README.md', 'src', 'models', 'assets', 'phone-wallpapers')) { Copy-Item -Recurse (Join-Path $game $item) $stage }
+foreach ($item in @('index.html', 'README.md', 'src', 'models', 'assets', 'phone-wallpapers', 'videos')) { Copy-Item -Recurse (Join-Path $game $item) $stage }
 $zip = Join-Path $work 'game.zip'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)

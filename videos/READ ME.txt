@@ -1,0 +1,10 @@
+Videos go in this folder, named with numbers in order:
+
+    1.mp4
+    2.mp4
+    3.mp4
+    ...
+
+(.mp4, .webm, .mov and .m4v all work.)
+
+Somewhere in Tokyo there is a place to watch them.

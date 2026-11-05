@@ -248,6 +248,7 @@ function buildCity() {
   // The buildings she can go into (interiors.js).
   buildLots(G, towers, rect);
   buildTokyo(G, towers, rand, rect);
+  buildNorthside(G);
   // A wall of towers along the north edge, so the city goes on beyond where she can walk.
   for (let x = -140; x <= 140; x += 22) towers.push([x, 162 + rand() * 6, 18, 40 + rand() * 80, 14]);
   for (let x = -200; x <= 200; x += 30) towers.push([x, 230 + rand() * 60, 24, 60 + rand() * 120, 24]);
@@ -753,6 +754,7 @@ function updateCity(dt) {
   updatePhone(dt);
   updateInteriors();
   updateTokyo(dt);
+  updateNorthside(dt);
   // The city's music follows the clock: bright pop by day, a late-night piano after dark.
   if (!show.active && (Sfx.trackName === 'city' || Sfx.trackName === 'cityNight')) Sfx.playMusic(cityMusic());
 }
@@ -761,6 +763,7 @@ function cityClamp(pos) {
   if (!city.active) return;
   if (city.inside && interiorClamp(pos)) return;
   pos.y = CITY.y;
+  if (northClamp(pos)) return;
   const B = CITY.bounds;
   pos.x = clamp(pos.x, B.x0, B.x1);
   pos.z = clamp(pos.z, B.z0, B.z1);
