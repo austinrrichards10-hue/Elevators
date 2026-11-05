@@ -466,6 +466,8 @@ function standUpDeep() {
 }
 
 const DEEP_DIR = 'videos/';
+// Titles for the tapes in the videos folder; any file not listed here shows its file name.
+const DEEP_TITLES = { '1.mp4': 'Reminiscing on the past.' };
 function probeDeepVideos() {
   if (deep.probed) return;
   deep.probed = true;
@@ -474,7 +476,7 @@ function probeDeepVideos() {
     let misses = 0;
     for (let n = 1; n <= 300 && misses < 2; n++) {
       let ok = false;
-      for (const ext of ['mp4', 'webm', 'mov', 'm4v']) { const src = `${DEEP_DIR}${n}.${ext}`; if (await tryVid(src)) { deep.list.push({ src, name: `${n}.${ext}` }); ok = true; break; } }
+      for (const ext of ['mp4', 'webm', 'mov', 'm4v']) { const src = `${DEEP_DIR}${n}.${ext}`; if (await tryVid(src)) { deep.list.push({ src, name: DEEP_TITLES[`${n}.${ext}`] || `${n}.${ext}` }); ok = true; break; } }
       misses = ok ? 0 : misses + 1;
     }
     renderRemote();
