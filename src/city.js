@@ -248,9 +248,9 @@ function buildCity() {
   // The buildings she can go into (interiors.js).
   buildLots(G, towers, rect);
   buildTokyo(G, towers, rand, rect);
-  buildNorthside(G);
   // A wall of towers along the north edge, so the city goes on beyond where she can walk.
   for (let x = -140; x <= 140; x += 22) towers.push([x, 162 + rand() * 6, 18, 40 + rand() * 80, 14]);
+  buildNorthside(G, towers);
   for (let x = -200; x <= 200; x += 30) towers.push([x, 230 + rand() * 60, 24, 60 + rand() * 120, 24]);
   for (const side of [-1, 1]) for (let z = -100; z <= 160; z += 24) towers.push([side * (146 + rand() * 6), z, 16, 30 + rand() * 60, 18]);
   // Round the Dome: the towers of Bunkyo, standing back from its plaza.

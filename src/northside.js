@@ -1,75 +1,78 @@
-// The north edge of the city. One gap in the wall of towers leads into a dark alley, and at the
-// end of it there's a door with a keypad. It doesn't say what's behind it.
+// The north edge of the city: a wall of towers. Between two of them there's an ordinary gap,
+// the width of a person, and behind them a narrow service walkway that nobody uses.
 
-const NORTH = { x0: 1.5, x1: 4.5, z: 146, door: 186.2 };
+// The gap (x), the street edge (z), and, once the city's built, the back face of the tower
+// east of the gap and the door set into it.
+const NORTH = { gx0: 1.5, gx1: 4.5, edge: 146, back: 0, wx1: 21.5, dx: 15 };
 const deep = { built: false, door: null, code: '', seated: false, video: null, list: [], idx: 0, probed: false, drone: null, t: 0 };
 
-/* ---------- The alley ---------- */
-function buildNorthside(G) {
+function buildNorthside(G, towers) {
   const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
   const glow = (c, k = 1.4) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), toneMapped: false });
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); G.add(m); return m; };
-  // Wet black asphalt, a few puddles, walls of grimy concrete either side.
-  add(new THREE.PlaneGeometry(5, 44).rotateX(-Math.PI / 2), std(0x16171c, { roughness: 0.55, metalness: 0.2 }), 3, 0.03, 166);
-  for (const [x, z, s] of [[2.4, 152, 1.2], [3.8, 163, 0.9], [2.8, 177, 1.4]]) add(new THREE.CircleGeometry(s, 20).rotateX(-Math.PI / 2), std(0x0a0c12, { roughness: 0.05, metalness: 0.8 }), x, 0.04, z).scale.set(1, 1, 1.8);
-  const wall = std(0x2a2a30);
-  for (const x of [0.75, 5.25]) add(new THREE.BoxGeometry(0.5, 14, 22), wall, x, 7, 176.5);
-  // Pipes, a ladder of conduit, rubbish bags, a rusty bin: nobody comes down here.
-  const pipe = std(0x3a3a40, { metalness: 0.6, roughness: 0.5 });
-  for (const [x, r] of [[1.1, 0.09], [1.25, 0.05], [4.85, 0.11]]) add(new THREE.CylinderGeometry(r, r, 14, 8), pipe, x, 7, 170 + r * 40);
-  for (const [x, z] of [[1.6, 158], [1.7, 159], [4.4, 171], [4.3, 172.4], [1.6, 181]]) add(new THREE.SphereGeometry(0.42, 8, 6), std(0x101114, { roughness: 0.4 }), x, 0.3, z).scale.set(1, 0.75, 1);
-  add(new THREE.BoxGeometry(0.9, 1.1, 1.6), std(0x3a2a20, { metalness: 0.4 }), 4.45, 0.55, 165);
-  // The building at the end: black, windowless, no name.
-  const block = std(0x121216, { roughness: 0.95 });
-  add(new THREE.BoxGeometry(34, 34, 28), block, 3, 17, 201);
-  for (let x = -12; x <= 18; x += 3) add(new THREE.BoxGeometry(0.12, 34, 0.1), std(0x1c1c22), x, 17, 186.96);
-  add(new THREE.SphereGeometry(0.25, 8, 6), glow(0xff1a2a, 2), 3, 33.6, 186.9);
-  // The door: heavy steel in two halves, studded, in a deep frame.
+  // The tower east of the gap: its back face is where the walkway runs.
+  const east = towers.find(([x, z, w]) => x === 14 && w === 18 && z >= 160 && z <= 170);
+  const back = NORTH.back = east ? east[1] + east[4] / 2 : 172;
+  const DX = NORTH.dx;
+  ROOMS.deep.door = { x: DX, z: back + 1.6 };
+  // Plain ground through the gap and along the back, and a plain wall closing it off: from
+  // the street it looks like any gap between buildings.
+  const ground = std(0x44464c);
+  add(new THREE.PlaneGeometry(4, back - NORTH.edge + 4).rotateX(-Math.PI / 2), ground, 3, 0.02, (NORTH.edge + back + 4) / 2);
+  add(new THREE.PlaneGeometry(23.5, 4).rotateX(-Math.PI / 2), ground, 11.75, 0.021, back + 2);
+  const concrete = std(0x5a5c62);
+  add(new THREE.BoxGeometry(24, 9, 0.6), concrete, 11.75, 4.5, back + 4.1);
+  add(new THREE.BoxGeometry(0.6, 9, 4.4), concrete, 23.6, 4.5, back + 2);
+  add(new THREE.BoxGeometry(0.6, 9, 12), concrete, 0.7, 4.5, back - 2);
+  // A drainpipe and a vent on the back wall: the only things anyone's put here.
+  add(new THREE.CylinderGeometry(0.08, 0.08, 9, 8), std(0x3a3a40, { metalness: 0.5 }), 8, 4.5, back + 0.12);
+  add(new THREE.BoxGeometry(0.9, 0.6, 0.2), std(0x6a6c72, { metalness: 0.4 }), 20, 2.6, back + 0.1);
+  // The door: heavy steel in two halves, studded, flush in a deep frame.
   const steel = std(0x3a3c44, { metalness: 0.85, roughness: 0.35 });
-  const frame = add(new THREE.BoxGeometry(2.8, 3.2, 0.4), std(0x1a1a1e, { metalness: 0.6 }), 3, 1.6, 186.95);
-  void frame;
+  add(new THREE.BoxGeometry(2.8, 3.2, 0.3), std(0x1a1a1e, { metalness: 0.6 }), DX, 1.6, back + 0.02);
   const halves = [];
   for (const s of [-1, 1]) {
-    const h = new THREE.Group(); h.position.set(3 + s * 0.55, 0, 186.68); G.add(h);
+    const h = new THREE.Group(); h.position.set(DX + s * 0.55, 0, back + 0.26); G.add(h);
     const slab = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.6, 0.18), steel); slab.position.set(0, 1.3, 0); h.add(slab);
-    for (let r = 0; r < 6; r++) for (const cx of [-0.4, 0.4]) { const stud = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), steel); stud.position.set(cx, 0.25 + r * 0.42, -0.1); h.add(stud); }
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.04), std(0x8a1a1a, { metalness: 0.5 })); bar.position.set(0, 1.3, -0.1); h.add(bar);
+    for (let r = 0; r < 6; r++) for (const cx of [-0.4, 0.4]) { const stud = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), steel); stud.position.set(cx, 0.25 + r * 0.42, 0.1); h.add(stud); }
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.04), std(0x8a1a1a, { metalness: 0.5 })); bar.position.set(0, 1.3, 0.1); h.add(bar);
     halves.push({ g: h, s });
   }
-  // Behind the door, the dark, faintly purple.
-  const inside = add(new THREE.PlaneGeometry(2.2, 2.6), new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }), 3, 1.3, 186.8);
-  inside.rotation.y = Math.PI;
-  // The keypad, its little red screen, and a caged bulb that won't stay lit.
-  add(new THREE.BoxGeometry(0.34, 0.5, 0.08), std(0x1a1c22, { metalness: 0.7 }), 4.75, 1.35, 186.66);
-  const led = add(new THREE.PlaneGeometry(0.24, 0.08), glow(0xff2030, 1.8), 4.75, 1.52, 186.61);
-  led.rotation.y = Math.PI;
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { const k = add(new THREE.BoxGeometry(0.06, 0.05, 0.02), std(0x5a5c66, { metalness: 0.6 }), 4.68 + c * 0.07, 1.4 - r * 0.065, 186.61); void k; }
-  const bulb = add(new THREE.SphereGeometry(0.12, 10, 8), glow(0xffe0b0, 1.8), 3, 3.6, 186.3);
-  add(new THREE.BoxGeometry(0.3, 0.06, 0.4), std(0x1a1a1e), 3, 3.75, 186.5);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0xffd8a0, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
-  halo.position.set(3, 3.5, 186.1); halo.scale.setScalar(5); G.add(halo);
-  // The light that spills out when it opens: violet, across the wet ground.
-  const spill = add(new THREE.PlaneGeometry(2.4, 5).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TEX.softDot, color: 0x9a4aff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), 3, 0.06, 185.2);
+  // Behind the door, the dark, faintly purple once it's open.
+  const inside = add(new THREE.PlaneGeometry(2.2, 2.6), new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }), DX, 1.3, back + 0.18);
+  // The keypad and its little red screen: the only light back here.
+  add(new THREE.BoxGeometry(0.34, 0.5, 0.08), std(0x1a1c22, { metalness: 0.7 }), DX + 1.75, 1.35, back + 0.06);
+  const led = add(new THREE.PlaneGeometry(0.24, 0.08), glow(0xff2030, 1.8), DX + 1.75, 1.52, back + 0.105);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) add(new THREE.BoxGeometry(0.06, 0.05, 0.02), std(0x5a5c66, { metalness: 0.6 }), DX + 1.68 + c * 0.07, 1.4 - r * 0.065, back + 0.11);
+  // The light that spills out when it opens: violet, across the ground.
+  const spill = add(new THREE.PlaneGeometry(2.4, 4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TEX.softDot, color: 0x9a4aff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), DX, 0.06, back + 1.8);
   const glowOut = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0x8a3aff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-  glowOut.position.set(3, 1.3, 186.4); glowOut.scale.set(3.2, 4, 1); G.add(glowOut);
-  deep.door = { halves, led, bulb, halo, inside, spill, glowOut };
-  citySpot({ x: 3, z: 185.2, r: 1.7, label: () => 'Press E to use the keypad', use: () => openKeypad(), active: () => !city.inside && !deep.open });
+  glowOut.position.set(DX, 1.3, back + 0.5); glowOut.scale.set(3.2, 4, 1); G.add(glowOut);
+  deep.door = { halves, led, inside, spill, glowOut };
+  citySpot({ x: DX + 0.6, z: back + 1.8, r: 2.4, label: () => 'Press E to use the keypad', use: () => openKeypad(), active: () => !city.inside });
 }
 
-// Only the one gap: the rest of the north edge stays shut.
+// The gap, and the walkway behind: the only way past the north edge.
 function northClamp(pos) {
-  if (pos.z <= NORTH.z || pos.x < NORTH.x0 - 0.3 || pos.x > NORTH.x1 + 0.3) return false;
-  pos.x = clamp(pos.x, NORTH.x0, NORTH.x1);
-  pos.z = Math.min(pos.z, NORTH.door - 0.9);
-  return true;
+  const N = NORTH;
+  if (!N.back) return false;
+  // Along the back of the tower.
+  if (pos.z > N.back + 0.3 && pos.x > N.gx0 - 0.3 && pos.x < N.wx1 + 0.5) {
+    pos.x = clamp(pos.x, N.gx0, N.wx1);
+    pos.z = clamp(pos.z, N.back + 0.6, N.back + 3.4);
+    return true;
+  }
+  // Through the gap: from the pavement's edge, so the city's own boundary never pushes back.
+  if (pos.x > N.gx0 - 0.3 && pos.x < N.gx1 + 0.3 && pos.z > N.edge - 0.6) {
+    pos.x = clamp(pos.x, N.gx0, N.gx1);
+    pos.z = Math.min(pos.z, N.back + 3.4);
+    return true;
+  }
+  return false;
 }
 
 function updateNorthside(dt) {
-  const D = deep.door;
-  if (!D) return;
-  // The bulb: steady, then a stutter, then dark for a beat.
-  const t = game.time, f = Math.sin(t * 13) > 0.92 || (t % 7) < 0.25 ? 0.1 : 1;
-  D.bulb.material.color.setScalar(1.8 * f); D.halo.material.opacity = 0.6 * f;
+  if (!deep.door) return;
   if (city.inside === 'deep') updateDeep(dt);
   // Down there, nothing on screen but the room: no goal, no arrow, no fame.
   document.body.classList.toggle('in-deep', city.inside === 'deep');
@@ -175,7 +178,8 @@ function startDescent() {
   Sfx.playMusic(null);
   const S = { t: 0, phase: 'door', fired: {} };
   const once = (k, at, fn) => { if (!S.fired[k] && S.t >= at) { S.fired[k] = true; fn(); } };
-  player.pos.set(3, CITY.y, NORTH.door - 1.3); player.yaw = player.bodyYaw = 0;
+  const DX = NORTH.dx, BK = NORTH.back;
+  player.pos.set(DX, CITY.y, BK + 1.3); player.yaw = player.bodyYaw = Math.PI;
   playScene({
     update(dt) {
       S.t += dt;
@@ -186,22 +190,22 @@ function startDescent() {
         once('bolt', 0.1, () => { deepTone(90, 0.25, 0.25, 0, 'square', 50); deepNoise(0.3, 'bandpass', 900, 2, 0.15); });
         once('grind', 0.7, () => { deepNoise(2.6, 'bandpass', 380, 3, 0.18, 0, 160); deepTone(48, 2.8, 0.22, 0, 'sawtooth', 38); });
         const open = smooth(clamp((t - 0.7) / 2.4, 0, 1));
-        for (const h of D.halves) h.g.position.x = 3 + h.s * (0.55 + open * 1.05);
+        for (const h of D.halves) h.g.position.x = DX + h.s * (0.55 + open * 1.05);
         D.inside.material.color.setRGB(0.32 * open, 0.07 * open, 0.62 * open);
         D.spill.material.opacity = 0.55 * open; D.glowOut.material.opacity = 0.7 * open;
-        D.halo.material.opacity = 0.12; D.bulb.material.color.setScalar(0.6);
         const walk = smooth(clamp((t - 3.1) / 2.2, 0, 1));
-        player.pos.set(3, CITY.y, NORTH.door - 1.3 + walk * 3.4);
-        if (walk > 0 && walk < 1) { player.stride = 1; player.walkPhase += dt * 5.5; poseAvatar(dt, cityV.set(0, 0, 1), true); } else { player.stride = 0; poseAvatar(dt, cityV.set(0, 0, 0), false); }
+        player.pos.set(DX, CITY.y, BK + 1.3 - walk * 3.4);
+        if (walk > 0 && walk < 1) { player.stride = 1; player.walkPhase += dt * 5.5; poseAvatar(dt, cityV.set(0, 0, -1), true); } else { player.stride = 0; poseAvatar(dt, cityV.set(0, 0, 0), false); }
         avatar.simulate(dt);
-        camera.position.set(1.9 + t * 0.08, CITY.y + 1.3 + t * 0.04, NORTH.door - 7.6 + t * 0.35);
-        camera.lookAt(3, CITY.y + 1.5, NORTH.door);
+        // From along the walkway, behind her, the door in the wall ahead.
+        camera.position.set(DX + 3.2 - t * 0.25, CITY.y + 1.4 + t * 0.04, BK + 3.1);
+        camera.lookAt(DX, CITY.y + 1.4, BK);
         setFov(50);
         once('fade', 4.6, () => impact('black', 900));
         if (t > 5.2) {
           // Into the car. The doors shut behind her.
           S.phase = 'car'; S.t = 0; S.fired = {};
-          for (const h of D.halves) h.g.position.x = 3 + h.s * 0.55;
+          for (const h of D.halves) h.g.position.x = DX + h.s * 0.55;
           D.inside.material.color.setRGB(0, 0, 0); D.spill.material.opacity = 0; D.glowOut.material.opacity = 0;
           D.led.material.color.setHex(0xff2030).multiplyScalar(1.8);
           city.inside = 'deep';
@@ -272,8 +276,8 @@ function startAscent() {
       if (t > 2.6) {
         city.inside = null;
         setStreetVisible(true);
-        for (const h of D.halves) h.g.position.x = 3 + h.s * 0.55;
-        player.pos.set(3, CITY.y, NORTH.door - 2.2); player.yaw = player.bodyYaw = Math.PI;
+        for (const h of D.halves) h.g.position.x = NORTH.dx + h.s * 0.55;
+        player.pos.set(NORTH.dx - 1, CITY.y, NORTH.back + 1.9); player.yaw = player.bodyYaw = -Math.PI / 2;
         endScene();
         lockPointer();
         Sfx.playMusic(cityMusic());
@@ -313,11 +317,12 @@ function buildDeep() {
   const starPts = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xd8c0ff, size: 0.05, transparent: true, opacity: 0.8 }));
   g.add(starPts);
   // Sconces along the walls: little upturned bowls of violet light.
+  const sconces = [];
   for (let i = 0; i < 6; i++) for (const s of [-1, 1]) {
     const z = -Dp + 4 + i * 5.2;
     add(new THREE.CylinderGeometry(0.22, 0.08, 0.2, 12), mat(0x1a1424, 0.2, { metalness: 0.7 }), s * (W - 0.35), 3.2, z);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0x9a4aff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
-    sp.position.set(s * (W - 0.4), 3.9, z); sp.scale.set(1.6, 3.2, 1); g.add(sp);
+    sp.position.set(s * (W - 0.4), 3.9, z); sp.scale.set(1.6, 3.2, 1); g.add(sp); sconces.push(sp);
   }
   // The screen: vast, framed in black, with velvet curtains drawn back from it.
   const sw = 20, sh = 8.4, sy = 5.8;
@@ -385,7 +390,7 @@ function buildDeep() {
     show: (f) => { const c = disp.getContext('2d'); c.fillStyle = '#0a0204'; c.fillRect(0, 0, 128, 48); c.fillStyle = '#ff2a3a'; c.font = 'bold 34px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f <= 1 ? '1F' : `B${f}`, 64, 26); dispTex.needsUpdate = true; },
   };
   deep.elev.show(1);
-  deep.room = { screen, idle, idleTex, beam, dots, exit, haze, starPts, sx, sz };
+  deep.room = { screen, idle, idleTex, beam, dots, exit, haze, starPts, sx, sz, sconces, sy, sw, sh, Dp };
   drawIdle(0);
   // Spots: the seat, and the way back up.
   citySpot({ x: R.x + sx, z: R.z + sz - 1.2, r: 1.5, label: () => (deep.seated ? '' : 'Press E to sit'), use: () => sitDeep(), active: () => city.inside === 'deep' && !deep.seated });
@@ -412,8 +417,16 @@ function updateDeep(dt) {
   deep.t += dt;
   const t = deep.t;
   if (!deep.video || deep.video.paused) { if (Math.floor(t * 8) !== deep.lastIdle) { deep.lastIdle = Math.floor(t * 8); if (!deep.video) drawIdle(t); } }
-  Rm.beam.material.opacity = deep.video && !deep.video.paused ? 0.035 + Math.random() * 0.008 : 0.016;
-  Rm.dots.forEach((d, i) => { const k = Math.floor(i / 2), wave = Math.max(0, 1 - Math.abs(((t * 4) % 16) - k) / 2); d.material.color.setRGB(0.5 + wave * 0.9, 0.25 + wave * 0.5, 1 + wave * 0.6); });
+  // Playing, from the seat: the room goes dark and the view sinks into the screen.
+  const playing = deep.seated && deep.video && !deep.video.paused;
+  deep.zoomK = (deep.zoomK || 0) + ((playing ? 1 : 0) - (deep.zoomK || 0)) * Math.min(1, dt * 2.2);
+  const lights = 1 - 0.92 * deep.zoomK;
+  for (const s of Rm.sconces) s.material.opacity = 0.55 * lights;
+  Rm.starPts.material.opacity = 0.15 + 0.65 * lights;
+  Rm.haze.material.opacity = 0.09 * lights;
+  Rm.beam.material.opacity = (deep.video && !deep.video.paused ? 0.035 + Math.random() * 0.008 : 0.016) * lights;
+  Rm.dots.forEach((d, i) => { const k = Math.floor(i / 2), wave = Math.max(0, 1 - Math.abs(((t * 4) % 16) - k) / 2); d.material.color.setRGB((0.5 + wave * 0.9) * lights, (0.25 + wave * 0.5) * lights, (1 + wave * 0.6) * lights); });
+  const rm = $("remote"); if (rm) rm.classList.toggle("mini", playing);
   Rm.exit.visible = !(Math.sin(t * 17) > 0.95 || (t % 11) < 0.12);
   Rm.haze.rotation.y = t * 0.01;
   if (deep.seated) {
@@ -541,5 +554,38 @@ addEventListener('keydown', (e) => {
   else if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) standUpDeep();
 }, true);
 
-// From the seat, clicking the screen mustn't grab the mouse back: the remote needs it.
-addEventListener('mousedown', (e) => { if (deep.seated && e.target === canvas) { e.stopImmediatePropagation(); } }, true);
+
+/* ---------- From the seat: looking round, and sinking into the screen ---------- */
+// Dragging with the mouse looks around (the cursor stays free for the remote).
+const deepDrag = { on: false, x: 0, y: 0 };
+addEventListener('mousedown', (e) => {
+  if (!deep.seated || e.target !== canvas) return;
+  e.stopImmediatePropagation();
+  deepDrag.on = true; deepDrag.x = e.clientX; deepDrag.y = e.clientY;
+}, true);
+addEventListener('mousemove', (e) => {
+  if (!deepDrag.on || !deep.seated) return;
+  player.yaw -= (e.clientX - deepDrag.x) * 0.005;
+  player.pitch = clamp(player.pitch - (e.clientY - deepDrag.y) * 0.004, -0.6, 0.9);
+  deepDrag.x = e.clientX; deepDrag.y = e.clientY;
+});
+addEventListener('mouseup', () => { deepDrag.on = false; });
+
+// While a tape plays, the view glides in until the screen fills nine tenths of it.
+const deepCamM = new THREE.Matrix4(), deepCamQ = new THREE.Quaternion(), deepCamP = new THREE.Vector3(), deepCamT = new THREE.Vector3(), deepUp = new THREE.Vector3(0, 1, 0);
+function deepCamera() {
+  const k = deep.zoomK || 0, Rm = deep.room;
+  if (!Rm || city.inside !== 'deep' || k < 0.001) return;
+  const R = ROOMS.deep, s = Rm.screen;
+  const w = Rm.sw * s.scale.x, h = Rm.sh * s.scale.y;
+  const v = THREE.MathUtils.degToRad(camera.fov) / 2, hz = Math.atan(Math.tan(v) * camera.aspect);
+  const d = Math.max(w / 0.9 / 2 / Math.tan(hz), h / 0.9 / 2 / Math.tan(v));
+  deepCamT.set(R.x, CITY.y + Rm.sy, R.z + Rm.Dp - 0.46);
+  deepCamP.set(deepCamT.x, deepCamT.y, deepCamT.z - d);
+  deepCamM.lookAt(deepCamP, deepCamT, deepUp);
+  deepCamQ.setFromRotationMatrix(deepCamM);
+  const e = k * k * (3 - 2 * k);
+  camera.position.lerp(deepCamP, e);
+  camera.quaternion.slerp(deepCamQ, e);
+  camera.updateMatrixWorld();
+}

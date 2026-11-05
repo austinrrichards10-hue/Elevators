@@ -345,7 +345,7 @@ function cityDoorOut(R) {
   // Doors are on a building face; step out a metre and a half on the street side.
   if (R.id === 'agency') return { x: R.door.x - 1.2, z: R.door.z, yaw: -Math.PI / 2 };
   if (R.id === 'konbini') return { x: R.door.x, z: R.door.z - 1.2, yaw: Math.PI };
-  if (R.custom) return { x: R.door.x, z: R.door.z - 1.4, yaw: Math.PI };
+  if (R.custom) return { x: R.door.x - 1, z: R.door.z + 0.3, yaw: -Math.PI / 2 };
   return { x: R.door.x, z: R.door.z + 1.2, yaw: 0 };
 }
 

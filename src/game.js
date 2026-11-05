@@ -1378,7 +1378,7 @@ function frame(now) {
   const still = game.state === 'book' || game.state === 'reader';
   // The snow settling over Miku is shown as stills (showdown.js).
   if (showdownFrozen()) return;
-  if (city.active && city.inside && !show.active && !show.dome) clampRoomCamera();
+  if (city.active && city.inside && !show.active && !show.dome) { clampRoomCamera(); deepCamera(); }
   if (!still || !frozenDrawn) pipeline.render(dt, game.time);
   frozenDrawn = still;
 }

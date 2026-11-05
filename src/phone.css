@@ -177,3 +177,9 @@ body:not(.in-city) #phone, body:not(.in-city) #phone-banner { display: none; }
 #remote .rm-stand:hover { color: #fff; }
 
 body.in-deep #objective, body.in-deep #nav-arrow, body.in-deep #fame, body.in-deep #clock, body.in-deep #phone-banner { display: none !important; }
+/* While a tape plays: the remote folds down to a small pop-up in the corner. */
+#remote.mini { width: 196px; padding: 10px 12px; border-radius: 18px; background: rgba(8, 6, 12, .82); backdrop-filter: blur(6px); }
+#remote.mini .rm-screen, #remote.mini .rm-load, #remote.mini .rm-stand, #remote.mini .rm-pad button[data-r="back"], #remote.mini .rm-pad button[data-r="fwd"], #remote.mini .rm-pad button[data-r="loop"] { display: none; }
+#remote.mini .rm-top { margin-bottom: 6px; }
+#remote.mini .rm-pad { gap: 6px; }
+#remote.mini .rm-pad button.big { width: 46px; height: 46px; }
