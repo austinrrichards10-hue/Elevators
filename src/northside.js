@@ -234,7 +234,8 @@ function startDescent() {
       // The doors open on the dark, and she walks out.
       const open = smooth(clamp((t - 11.2) / 2.4, 0, 1));
       E.setDoors(open);
-      once('doors', 11.2, () => { deepNoise(2.4, 'bandpass', 600, 2, 0.07, 0, 300); deepDrone(true); });
+      once('doors', 11.2, () => { deepNoise(2.4, 'bandpass', 600, 2, 0.07, 0, 300); deepDrone(true); deep.arrived = deep.t; });
+      if (t > 11) updateDeep(dt);
       const walk = smooth(clamp((t - 13.4) / 2.6, 0, 1));
       player.pos.set(R.x, CITY.y, E.z + walk * 3.4);
       if (walk > 0 && walk < 1) { player.stride = 1; player.walkPhase += dt * 4.5; poseAvatar(dt, cityV.set(0, 0, 1), true); } else { player.stride = 0; poseAvatar(dt, cityV.set(0, 0, 0), false); }
@@ -386,6 +387,7 @@ function buildDeep() {
   };
   deep.elev.show(1);
   deep.room = { screen, idle, idleTex, beam, dots, exit, haze, starPts, sx, sz, sconces, sy, sw, sh, Dp };
+  buildDeepFx();
   drawIdle(0);
   // Spots: the seat, and the way back up.
   citySpot({ x: R.x + sx, z: R.z + sz - 1.2, r: 1.5, label: () => (deep.seated ? '' : 'Press E to sit'), use: () => sitDeep(), active: () => city.inside === 'deep' && !deep.seated });
@@ -399,9 +401,25 @@ function drawIdle(t) {
   c.fillStyle = '#05020a'; c.fillRect(0, 0, w, h);
   for (let i = 0; i < 900; i++) { const v = Math.random() * 40; c.fillStyle = `rgba(${v + 30},${v * 0.4},${v + 60},.35)`; c.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
   const p = 0.5 + 0.5 * Math.sin(t * 0.8);
-  c.fillStyle = `rgba(190,140,255,${0.25 + p * 0.45})`; c.font = 'bold 54px "Yu Gothic", serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  // Slow violet waves rolling under everything.
+  for (let i = 0; i < 4; i++) {
+    c.strokeStyle = `rgba(140,70,255,${0.06 + i * 0.02})`; c.lineWidth = 2; c.beginPath();
+    for (let x = 0; x <= w; x += 8) c.lineTo(x, h * 0.72 + i * 9 + Math.sin(x * 0.012 + t * (0.6 + i * 0.2) + i) * (10 + i * 4));
+    c.stroke();
+  }
+  c.font = 'bold 54px "Yu Gothic", serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  // Now and then the word tears: red and cyan ghosts pulled apart, a slice of it shoved sideways.
+  const glitch = Math.sin(t * 2.3) > 0.97 || Math.random() < 0.025;
+  if (glitch) {
+    c.fillStyle = 'rgba(255,40,90,.5)'; c.fillText('おかえり', w / 2 - 5, h / 2 - 12);
+    c.fillStyle = 'rgba(60,240,255,.45)'; c.fillText('おかえり', w / 2 + 5, h / 2 - 10);
+  }
+  c.fillStyle = `rgba(190,140,255,${0.25 + p * 0.45})`;
   c.fillText('おかえり', w / 2, h / 2 - 12);
+  if (glitch) { const y0 = h / 2 - 30 + Math.random() * 30, sh = 6 + Math.random() * 12; c.drawImage(c.canvas, 0, y0, w, sh, (Math.random() - 0.5) * 40, y0, w, sh); }
   c.fillStyle = `rgba(190,140,255,${0.15 + p * 0.2})`; c.font = '16px monospace'; c.fillText(deep.seated ? 'LOAD A TAPE' : 'B215', w / 2, h / 2 + 42);
+  // A bright line crawling down the screen, and the scanlines over it all.
+  const sy = (t * 40) % (h + 40) - 20; c.fillStyle = 'rgba(200,170,255,.07)'; c.fillRect(0, sy, w, 14);
   for (let y = 0; y < h; y += 3) { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(0, y, w, 1); }
   deep.room.idleTex.needsUpdate = true;
 }
@@ -416,11 +434,11 @@ function updateDeep(dt) {
   const playing = deep.seated && deep.video && !deep.video.paused;
   deep.zoomK = (deep.zoomK || 0) + ((playing ? 1 : 0) - (deep.zoomK || 0)) * Math.min(1, dt * 2.2);
   const lights = 1 - 0.92 * deep.zoomK;
-  for (const s of Rm.sconces) s.material.opacity = 0.55 * lights;
   Rm.starPts.material.opacity = 0.15 + 0.65 * lights;
   Rm.haze.material.opacity = 0.09 * lights;
   Rm.beam.material.opacity = (deep.video && !deep.video.paused ? 0.035 + Math.random() * 0.008 : 0.016) * lights;
   Rm.dots.forEach((d, i) => { const k = Math.floor(i / 2), wave = Math.max(0, 1 - Math.abs(((t * 4) % 16) - k) / 2); d.material.color.setRGB((0.5 + wave * 0.9) * lights, (0.25 + wave * 0.5) * lights, (1 + wave * 0.6) * lights); });
+  updateDeepFx(dt, lights);
   const rm = $("remote"); if (rm) rm.classList.toggle("mini", playing);
   Rm.exit.visible = !(Math.sin(t * 17) > 0.95 || (t % 11) < 0.12);
   Rm.haze.rotation.y = t * 0.01;
@@ -640,4 +658,116 @@ function deepCamera() {
   camera.position.lerp(deepCamP, e);
   camera.quaternion.slerp(deepCamQ, e);
   camera.updateMatrixWorld();
+}
+
+/* ---------- Below: the finishing touches ---------- */
+// Light that comes off the screen and takes its colour from whatever's playing; shafts of
+// violet through slots in the ceiling; tall pillars with a pulse running down their neon
+// toward the screen; a ring round the seat that beats like a heart; motes rising in the dark.
+function buildDeepFx() {
+  const R = ROOMS.deep, Rm = deep.room, g = R.g, W = R.w / 2, Dp = R.d / 2;
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  const additive = (map, color, opacity) => new THREE.MeshBasicMaterial({ map, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  // The ambilight: a soft frame of light round the screen (dark in the middle), and its pool
+  // on the floor in front.
+  const frameTex = paintCanvas(256, 128, (c) => {
+    const img = c.createImageData(256, 128);
+    for (let y = 0; y < 128; y++) for (let x = 0; x < 256; x++) {
+      const dx = Math.max(0, Math.abs(x - 128) - 82) / 46, dy = Math.max(0, Math.abs(y - 64) - 36) / 28;
+      const d = Math.hypot(dx, dy), inside = Math.abs(x - 128) < 82 && Math.abs(y - 64) < 36;
+      const a = inside ? 0 : Math.max(0, 1 - d) ** 1.6;
+      const k = (y * 256 + x) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = 255; img.data[k + 3] = a * 255;
+    }
+    c.putImageData(img, 0, 0);
+  });
+  const ambi = add(new THREE.PlaneGeometry(Rm.sw * 1.6, Rm.sh * 1.8), additive(frameTex, 0x8a3aff, 0.55), 0, Rm.sy, Dp - 0.62);
+  ambi.rotation.y = Math.PI;
+  const poolTex = paintCanvas(128, 128, (c) => { const gr = c.createRadialGradient(64, 0, 4, 64, 0, 128); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, 128, 128); });
+  const pool = add(new THREE.PlaneGeometry(Rm.sw * 1.3, 16).rotateX(-Math.PI / 2), additive(poolTex, 0x8a3aff, 0.35), 0, 0.03, Dp - 10.2);
+  pool.rotation.y = Math.PI;
+  // Shafts of light through slots in the ceiling, swaying very slowly.
+  const shaftTex = paintCanvas(64, 256, (c) => { const gr = c.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, 64, 256); const h = c.createLinearGradient(0, 0, 64, 0); h.addColorStop(0, 'rgba(0,0,0,1)'); h.addColorStop(0.5, 'rgba(0,0,0,0)'); h.addColorStop(1, 'rgba(0,0,0,1)'); c.globalCompositeOperation = 'destination-out'; c.fillStyle = h; c.fillRect(0, 0, 64, 256); });
+  const shafts = [];
+  for (let i = 0; i < 5; i++) {
+    const s = add(new THREE.PlaneGeometry(1.6, R.h).translate(0, -R.h / 2, 0), additive(shaftTex, 0x9a5aff, 0.12), -8 + i * 4, R.h, -8 + (i % 2) * 7);
+    s.userData.phase = i * 1.7;
+    add(new THREE.PlaneGeometry(1.8, 0.3).rotateX(Math.PI / 2), additive(null, 0xd8c0ff, 0.5), s.position.x, R.h - 0.03, s.position.z);
+    shafts.push(s);
+  }
+  // Pillars down both walls, each with a strip of neon; a pulse runs along them to the screen.
+  const strips = [], pillarM = new THREE.MeshStandardMaterial({ color: 0x0c0812, roughness: 0.6, metalness: 0.4, emissive: 0x140a20, emissiveIntensity: 0.6 });
+  for (let i = 0; i < 6; i++) for (const s of [-1, 1]) {
+    const z = -Dp + 6.6 + i * 5.2;
+    R.rects.push({ x0: R.x + s * (W - 0.5) - 0.8, x1: R.x + s * (W - 0.5) + 0.8, z0: R.z + z - 0.8, z1: R.z + z + 0.8 });
+    add(new THREE.BoxGeometry(0.9, R.h, 0.9), pillarM, s * (W - 0.5), R.h / 2, z);
+    const strip = add(new THREE.PlaneGeometry(0.06, R.h - 1.2), additive(null, 0xb46aff, 0.9), s * (W - 0.94), R.h / 2, z);
+    strip.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2;
+    strip.userData.i = i;
+    strips.push(strip);
+    const up = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDot, color: 0x7a3aff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
+    up.position.set(s * (W - 1.1), 0.6, z); up.scale.set(1.4, 2.6, 1); g.add(up); strip.userData.up = up;
+  }
+  // The ring round the seat: it beats.
+  const ring = add(new THREE.RingGeometry(1.25, 1.36, 64).rotateX(-Math.PI / 2), additive(null, 0xb46aff, 0.7), Rm.sx, 0.03, Rm.sz);
+  const ring2 = add(new THREE.RingGeometry(1.25, 1.3, 64).rotateX(-Math.PI / 2), additive(null, 0xffffff, 0), Rm.sx, 0.032, Rm.sz);
+  // Motes drifting up through the dark round the chair.
+  const mn = 140, mp = new Float32Array(mn * 3);
+  for (let i = 0; i < mn; i++) mp.set([(Math.random() - 0.5) * 10, Math.random() * 6, Rm.sz + (Math.random() - 0.5) * 10], i * 3);
+  const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+  const motes = new THREE.Points(mg, new THREE.PointsMaterial({ map: TEX.softDot, color: 0xe0c8ff, size: 0.09, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  g.add(motes);
+  // A second layer of stars, to twinkle against the first.
+  const st = []; for (let i = 0; i < 200; i++) st.push((Math.random() - 0.5) * R.w, R.h - 0.06, (Math.random() - 0.5) * R.d);
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(st, 3));
+  const stars2 = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.08, transparent: true, opacity: 0.5 }));
+  g.add(stars2);
+  // A little canvas to read the video's colour from.
+  const probe = document.createElement('canvas'); probe.width = 8; probe.height = 8;
+  deep.fx = { ambi, pool, shafts, strips, ring, ring2, motes, stars2, probe, color: new THREE.Color(0x8a3aff), target: new THREE.Color(0x8a3aff), sample: 0, beat: 0 };
+}
+
+function updateDeepFx(dt, lights) {
+  const F = deep.fx, Rm = deep.room;
+  if (!F) return;
+  const t = deep.t;
+  // The lights come on one by one from the elevator to the screen when she arrives.
+  const since = deep.arrived === undefined ? 99 : t - deep.arrived;
+  const lit = (i) => clamp((since - 0.6 - i * 0.35) * 3, 0, 1);
+  Rm.sconces.forEach((s, k) => { s.material.opacity = 0.55 * lights * lit(Math.floor(k / 2)) * (0.92 + 0.08 * Math.sin(t * 9 + k)); });
+  // The screen's colour: sampled from the video a few times a second, or a slow violet breath.
+  F.sample -= dt;
+  if (F.sample <= 0) {
+    F.sample = 0.2;
+    const v = deep.video;
+    if (v && !v.paused && v.readyState >= 2) {
+      try {
+        const c = F.probe.getContext('2d', { willReadFrequently: true }); c.drawImage(v, 0, 0, 8, 8);
+        const d = c.getImageData(0, 0, 8, 8).data; let r = 0, gg = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; }
+        F.target.setRGB(r / 64 / 255, gg / 64 / 255, b / 64 / 255).lerp(new THREE.Color(0x6a2aff), 0.25);
+      } catch { F.target.setHex(0x8a3aff); }
+    } else F.target.setHSL(0.75 + Math.sin(t * 0.3) * 0.03, 0.85, 0.32 + Math.sin(t * 0.8) * 0.06);
+  }
+  F.color.lerp(F.target, Math.min(1, dt * 4));
+  const playing = deep.video && !deep.video.paused;
+  F.ambi.material.color.copy(F.color); F.ambi.material.opacity = (playing ? 0.75 : 0.35) * lit(0);
+  F.pool.material.color.copy(F.color); F.pool.material.opacity = (playing ? 0.16 : 0.14) * lit(0) * (1 - 0.6 * (deep.zoomK || 0));
+  // The shafts sway and fade with the lights.
+  for (const s of F.shafts) { s.rotation.z = Math.sin(t * 0.15 + s.userData.phase) * 0.12; s.material.opacity = 0.1 * lights * lit(2) * (0.8 + 0.2 * Math.sin(t * 0.7 + s.userData.phase)); }
+  // A pulse running along the pillar neon toward the screen.
+  for (const s of F.strips) { const wave = Math.max(0, 1 - Math.abs(((t * 1.4) % 8) - s.userData.i) / 1.4); s.material.opacity = (0.25 + 0.75 * wave) * lights * lit(s.userData.i); s.userData.up.material.opacity = (0.2 + 0.35 * wave) * lights * lit(s.userData.i); }
+  // The heartbeat: lub-dub, then a long rest. Faster while she's sitting.
+  const period = deep.seated ? 1.05 : 1.5, p = (t % period) / period;
+  const beat = Math.max(0, 1 - Math.abs(p - 0.05) / 0.06) + 0.7 * Math.max(0, 1 - Math.abs(p - 0.22) / 0.06);
+  F.ring.material.opacity = (0.35 + 0.65 * beat) * Math.max(0.35, lights);
+  F.ring2.material.opacity = 0.6 * beat * Math.max(0.3, lights);
+  F.ring2.scale.setScalar(1 + p * 0.25);
+  if (Math.floor(t / period) !== F.beat) { F.beat = Math.floor(t / period); if (Sfx.ctx && deep.drone) { deepTone(52, 0.18, playing ? 0.03 : 0.09, 0, 'sine', 38); deepTone(48, 0.16, playing ? 0.02 : 0.06, period * 0.17, 'sine', 36); } }
+  // Motes rising; stars twinkling against each other.
+  const mp = F.motes.geometry.attributes.position.array;
+  for (let i = 0; i < mp.length; i += 3) { mp[i + 1] += dt * (0.12 + (i % 5) * 0.03); mp[i] += Math.sin(t * 0.6 + i) * dt * 0.08; if (mp[i + 1] > 6.5) mp[i + 1] = 0.1; }
+  F.motes.geometry.attributes.position.needsUpdate = true;
+  F.motes.material.opacity = 0.8 * Math.max(0.3, lights);
+  F.stars2.material.opacity = (0.25 + 0.35 * Math.sin(t * 1.3)) * lights;
+  Rm.starPts.material.opacity *= 0.75 + 0.25 * Math.sin(t * 0.9 + 1.5);
 }

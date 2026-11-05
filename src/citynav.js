@@ -61,7 +61,8 @@ function buildNav() {
 }
 
 function updateNav() {
-  const N = buildNav(), t = city.active && !city.talking && !show.active ? routeTarget(idolTarget()) : null;
+  // No beacon down below: nothing should point the way there, or out.
+  const N = buildNav(), t = city.active && !city.talking && !show.active && city.inside !== 'deep' ? routeTarget(idolTarget()) : null;
   N.g.visible = !!t;
   N.el.classList.toggle('hidden', !t);
   if (!t) return;
