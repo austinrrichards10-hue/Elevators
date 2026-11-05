@@ -15,11 +15,6 @@ function buildNorthside(G, towers) {
   const back = NORTH.back = east ? east[1] + east[4] / 2 : 172;
   const DX = NORTH.dx;
   ROOMS.deep.door = { x: DX, z: back + 1.6 };
-  // The same paving as every pavement in the city, at the same height.
-  const paving = (w, d) => { const t = paveTexture(); t.repeat.set(w / 3.7, d / 3.7); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }); };
-  const gapLen = back - NORTH.edge + 4;
-  add(new THREE.PlaneGeometry(4, gapLen).rotateX(-Math.PI / 2), paving(4, gapLen), 3, 0.14, (NORTH.edge + back + 4) / 2).receiveShadow = true;
-  add(new THREE.PlaneGeometry(23.5, 4).rotateX(-Math.PI / 2), paving(23.5, 4), 11.75, 0.141, back + 2).receiveShadow = true;
   // Behind the walkway, another ordinary building, windows and shopfronts like all the rest,
   // so looking down the gap just shows more city.
   towers.push([11.5, back + 9.6, 26, 26 + (back % 1) * 30, 11]);
