@@ -428,7 +428,7 @@ const phone = { open: false, app: 'home', thread: null, t: 0, el: null, lastUnre
 const APPS = [
   ['messages', 'Messages', '💬', '#39d5c8'], ['quests', 'Quests', '⭐', '#ffd36a'], ['map', 'Map', '🗺️', '#7ac0ff'],
   ['startube', 'StarTube', '▶️', '#ff4a5a'], ['chirp', 'Chirp', '🐦', '#5ab0ff'], ['schedule', 'Schedule', '📅', '#b47aff'],
-  ['settings', 'Settings', '⚙️', '#8a8e9a'],
+  ['tiktok', 'TikTok', '♪', 'linear-gradient(135deg, #25f4ee, #101014 45%, #101014 55%, #fe2c55)'], ['settings', 'Settings', '⚙️', '#8a8e9a'],
 ];
 
 function buildPhone() {
@@ -469,6 +469,7 @@ function openPhone(app = 'home') {
 function closePhone() {
   if (!phone.open) return;
   phone.open = false;
+  ttLeave();
   phone.el.classList.add('hidden');
   if (game.state === 'playing') lockPointer();
 }
@@ -499,6 +500,7 @@ function renderPhone() {
   phone.el.dataset.app = phone.app;
   body.innerHTML = PHONE_APPS[phone.app] ? PHONE_APPS[phone.app]() : PHONE_APPS.home();
   if (phone.app === 'map') { const c = body.querySelector('canvas'); if (c) drawCityMap(c, null); }
+  if (phone.app === 'tiktok') ttEnter(); else ttLeave();
 }
 
 const PHONE_APPS = {
@@ -582,6 +584,7 @@ const PHONE_APPS = {
 function avatarColor(id) { const L = LOOKS[id]; return L ? `#${new THREE.Color(L.hair).getHexString()}` : id === 'teto' ? '#d8243c' : '#5a6a8a'; }
 
 function phoneClick(e) {
+  if (phone.app === 'tiktok' && ttClick(e)) return;
   const b = e.target.closest('[data-go],[data-thread],[data-track],[data-reply],[data-act],[data-post],[data-delwall],[data-wall],[data-ui],.ph-home');
   if (!b) return;
   // Deleting takes two taps: the first asks "Delete?", the second does it.
@@ -604,7 +607,7 @@ function phoneClick(e) {
   Sfx.swap();
   renderPhone();
 }
-addEventListener('change', (e) => { if (e.target.matches && e.target.matches('#phone [data-pick]')) pickWallpapers(e.target.files); });
+addEventListener('change', (e) => { if (e.target.matches && e.target.matches('#phone [data-pick]')) pickWallpapers(e.target.files); if (e.target.matches && e.target.matches('#phone [data-pickvid]')) pickVideos(e.target.files); });
 
 function reply(id, kind) {
   if (!id) return;
@@ -658,3 +661,186 @@ function updatePhone(dt) {
     else if (phone.app === 'startube' && (phone.slow = (phone.slow || 0) + 1) % 15 === 0) { const s = phone.el.querySelector('.ph-scroll'); const top = s ? s.scrollTop : 0; renderPhone(); const s2 = phone.el.querySelector('.ph-scroll'); if (s2) s2.scrollTop = top; }
   }
 }
+
+/* ---------- TikTok ---------- */
+// A feed of the videos in the phone-videos folder: one at a time, full screen, swiping up to
+// the next. Opening it brings the phone to the middle of the screen, big; the rotate button
+// turns it sideways for wide videos. Like the wallpapers, the folder is read by trying 1.mp4,
+// 2.mp4, ... (any of .mp4 .webm .mov .m4v); served over http any name works; and videos can
+// be loaded by hand.
+const VID_DIR = 'phone-videos/';
+const tt = { videos: [], probed: false, active: false, land: false, observer: null, likes: {}, ducked: null, current: 0 };
+try { tt.likes = JSON.parse(localStorage.getItem('tiktok-likes') || '{}'); } catch { /* fine */ }
+
+function probeVideos() {
+  if (tt.probed) return;
+  tt.probed = true;
+  const add = (src, name) => { if (!tt.videos.some((v) => v.src === src)) { tt.videos.push({ src, name }); if (tt.active) ttRefresh(); } };
+  const tryVid = (src) => new Promise((res) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.muted = true;
+    const done = (ok) => { v.onloadedmetadata = v.onerror = null; v.removeAttribute('src'); v.load(); res(ok); };
+    v.onloadedmetadata = () => done(true);
+    v.onerror = () => done(false);
+    v.src = src;
+  });
+  const series = async (prefix) => {
+    let misses = 0;
+    for (let n = 1; n <= 300 && misses < 2; n++) {
+      let found = false;
+      for (const ext of ['mp4', 'webm', 'mov', 'm4v']) {
+        const src = `${VID_DIR}${prefix}${n}.${ext}`;
+        if (await tryVid(src)) { add(src, `${prefix}${n}.${ext}`); found = true; break; }
+      }
+      misses = found ? 0 : misses + 1;
+    }
+  };
+  series('').then(() => series('video'));
+  if (location.protocol.startsWith('http')) {
+    fetch(VID_DIR).then((r) => (r.ok ? r.text() : '')).then((html) => {
+      for (const m of html.matchAll(/href="([^"?#]+\.(?:mp4|webm|mov|m4v))"/gi)) { const n = decodeURIComponent(m[1]).split('/').pop(); add(VID_DIR + encodeURIComponent(n), n); }
+    }).catch(() => {});
+  }
+}
+function pickVideos(files) {
+  for (const f of files) if (/^video\//.test(f.type) || /\.(mp4|webm|mov|m4v)$/i.test(f.name)) tt.videos.push({ src: URL.createObjectURL(f), name: f.name, picked: true });
+  ttRefresh();
+}
+
+const TT_USERS = ['@miku.daily', '@tokyo.nights', '@snowdrop_fan', '@shibuya_walks', '@neon.cat', '@ramen.go', '@idol.clips', '@sakura.vibes'];
+const TT_TAGS = ['#fyp #tokyo', '#idol #live', '#sakura #spring', '#dance', '#citypop #night', '#vocaloid', '#shibuya', '#music'];
+const ttLikes = (v, i) => 1200 + ((v.name.length * 7919 + i * 3571) % 98000) + (tt.likes[v.name] ? 1 : 0);
+PHONE_APPS.tiktok = () => {
+  const vids = tt.videos;
+  const slides = vids.map((v, i) => {
+    const user = TT_USERS[i % TT_USERS.length];
+    return `<section class="tt-slide" data-i="${i}">
+      <video class="tt-vid" playsinline loop preload="metadata" src="${esc(v.src)}"></video>
+      <div class="tt-tap" data-ttplay="${i}"></div>
+      <div class="tt-paused">&#9654;</div>
+      <aside class="tt-side">
+        <i class="tt-av">${esc(user[1].toUpperCase())}</i>
+        <button data-ttlike="${i}" class="${tt.likes[v.name] ? 'on' : ''}"><b>&#9829;</b><span>${fmt(ttLikes(v, i))}</span></button>
+        <button data-ttcomment="${i}"><b>&#128172;</b><span>${fmt(Math.round(ttLikes(v, i) / 37))}</span></button>
+        <button data-ttshare="${i}"><b>&#8599;</b><span>Share</span></button>
+      </aside>
+      <footer class="tt-cap"><b>${esc(user)}</b><span>${esc(v.name.replace(/\.[^.]+$/, ''))} ${TT_TAGS[i % TT_TAGS.length]}</span><em>&#9834; original sound</em></footer>
+      <div class="tt-bar"><i></i></div>
+    </section>`;
+  }).join('');
+  const empty = `<div class="tt-empty"><b>No videos yet</b><p>Put videos in the <b>phone-videos</b> folder next to index.html, named 1.mp4, 2.mp4, 3.mp4...</p><label class="ph-file">Load videos...<input type="file" accept="video/*" multiple data-pickvid></label></div>`;
+  return `<div class="tt-feed">${vids.length ? slides : empty}</div>
+    <div class="tt-top"><button data-go="home" title="Back">&#10005;</button><span><em>Following</em><b>For You</b></span><button data-ttrotate title="Rotate (R)">&#10227;</button></div>
+    ${vids.length ? '<div class="tt-nav"><button data-ttnav="-1" title="Previous (Up / W)">&#9650;</button><button data-ttnav="1" title="Next (Down / S)">&#9660;</button></div>' : ''}
+    ${vids.length ? '<label class="tt-add" title="Load more videos">+<input type="file" accept="video/*" multiple data-pickvid></label>' : ''}`;
+};
+
+function ttFeed() { return phone.el && phone.el.querySelector('.tt-feed'); }
+function ttEnter() {
+  probeVideos();
+  if (!tt.active) {
+    tt.active = true;
+    tt.current = 0;
+    phone.el.classList.add('big');
+    phone.el.classList.remove('rise'); void phone.el.offsetWidth; phone.el.classList.add('rise');
+    // Hush the game while a video plays.
+    if (Sfx.master && Sfx.ctx) { tt.ducked = true; Sfx.master.gain.setTargetAtTime(Sfx.muted ? 0 : 0.14, Sfx.ctx.currentTime, 0.2); }
+  }
+  ttLayout();
+  ttWire();
+}
+function ttLeave() {
+  if (!tt.active) return;
+  tt.active = false;
+  for (const v of phone.el.querySelectorAll('video')) { v.pause(); v.removeAttribute('src'); v.load(); }
+  if (tt.observer) { tt.observer.disconnect(); tt.observer = null; }
+  tt.land = false;
+  phone.el.classList.remove('big', 'land', 'turning');
+  phone.el.style.zoom = '';
+  // Back to the game's own volume (or silence, if it was muted meanwhile).
+  if (Sfx.master && Sfx.ctx && tt.ducked) { Sfx.master.gain.cancelScheduledValues(Sfx.ctx.currentTime); Sfx.master.gain.setTargetAtTime(Sfx.muted ? 0 : 0.7, Sfx.ctx.currentTime, 0.2); tt.ducked = null; }
+}
+// Big in the middle of the screen; turned sideways, nearly the whole screen.
+function ttLayout() {
+  if (!tt.active) return;
+  phone.el.classList.toggle('land', tt.land);
+  const z = tt.land ? Math.min((innerWidth * 0.94) / 1140, (innerHeight * 0.9) / 560) : (innerHeight * 0.94) / 640;
+  phone.el.style.zoom = z.toFixed(3);
+}
+addEventListener('resize', () => { if (tt.active) ttLayout(); });
+
+// Each video plays when it fills the screen, and stops when it's scrolled away.
+function ttWire() {
+  const feed = ttFeed();
+  if (!feed) return;
+  if (tt.observer) tt.observer.disconnect();
+  tt.observer = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      const v = en.target.querySelector('video');
+      if (en.isIntersecting && en.intersectionRatio > 0.6) {
+        tt.current = +en.target.dataset.i;
+        en.target.classList.remove('paused');
+        v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+        ttHint(v);
+      } else v.pause();
+    }
+  }, { root: feed, threshold: [0, 0.6, 1] });
+  for (const s of feed.querySelectorAll('.tt-slide')) {
+    tt.observer.observe(s);
+    const v = s.querySelector('video');
+    v.ontimeupdate = () => { const b = s.querySelector('.tt-bar i'); if (b && v.duration) b.style.width = `${(v.currentTime / v.duration) * 100}%`; };
+    v.onloadedmetadata = () => { s.classList.toggle('wide', v.videoWidth > v.videoHeight); if (+s.dataset.i === tt.current) ttHint(v); };
+  }
+}
+// A wide video in a tall phone: the rotate button pulses.
+function ttHint(v) { const r = phone.el.querySelector('[data-ttrotate]'); if (r) r.classList.toggle('hint', !tt.land && v.videoWidth > v.videoHeight); }
+function ttRefresh() { if (tt.active && phone.app === 'tiktok') { const at = tt.current || 0; renderPhone(); ttGo(at, false); } }
+function ttGo(i, smooth = true) {
+  const feed = ttFeed();
+  if (!feed || !tt.videos.length) return;
+  const n = Math.max(0, Math.min(tt.videos.length - 1, i));
+  const top = n * feed.clientHeight;
+  feed.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+  // If the smooth scroll didn't get there (some browsers stall it), jump the rest.
+  if (smooth) setTimeout(() => { if (Math.abs(feed.scrollTop - top) > 4) feed.scrollTop = top; }, 650);
+}
+function ttRotate() {
+  const at = tt.current || 0;
+  tt.land = !tt.land;
+  phone.el.classList.remove('turning'); void phone.el.offsetWidth; phone.el.classList.add('turning');
+  ttLayout();
+  // Stay on the same video after the screen changes shape.
+  ttGo(at, false);
+  setTimeout(() => ttGo(at, false), 80);
+  const v = phone.el.querySelector(`.tt-slide[data-i="${at}"] video`);
+  if (v) ttHint(v);
+}
+
+function ttClick(e) {
+  const b = e.target.closest('[data-ttplay],[data-ttlike],[data-ttcomment],[data-ttshare],[data-ttnav],[data-ttrotate]');
+  if (!b) return false;
+  if (b.dataset.ttplay !== undefined) {
+    const s = b.closest('.tt-slide'), v = s.querySelector('video');
+    if (v.paused) { v.muted = false; v.play().catch(() => {}); s.classList.remove('paused'); } else { v.pause(); s.classList.add('paused'); }
+  } else if (b.dataset.ttlike !== undefined) {
+    const i = +b.dataset.ttlike, v = tt.videos[i];
+    tt.likes[v.name] = !tt.likes[v.name];
+    try { localStorage.setItem('tiktok-likes', JSON.stringify(tt.likes)); } catch { /* fine */ }
+    b.classList.toggle('on', !!tt.likes[v.name]);
+    b.querySelector('span').textContent = fmt(ttLikes(v, i));
+    Sfx.pickup();
+  } else if (b.dataset.ttcomment !== undefined) phoneBanner('Comments', ['so good', 'who is this??', 'tokyo never sleeps', 'replaying forever', 'the vibes'][Math.floor(Math.random() * 5)]);
+  else if (b.dataset.ttshare !== undefined) phoneBanner('Shared', 'Sent to Kotone. She replied with nine exclamation marks.');
+  else if (b.dataset.ttnav !== undefined) ttGo((tt.current || 0) + +b.dataset.ttnav);
+  else if (b.dataset.ttrotate !== undefined) ttRotate();
+  return true;
+}
+
+addEventListener('keydown', (e) => {
+  if (!tt.active || !phone.open) return;
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') { e.preventDefault(); e.stopImmediatePropagation(); ttGo((tt.current || 0) + 1); }
+  else if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); e.stopImmediatePropagation(); ttGo((tt.current || 0) - 1); }
+  else if (e.code === 'KeyR') { e.preventDefault(); e.stopImmediatePropagation(); ttRotate(); }
+  else if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);

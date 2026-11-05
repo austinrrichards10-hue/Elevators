@@ -138,3 +138,53 @@ body:not(.in-city) #phone, body:not(.in-city) #phone-banner { display: none; }
 #phone .ph-wall-x { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; border: 0; background: rgba(10, 14, 26, .85); color: #fff; font-size: 10px; font-weight: 700; box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); cursor: pointer; }
 #phone .ph-wall-x:hover { background: #d8303a; }
 #phone .ph-wall-x.sure { background: #d8303a; right: 50%; transform: translateX(50%); top: 40%; padding: 0 8px; }
+
+/* ---------- TikTok: the phone big in the middle of the screen ---------- */
+#phone.big { right: auto; left: 50%; top: 50%; margin: 0; transform: translate(-50%, -50%); z-index: 46; box-shadow: 0 30px 120px rgba(0, 0, 0, .75), inset 0 0 0 2px #3a3f4c, inset 0 0 0 5px #0a0b10; }
+#phone.big.rise { animation: ph-grow .35s cubic-bezier(.2, .9, .3, 1.1); }
+@keyframes ph-grow { from { transform: translate(-50%, -50%) scale(.7); opacity: .3; } to { transform: translate(-50%, -50%); opacity: 1; } }
+#phone.big.land { width: 1120px; height: 540px; border-radius: 48px; }
+#phone.big.land .ph-screen { border-radius: 38px; }
+#phone.big.land .ph-screen::before { left: 10px; top: 50%; width: 22px; height: 86px; margin: -43px 0 0; }
+#phone.big.land .ph-status { display: none; }
+#phone.big.land .ph-home { left: auto; right: 9px; top: 50%; bottom: auto; width: 5px; height: 110px; margin: -55px 0 0; }
+#phone.turning { animation: ph-turn .45s cubic-bezier(.3, .9, .3, 1); }
+@keyframes ph-turn { from { transform: translate(-50%, -50%) rotate(-90deg) scale(.55); } to { transform: translate(-50%, -50%) rotate(0) scale(1); } }
+#phone[data-app="tiktok"] .ph-body { margin-top: -26px; padding-top: 0; background: #000; }
+#phone[data-app="tiktok"] .ph-status { color: #fff; }
+.tt-feed { position: absolute; inset: 0; overflow-y: scroll; scroll-snap-type: y mandatory; background: #000; scrollbar-width: none; }
+.tt-feed::-webkit-scrollbar { width: 0; }
+.tt-slide { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; display: grid; place-items: center; overflow: hidden; background: #000; }
+.tt-vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.tt-tap { position: absolute; inset: 60px 70px 90px 0; cursor: pointer; }
+.tt-paused { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 54px; color: rgba(255, 255, 255, .75); pointer-events: none; opacity: 0; transition: opacity .15s; text-shadow: 0 2px 12px rgba(0, 0, 0, .6); }
+.tt-slide.paused .tt-paused { opacity: 1; }
+.tt-side { position: absolute; right: 8px; bottom: 96px; display: grid; gap: 14px; justify-items: center; }
+.tt-side button { display: grid; justify-items: center; gap: 2px; background: none; border: 0; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, .7); }
+.tt-side button b { font-size: 26px; line-height: 1; }
+.tt-side button span { font-size: 11px; font-weight: 600; }
+.tt-side button.on b { color: #fe2c55; transform: scale(1.12); }
+.tt-av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; color: #fff; background: linear-gradient(135deg, #25f4ee, #fe2c55); box-shadow: 0 0 0 2px #fff; }
+.tt-cap { position: absolute; left: 12px; right: 70px; bottom: 26px; display: grid; gap: 3px; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, .8); font-size: 12.5px; }
+.tt-cap b { font-size: 14px; }
+.tt-cap em { font-style: normal; font-size: 11.5px; opacity: .9; }
+.tt-bar { position: absolute; left: 0; right: 0; bottom: 14px; height: 2px; background: rgba(255, 255, 255, .25); }
+.tt-bar i { display: block; height: 100%; width: 0; background: #fff; }
+.tt-top { position: absolute; left: 0; right: 0; top: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 12px; color: #fff; pointer-events: none; z-index: 2; }
+#phone.big.land .tt-top { top: 14px; padding: 0 44px; }
+.tt-top button { pointer-events: auto; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .35); color: #fff; font-size: 17px; }
+.tt-top button.hint { background: #fe2c55; animation: tt-pulse 1s ease-in-out infinite; }
+@keyframes tt-pulse { 50% { transform: scale(1.18); box-shadow: 0 0 0 6px rgba(254, 44, 85, .3); } }
+.tt-top span { display: flex; gap: 14px; font-size: 14px; text-shadow: 0 1px 4px rgba(0, 0, 0, .7); }
+.tt-top span em { font-style: normal; opacity: .65; }
+.tt-top span b { border-bottom: 2px solid #fff; padding-bottom: 2px; }
+.tt-nav { position: absolute; right: 13px; top: 96px; display: grid; gap: 8px; z-index: 2; }
+#phone.big.land .tt-nav { right: 30px; }
+#phone.big.land .tt-side { right: 30px; }
+.tt-nav button { width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .35); color: #fff; font-size: 12px; }
+.tt-add { position: absolute; left: 12px; top: 76px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, .35); color: #fff; font-size: 20px; cursor: pointer; z-index: 2; }
+#phone.big.land .tt-add { left: 44px; top: 58px; }
+.tt-add input { display: none; }
+.tt-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; padding: 40px 26px; text-align: center; color: #fff; }
+.tt-empty b { font-size: 18px; }
+.tt-empty p { margin: 0; font-size: 13px; opacity: .75; line-height: 1.5; }
