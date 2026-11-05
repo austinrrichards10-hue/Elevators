@@ -30,6 +30,7 @@ const MOD_TELEPORTS = {
 // One chip per site, landing on the edge of it.
 for (const s of SITES) MOD_TELEPORTS[mapSiteName(s).replace(/^The /, '')] = () => ({ x: s.x, z: s.z + s.radius - 4 });
 const MOD_ACTIONS = {
+  save: ['Save the game now', () => { if (!saveGame(true)) toast("Can't save right now: not mid-fight or mid-scene"); }],
   stamina: ['Heal and warm up', () => { player.stamina = 100; survival.health = 100; survival.warmth = 100; }],
   axe: ['Give axe', () => { if (!survival.hasAxe) takeAxe(); }],
   planks: ['+10 planks', () => { survival.planks += 10; }],
@@ -70,6 +71,7 @@ function renderMod() {
       <h2>Moderator</h2>
     </header>
     <div class="room-actions"><button id="close-mod" class="secondary">Close</button><button class="secondary" data-action="reset">Reset all</button></div>
+    ${section('Save', modButtons(['save']))}
     ${section('Player', MOD_SWITCHES.Player.map(toggle).join('') + modButtons(['stamina', 'arrows']))}
     ${section('Survival', MOD_SWITCHES.Survival.map(toggle).join('') + modButtons(['axe', 'planks', 'fire', 'items', 'reveal', 'katana', 'crimson', 'balloon', 'pelts', 'boss']))}
     ${section('Part two', modButtons(['voyage', 'fame', 'evening', 'dome']))}

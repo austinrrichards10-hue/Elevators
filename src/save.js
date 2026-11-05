@@ -13,9 +13,10 @@ function readSave() {
   }
 }
 
-function saveGame() {
+// `force`: from the moderator menu, which pauses the game while it's open.
+function saveGame(force = false) {
   // Nothing mid-fight: she only ever sits down in the real forest.
-  if (arenaActive() || game.state !== 'playing') return;
+  if (arenaActive() || (game.state !== 'playing' && !(force && game.state === 'paused'))) return false;
   const data = {
     v: 1,
     at: Date.now(),
@@ -42,6 +43,7 @@ function saveGame() {
     toast('Game saved');
   } catch { /* storage is optional */ }
   renderLoadButton();
+  return true;
 }
 
 function loadGame() {

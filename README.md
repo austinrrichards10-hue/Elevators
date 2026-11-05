@@ -179,7 +179,7 @@ src/
   songs.js       The idol songs, their lyrics and the synthesized voice
   rhythm.js      The rhythm game on stage
   save.js        Saving at campfires, and loading from the title screen
-  moderator.js   Moderator menu: flying, no cold, give items, teleports and more
+  moderator.js   Moderator menu: a manual save, flying, no cold, give items, teleports and more
   player.js      Loads the character models, the skin list (SKINS) and the player rig
   boots.js       Black tactical boots, shaped from the characters' own feet
   bow.js         The bow and arrow models, built in code
