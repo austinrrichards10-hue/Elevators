@@ -20,10 +20,10 @@ function buildNorthside(G, towers) {
   const ground = std(0x44464c);
   add(new THREE.PlaneGeometry(4, back - NORTH.edge + 4).rotateX(-Math.PI / 2), ground, 3, 0.02, (NORTH.edge + back + 4) / 2);
   add(new THREE.PlaneGeometry(23.5, 4).rotateX(-Math.PI / 2), ground, 11.75, 0.021, back + 2);
-  const concrete = std(0x5a5c62);
-  add(new THREE.BoxGeometry(24, 9, 0.6), concrete, 11.75, 4.5, back + 4.1);
-  add(new THREE.BoxGeometry(0.6, 9, 4.4), concrete, 23.6, 4.5, back + 2);
-  add(new THREE.BoxGeometry(0.6, 9, 12), concrete, 0.7, 4.5, back - 2);
+  // Behind the walkway, another ordinary building, windows and shopfronts like all the rest,
+  // so looking down the gap just shows more city.
+  towers.push([11.5, back + 9.6, 26, 26 + (back % 1) * 30, 11]);
+  towers.push([24.2, back + 2.1, 2.4, 22, 4.6]);
   // A drainpipe and a vent on the back wall: the only things anyone's put here.
   add(new THREE.CylinderGeometry(0.08, 0.08, 9, 8), std(0x3a3a40, { metalness: 0.5 }), 8, 4.5, back + 0.12);
   add(new THREE.BoxGeometry(0.9, 0.6, 0.2), std(0x6a6c72, { metalness: 0.4 }), 20, 2.6, back + 0.1);
