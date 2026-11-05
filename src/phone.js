@@ -307,12 +307,14 @@ const BUILTIN_WALLS = [
   'radial-gradient(circle at 30% 20%, #ffd36a 0%, #ff8ab8 35%, #2a1640 80%)',
   'linear-gradient(180deg, #0b1630 0%, #13254a 60%, #39d5c8 140%)',
 ];
-const walls = { found: [], picked: [], probed: false };
+const walls = { found: [], picked: [], probed: false, bust: '' };
 function probeWallpapers() {
   if (walls.probed) return;
   walls.probed = true;
   const add = (url) => { if (!walls.found.includes(url)) { walls.found.push(url); if (phone.open && phone.app === 'settings') renderPhone(); } };
-  const tryImg = (url) => new Promise((res) => { const im = new Image(); im.onload = () => { add(url); res(true); }; im.onerror = () => res(false); im.src = url; });
+  // `bust` makes the browser fetch the folder afresh after a picture's been deleted and the
+  // rest renumbered, instead of showing the old 2.png from its cache.
+  const tryImg = (url) => new Promise((res) => { const im = new Image(); im.onload = () => { add(url); res(true); }; im.onerror = () => res(false); im.src = url + walls.bust; });
   const series = async (name) => { for (let i = 1; i <= 60; i++) if (!(await tryImg(`${WALL_DIR}${name}${i}.png`))) break; };
   series('');
   series('wallpaper');
@@ -325,8 +327,70 @@ function probeWallpapers() {
     }).catch(() => {});
   }
 }
+function hiddenWalls() { try { return JSON.parse(localStorage.getItem('phone-wallpaper-hidden') || '[]'); } catch { return []; } }
 function allWalls() {
-  return [...BUILTIN_WALLS.map((css, i) => ({ key: `builtin:${i}`, css })), ...walls.found.map((u) => ({ key: `file:${u}`, css: `center / cover no-repeat url("${u}")` })), ...walls.picked.map((p) => ({ key: `picked:${p.name}`, css: `center / cover no-repeat url("${p.url}")` }))];
+  const hidden = hiddenWalls();
+  return [...BUILTIN_WALLS.map((css, i) => ({ key: `builtin:${i}`, css })), ...walls.found.map((u) => ({ key: `file:${u}`, css: `center / cover no-repeat url("${u}${walls.bust}")` })), ...walls.picked.map((p) => ({ key: `picked:${p.name}`, css: `center / cover no-repeat url("${p.url}")` }))].filter((w) => !hidden.includes(w.key));
+}
+
+/* ---------- Deleting wallpapers, for good ---------- */
+// Pictures in the folder are really deleted from the disk. A web page can only do that with
+// the folder's permission, so the first time it asks for the phone-wallpapers folder (and
+// remembers it); then it removes the file and moves the later numbers down, so 1.png, 2.png,
+// 3.png... stay without a gap. Built-in wallpapers are hidden for good instead.
+const WALL_DB = 'frostmourne-wallpapers';
+function wallDb() {
+  return new Promise((res, rej) => { const r = indexedDB.open(WALL_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore('h'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function wallDirHandle() {
+  let h = null;
+  try { const db = await wallDb(); h = await new Promise((res) => { const q = db.transaction('h').objectStore('h').get('dir'); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch { /* no saved folder */ }
+  if (h && (await h.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') h = null;
+  if (!h) {
+    phoneBanner('Wallpapers', 'Choose the phone-wallpapers folder (next to index.html) so the phone can delete from it.');
+    h = await window.showDirectoryPicker({ id: 'phone-wallpapers', mode: 'readwrite' });
+    try { const db = await wallDb(); db.transaction('h', 'readwrite').objectStore('h').put(h, 'dir'); } catch { /* asks again next time */ }
+  }
+  return h;
+}
+async function fileExists(dir, name) { try { await dir.getFileHandle(name); return true; } catch { return false; } }
+
+async function deleteWall(key) {
+  const current = (() => { try { return localStorage.getItem('phone-wallpaper'); } catch { return null; } })();
+  if (key.startsWith('builtin:')) {
+    const hidden = hiddenWalls();
+    // Always keep one built-in, so the phone is never left without a wallpaper.
+    if (BUILTIN_WALLS.length - hidden.filter((k) => k.startsWith('builtin:')).length <= 1) { phoneBanner('Wallpapers', 'The phone needs at least one built-in wallpaper.'); return; }
+    hidden.push(key);
+    try { localStorage.setItem('phone-wallpaper-hidden', JSON.stringify(hidden)); } catch { /* fine */ }
+  } else if (key.startsWith('picked:')) {
+    walls.picked = walls.picked.filter((p) => `picked:${p.name}` !== key);
+    if (current === key) try { localStorage.removeItem('phone-wallpaper-data'); } catch { /* fine */ }
+  } else if (key.startsWith('file:')) {
+    if (!window.showDirectoryPicker) { phoneBanner('Wallpapers', 'This browser can\'t delete files. Delete it from the phone-wallpapers folder by hand.'); return; }
+    const name = decodeURIComponent(key.slice(5).split('/').pop());
+    let dir;
+    try { dir = await wallDirHandle(); } catch { phoneBanner('Wallpapers', 'Not deleted: the folder wasn\'t chosen.'); return; }
+    if (!(await fileExists(dir, name))) { phoneBanner('Wallpapers', `That folder has no ${name}. Choose the phone-wallpapers folder next to index.html.`); try { const db = await wallDb(); db.transaction('h', 'readwrite').objectStore('h').delete('dir'); } catch { /* fine */ } return; }
+    await dir.removeEntry(name);
+    // Close the gap: 3.png becomes 2.png, 4.png becomes 3.png...
+    const m = name.match(/^(wallpaper)?(\d+)\.png$/i);
+    if (m) {
+      const pre = m[1] || '';
+      for (let n = +m[2] + 1; await fileExists(dir, `${pre}${n}.png`); n++) {
+        const src = await (await dir.getFileHandle(`${pre}${n}.png`)).getFile();
+        const w = await (await dir.getFileHandle(`${pre}${n - 1}.png`, { create: true })).createWritable();
+        await w.write(await src.arrayBuffer()); await w.close();
+        await dir.removeEntry(`${pre}${n}.png`);
+      }
+    }
+    phoneBanner('Wallpapers', `Deleted ${name} for good.`);
+    walls.found = []; walls.probed = false; walls.bust = `?v=${Date.now()}`;
+    probeWallpapers();
+  }
+  if (current === key || (current && current.startsWith('file:') && key.startsWith('file:'))) try { localStorage.setItem('phone-wallpaper', allWalls()[0].key); } catch { /* fine */ }
+  phone.confirmDel = null;
+  renderPhone();
 }
 function currentWall() {
   let key = 'builtin:0', saved = null;
@@ -507,7 +571,8 @@ const PHONE_APPS = {
   settings() {
     let ui = 1; try { ui = parseFloat(localStorage.getItem('ui-scale')) || 1; } catch { /* fine */ }
     const cur = (() => { try { return localStorage.getItem('phone-wallpaper') || 'builtin:0'; } catch { return 'builtin:0'; } })();
-    return `${header('Settings')}<div class="ph-scroll"><h4>Wallpaper</h4><div class="ph-walls">${allWalls().map((w) => `<button data-wall="${esc(w.key)}" class="${w.key === cur ? 'on' : ''}" style='background:${w.css.replace(/'/g, '%27')}'></button>`).join('')}</div>
+    return `${header('Settings')}<div class="ph-scroll"><h4>Wallpaper</h4><div class="ph-walls">${allWalls().map((w) => `<div class="ph-wall"><button data-wall="${esc(w.key)}" class="${w.key === cur ? 'on' : ''}" style='background:${w.css.replace(/'/g, '%27')}'></button><button class="ph-wall-x${phone.confirmDel === w.key ? ' sure' : ''}" data-delwall="${esc(w.key)}" title="Delete this wallpaper">${phone.confirmDel === w.key ? 'Delete?' : '✕'}</button></div>`).join('')}</div>
+      <p class="ph-tip">✕ deletes a wallpaper for good (tap twice). Pictures from the folder are deleted from your computer.</p>
       <p class="ph-tip">Put PNGs in the <b>phone-wallpapers</b> folder next to index.html, named 1.png, 2.png, 3.png... and they show up here. Or load them by hand:</p>
       <div class="ph-actions"><label class="ph-file">📁 Load pictures…<input type="file" accept="image/*" multiple data-pick></label></div>
       <h4>Interface size</h4><div class="ph-actions">${[0.85, 1, 1.15, 1.3].map((s) => `<button data-ui="${s}" class="${Math.abs(s - ui) < 0.01 ? 'on' : ''}">${s === 1 ? 'Normal' : `${Math.round(s * 100)}%`}</button>`).join('')}</div></div>`;
@@ -517,8 +582,15 @@ const PHONE_APPS = {
 function avatarColor(id) { const L = LOOKS[id]; return L ? `#${new THREE.Color(L.hair).getHexString()}` : id === 'teto' ? '#d8243c' : '#5a6a8a'; }
 
 function phoneClick(e) {
-  const b = e.target.closest('[data-go],[data-thread],[data-track],[data-reply],[data-act],[data-post],[data-wall],[data-ui],.ph-home');
+  const b = e.target.closest('[data-go],[data-thread],[data-track],[data-reply],[data-act],[data-post],[data-delwall],[data-wall],[data-ui],.ph-home');
   if (!b) return;
+  // Deleting takes two taps: the first asks "Delete?", the second does it.
+  if (b.dataset.delwall) {
+    const key = b.dataset.delwall;
+    if (phone.confirmDel === key) deleteWall(key).catch((err) => { phoneBanner('Wallpapers', `Couldn't delete it: ${err.message || err}`); phone.confirmDel = null; renderPhone(); });
+    else { phone.confirmDel = key; clearTimeout(phone.confirmT); phone.confirmT = setTimeout(() => { phone.confirmDel = null; if (phone.open && phone.app === 'settings') renderPhone(); }, 4000); Sfx.swap(); renderPhone(); }
+    return;
+  }
   if (b.classList.contains('ph-home')) { phone.app = 'home'; phone.thread = null; }
   else if (b.dataset.go) { phone.app = b.dataset.go; phone.thread = null; }
   else if (b.dataset.thread) { phone.app = 'messages'; phone.thread = b.dataset.thread; }
