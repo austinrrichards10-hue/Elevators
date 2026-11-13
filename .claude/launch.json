@@ -4,8 +4,9 @@
     {
       "name": "elevators",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\\serve.ps1", "8125"],
-      "port": 8125
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\\serve.ps1", "8126"],
+      "port": 8126,
+      "autoPort": false
     }
   ]
 }
