@@ -4,8 +4,8 @@
     {
       "name": "game",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\richh\\AppData\\Local\\Temp\\claude\\C--Users-richh-OneDrive-Desktop-Claude-Projects-game\\6d94a5af-c577-4be8-aeaf-966db0a69de5\\scratchpad\\serve.ps1"],
-      "port": 8123
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\\serve.ps1", "8124"],
+      "port": 8124
     }
   ]
 }
