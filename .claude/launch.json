@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "game",
+      "name": "elevators",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\\serve.ps1", "8124"],
-      "port": 8124
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\\serve.ps1", "8125"],
+      "port": 8125
     }
   ]
 }

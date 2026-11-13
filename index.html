@@ -3,234 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Frostmourne</title>
+<title>Elevators</title>
 <link rel="stylesheet" href="src/style.css">
-<link rel="stylesheet" href="src/story.css">
-<link rel="stylesheet" href="src/map.css">
-<link rel="stylesheet" href="src/items.css">
-<link rel="stylesheet" href="src/crimson.css">
-<link rel="stylesheet" href="src/balloon.css">
-<link rel="stylesheet" href="src/showdown.css">
-<link rel="stylesheet" href="src/city.css">
-<link rel="stylesheet" href="src/phone.css">
 </head>
 <body>
 <canvas id="view"></canvas>
-<div id="frost"></div>
-<div id="hurt"></div>
-
-<div id="hud" class="hidden">
-  <div id="crosshair" class="hidden"></div>
-  <div id="draw-ring" class="hidden"></div>
-  <div id="prompt" class="hidden"></div>
-  <div id="toast"></div>
-  <div id="note"></div>
-  <div id="objective"></div>
-  <div id="clock"></div>
-  <div id="fame"><span class="fame-level">Lv 1</span><span class="fame-title">Nobody</span><div class="fame-bar"><i></i></div><span class="fame-num"></span></div>
-  <div id="decor" class="hidden"></div>
-  <div id="compass" class="hidden"></div>
-  <canvas id="minimap" class="hidden" width="180" height="180"></canvas>
-  <div id="binoculars" class="hidden"></div>
-  <div id="vitals">
-    <div class="vital"><label>Health</label><div class="bar hp"><i id="hp-fill"></i></div></div>
-    <div class="vital" id="warmth"><label>Warmth</label><div class="bar warmth"><i id="warmth-fill"></i></div></div>
-    <div class="vital needs"><label>Hunger</label><div class="bar hunger"><i id="hunger-fill"></i></div></div>
-    <div class="vital needs"><label>Thirst</label><div class="bar thirst"><i id="thirst-fill"></i></div></div>
-    <div class="bar stamina"><i id="stamina-fill"></i></div>
-  </div>
-  <div id="hotbar">
-    <div class="slots">
-      <div class="slot" id="slot-bow"><kbd>1</kbd>Bow</div>
-      <div class="slot hidden" id="slot-axe"><kbd>2</kbd>Axe</div>
-      <div class="slot hidden" id="slot-katana"><kbd>3</kbd>Ember Blade</div>
-      <div class="slot resource"><b id="planks">0</b> planks</div>
-      <div class="slot resource hidden" id="slot-food"><kbd>F</kbd><b id="food-count">0</b> food</div>
-    </div>
-    <p class="hotbar-hint"><kbd>Tab</kbd> craft &nbsp;·&nbsp; <kbd>M</kbd> map &nbsp;·&nbsp; <kbd>J</kbd> journal &nbsp;·&nbsp; <kbd>I</kbd> pack &nbsp;·&nbsp; <kbd>Ctrl</kbd> <span id="look-mode">Free look</span></p>
-  </div>
-  <div id="craft" class="hidden">
-    <h3>Crafting</h3>
-    <ul id="craft-list"></ul>
-    <p>Press a number to craft &nbsp;·&nbsp; Tab to close</p>
-  </div>
-</div>
-
-<div id="subtitle"></div>
-<div id="banner"><p class="banner-kicker"></p><h2 class="banner-title"></h2><p class="banner-sub"></p></div>
-
-<div id="cine">
-  <div class="letterbox top"></div>
-  <div class="letterbox bottom"></div>
-  <canvas id="speedlines"></canvas>
-  <div id="cine-caption"></div>
-</div>
-<div id="flash"></div>
-<div id="sleep-fade"></div>
-<div id="talk" class="hidden"><div class="talk-name"></div><div class="talk-text"></div><div class="talk-choices"></div><div class="talk-more">E</div></div>
-<div id="gig-result" class="hidden"></div>
-<div id="levelup"></div>
-<div id="idol-log" class="hidden"></div>
+<div id="fade"></div>
 
 <section id="title" class="screen">
   <div class="title-card">
-    <p class="kicker">A survival story</p>
-    <h1>Frost<span>mourne</span></h1>
-    <p class="tag">The plane went down over the northern range. You walked away from it. Now the cold is coming for you.</p>
+    <p class="kicker">Floor 70 · going down</p>
+    <h1>ELEVATORS</h1>
+    <p class="tag">A glass car on the outside of the tallest tower in the city. Midnight. The whole skyline is lit, and it's a long way to the ground.</p>
     <nav class="menu">
       <button id="start" class="primary">Begin</button>
-      <button id="load" class="hidden">Load last save</button>
-      <button id="open-room">Character room</button>
-      <button id="open-mod">Moderator</button>
-      <button class="mute-toggle"></button>
+      <button class="mute-toggle">Sound: on</button>
     </nav>
-  </div>
-  <div class="title-help">
-    <h3>Controls</h3>
     <ul class="keys">
-      <li><b>WASD</b> move</li>
-      <li><b>Mouse</b> look around</li>
-      <li><b>Ctrl</b> lock aim</li>
-      <li><b>Left click</b> draw bow / swing axe</li>
-      <li><b>Right click</b> aim</li>
-      <li><b>1 · 2</b> bow · axe</li>
-      <li><b>E</b> pick up · use</li>
-      <li><b>Tab</b> craft</li>
-      <li><b>M</b> map (click to mark)</li>
-      <li><b>J</b> journal</li>
-      <li><b>I</b> pack</li>
-      <li><b>F</b> eat</li>
-      <li><b>C</b> sit by a fire</li>
-      <li><b>R</b> turn what you're building</li>
-      <li><b>B · X</b> decorate · pick up (in your cabin)</li>
-      <li><b>Z</b> binoculars</li>
-      <li><b>N</b> mute</li>
-      <li><b>Shift</b> sprint</li>
-      <li><b>Space</b> dodge</li>
-      <li><b>Q</b> scythe beam (vs Teto)</li>
-      <li><b>D F J K</b> hit notes on stage</li>
-      <li><b>P</b> phone (in Tokyo)</li>
+      <li><b>Mouse</b> look</li>
+      <li><b>WASD</b> walk</li>
+      <li><b>M</b> mute</li>
       <li><b>Esc</b> pause</li>
-      <li><b>`</b> moderator</li>
     </ul>
   </div>
-  <p class="credit">"Doomer Miku and Teto" by 0x00001337 (CC BY 4.0) · "RAF Voyager Aeroplane" by Foggy_123 (CC BY 4.0) · "Double Scythe" by EVAI (CC BY 4.0)</p>
+  <p class="credit">"Hatsune Miku (Vocaloid) T-Pose 3D Model" by Leon Okafor (CC BY 4.0)</p>
 </section>
-
-<aside id="room" class="hidden">
-  <header class="room-head">
-    <p class="room-kicker">Frostmourne</p>
-    <h2>Character Room</h2>
-  </header>
-  <div class="room-actions">
-    <button id="close-room" class="secondary">Back to menu</button>
-    <button class="secondary mute-toggle"></button>
-  </div>
-  <h3>View</h3>
-  <div class="chips" id="room-views"></div>
-  <h3>Pose</h3>
-  <div class="chips" id="room-poses"></div>
-  <label class="check"><input type="checkbox" id="room-bow" checked> Show bow</label>
-  <div class="loadout"></div>
-  <p class="hint"><b>Left drag</b> rotate<br><b>Scroll</b> zoom<br><b>Right drag</b> pan</p>
-</aside>
-
-<aside id="mod" class="hidden"></aside>
-<div id="mod-info" class="hidden"></div>
 
 <section id="pause" class="screen hidden">
-  <h2>Paused</h2>
-  <div class="title-actions">
-    <button class="secondary mute-toggle"></button>
-    <button id="pause-mod" class="secondary">Moderator</button>
-    <button id="pause-menu" class="secondary">Main menu</button>
-    <button id="resume">Resume</button>
+  <div class="pause-card">
+    <h2>Paused</h2>
+    <p>Click to keep riding</p>
+    <button class="mute-toggle secondary">Sound: on</button>
   </div>
 </section>
 
-<section id="dead" class="screen hidden">
-  <h2 id="dead-title">The cold took you</h2>
-  <p class="tag" id="dead-text">Out here, a fire is the difference between morning and never.</p>
-  <div class="title-actions">
-    <button id="dead-menu" class="secondary">Main menu</button>
-    <button id="dead-retry" class="secondary">Start over</button>
-    <button id="dead-continue">Respawn at last save</button>
-  </div>
-</section>
-
-<!-- The field book: her map, journal and pack, opened with M, J and I. -->
-<section id="book" class="hidden">
-  <nav class="book-tabs">
-    <button data-tab="map"><kbd>M</kbd> Map</button>
-    <button data-tab="journal"><kbd>J</kbd> Journal</button>
-    <button data-tab="pack"><kbd>I</kbd> Pack</button>
-  </nav>
-  <div class="book-page" id="book-map"><canvas id="map-canvas"></canvas><aside id="map-legend"></aside></div>
-  <div class="book-page" id="book-journal"></div>
-  <div class="book-page" id="book-pack"></div>
-  <p class="book-hint"></p>
-</section>
-
-<!-- A note or journal page, held up to read. -->
-<section id="reader" class="hidden">
-  <article class="paper">
-    <p class="reader-meta"></p>
-    <h3 class="reader-title"></h3>
-    <div class="reader-body"></div>
-    <p class="reader-hint">E, Space or click to put it away</p>
-  </article>
-</section>
-
-<section id="ending" class="screen hidden"></section>
+<div id="hint"></div>
+<div id="caption"></div>
+<div id="prompt" class="hidden"><kbd>E</kbd> Talk to Miku</div>
+<div id="talk" class="hidden">
+  <div class="talk-name"></div>
+  <div class="talk-text"></div>
+  <ol class="talk-choices"></ol>
+  <div class="talk-more">E ▸</div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<!-- 3D models, embedded as scripts so the game runs straight from the folder. -->
-<script src="models/characters/doomer-miku-and-teto.js"></script>
-<script src="models/vehicles/plane.js"></script>
-<script src="models/weapons/double-scythe.js"></script>
-<!-- Game code. -->
-<script src="src/glb.js"></script>
-<script src="src/textures.js"></script>
-<script src="src/render.js"></script>
 <script src="src/audio.js"></script>
-<script src="src/events.js"></script>
-<script src="src/lore.js"></script>
-<script src="src/world.js"></script>
-<script src="src/sites.js"></script>
-<script src="src/structures.js"></script>
-<script src="src/bow.js"></script>
-<script src="src/player.js"></script>
-<script src="src/boots.js"></script>
-<script src="src/wolfmodel.js"></script>
-<script src="src/wolves.js"></script>
-<script src="src/rabbits.js"></script>
-<script src="src/survival.js"></script>
-<script src="src/items.js"></script>
-<script src="src/daynight.js"></script>
-<script src="src/build.js"></script>
-<script src="src/songs.js"></script>
-<script src="src/rhythm.js"></script>
 <script src="src/city.js"></script>
-<script src="src/citydecor.js"></script>
-<script src="src/citynav.js"></script>
-<script src="src/phone.js"></script>
-<script src="src/interiors.js"></script>
-<script src="src/tokyo.js"></script>
-<script src="src/northside.js"></script>
-<script src="src/idol.js"></script>
-<script src="src/stage.js"></script>
-<script src="src/dome.js"></script>
-<script src="src/story.js"></script>
-<script src="src/map.js"></script>
-<script src="src/katana.js"></script>
-<script src="src/crimson.js"></script>
-<script src="src/balloon.js"></script>
-<script src="src/showdown.js"></script>
-<script src="src/arena.js"></script>
-<script src="src/cabin.js"></script>
-<script src="src/cutscene.js"></script>
-<script src="src/game.js"></script>
-<script src="src/save.js"></script>
-<script src="src/moderator.js"></script>
+<script src="src/elevator.js"></script>
+<!-- Loads models/miku.js (the model, embedded as a script so the game runs straight from the folder) once the page is up. -->
+<script src="src/miku.js"></script>
+<script src="src/talk.js"></script>
+<script src="src/main.js"></script>
 </body>
 </html>

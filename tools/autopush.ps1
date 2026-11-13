@@ -1,4 +1,4 @@
-# Commits everything that changed and pushes it to the Elevators repo on GitHub.
+# Commits everything that changed and pushes it to GitHub (origin/main).
 # Run automatically by the Claude Code Stop hook in .claude/settings.json at the end of every turn.
 # Does nothing when there's nothing new.
 $ErrorActionPreference = 'Stop'
@@ -15,10 +15,10 @@ if ($LASTEXITCODE -ne 0) {
   if ($LASTEXITCODE -ne 0) { throw 'git commit failed' }
 }
 
-# Push if this branch is ahead of the Elevators repo.
-$ahead = & $git rev-list --count elevators/main..HEAD 2>$null
+# Push if this branch is ahead of GitHub.
+$ahead = & $git rev-list --count origin/main..HEAD 2>$null
 if ($LASTEXITCODE -ne 0 -or [int]$ahead -gt 0) {
-  & $git push -q elevators main
+  & $git push -q origin main
   if ($LASTEXITCODE -ne 0) { throw 'git push failed' }
   Write-Output '{"systemMessage": "Committed and pushed to the Elevators repo."}'
 }
