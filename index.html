@@ -26,7 +26,7 @@
       <li><b>Esc</b> pause</li>
     </ul>
   </div>
-  <p class="credit">"Hatsune Miku (Vocaloid) T-Pose 3D Model" by Leon Okafor (CC BY 4.0)</p>
+  <p class="credit">"Miku (Sanrio X Project Sekai)" by 雨宮レン (CC BY 4.0)</p>
 </section>
 
 <section id="pause" class="screen hidden">
@@ -47,13 +47,26 @@
   <div class="talk-more">E ▸</div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script src="src/audio.js"></script>
-<script src="src/city.js"></script>
-<script src="src/elevator.js"></script>
-<!-- Loads models/miku.js (the model, embedded as a script so the game runs straight from the folder) once the page is up. -->
-<script src="src/miku.js"></script>
-<script src="src/talk.js"></script>
-<script src="src/main.js"></script>
+<!-- Three.js and its GLTF loader come in as modules; the game's own scripts are plain scripts
+     that use the global THREE, so they're loaded in order once it's set. src/miku.js loads
+     models/miku.js (the model, embedded as a script so the game runs straight from the folder). -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+window.THREE = THREE;
+window.GLTFLoader = GLTFLoader;
+const load = (src) => new Promise((resolve, reject) => {
+  const s = document.createElement('script');
+  s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
+  document.body.appendChild(s);
+});
+for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/miku.js', 'src/talk.js', 'src/main.js']) await load(src);
+</script>
 </body>
 </html>
