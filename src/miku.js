@@ -6,14 +6,16 @@ const Miku = (() => {
   // Measured from the source T-pose: each arm is a tube along z at y 1.19–1.29 (axis y ≈ 1.23),
   // meeting the body at |z| ≈ 0.17. Right behind it hang the twin tails (x < 0), whose front
   // edges come up to y ≈ 1.17 between |z| 0.17 and 0.28, so they must stay put.
-  // The pivot is the shoulder joint itself, inside the top of the arm, not the arm's root at the
-  // body's edge: swinging round the edge leaves the arm sticking out sideways. Each value can be
-  // overridden from the URL (e.g. ?pz=0.12&drop=1.35) to tune the pose.
+  // The pivot sits on the arm's centre line (y 1.235), just inside where the arm meets the body.
+  // Below the centre line, the top of the arm would swing outward and bow; further out, the arm
+  // would leave the shoulder sideways before dropping. The blend straddles the pivot and is
+  // narrow, so the arm drops straight from a rounded shoulder. Each value can be overridden from
+  // the URL (e.g. ?pz=0.16&drop=1.4) to tune the pose.
   const q = new URLSearchParams(location.search);
   const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
-  const SHOULDER_Y = num('py', 1.215), SHOULDER_Z = num('pz', 0.125);
-  const ARM_DROP = num('drop', 1.42);    // radians the arms swing down from the T-pose (about 81°)
-  const RAMP0 = num('r0', 0.15), RAMP1 = num('r1', 0.22);
+  const SHOULDER_Y = num('py', 1.235), SHOULDER_Z = num('pz', 0.15);
+  const ARM_DROP = num('drop', 1.5);     // radians the arms swing down from the T-pose (about 86°)
+  const RAMP0 = num('r0', 0.13), RAMP1 = num('r1', 0.175);
 
   const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
