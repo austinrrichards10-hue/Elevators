@@ -3,15 +3,24 @@
 // here, blending smoothly in across the shoulders so the mesh doesn't tear.
 // She stands facing -z in her own space (the way a camera looks).
 const Miku = (() => {
-  const SHOULDER_Y = 1.22, SHOULDER_Z = 0.16;
-  const ARM_DROP = 1.22;   // radians the arms swing down from the T-pose
+  // Measured from the source T-pose: each arm is a tube along z at y 1.19–1.29 (axis y ≈ 1.23),
+  // meeting the body at |z| ≈ 0.17. Right behind it hang the twin tails (x < 0), whose front
+  // edges come up to y ≈ 1.17 between |z| 0.17 and 0.28, so they must stay put.
+  const SHOULDER_Y = 1.235, SHOULDER_Z = 0.165;
+  const ARM_DROP = 1.3;    // radians the arms swing down from the T-pose (about 75°)
 
   const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-  // How much of a vertex belongs to an arm. In the source she faces +x and her arms reach out
-  // along z; the twin tails hang behind her (x < 0) and her body never reaches |z| > 0.2 below
-  // the shoulders, so these three ramps pick out just the arms.
-  const armWeight = (x, y, az) => smooth(0.15, 0.23, az) * smooth(-0.06, -0.02, x) * smooth(0.98, 1.06, y);
+  // How much of a vertex belongs to an arm (source space: she faces +x, arms along ±z).
+  function armWeight(x, y, az) {
+    const joint = smooth(0.15, 0.21, az);                        // blend in across the shoulder joint
+    if (joint <= 0) return 0;
+    // Near the body: only the arm's own band of height (not the tails below it, not the head above).
+    const band = smooth(1.15, 1.19, y) * (1 - smooth(1.30, 1.34, y)) * smooth(-0.05, -0.03, x);
+    // Further out, past the tails: everything in front of them (the arm, the sleeve and its hanging cuff).
+    const far = smooth(0.28, 0.30, az) * smooth(-0.01, 0.01, x);
+    return joint * Math.max(band, far);
+  }
 
   function lowerArms(pos, nor) {
     for (let i = 0; i < pos.length; i += 3) {
@@ -24,7 +33,7 @@ const Miku = (() => {
       const dy = y - SHOULDER_Y, dz = z - s * SHOULDER_Z;
       pos[i + 1] = SHOULDER_Y + dy * c - dz * sn;
       pos[i + 2] = s * SHOULDER_Z + dy * sn + dz * c;
-      pos[i] += 0.025 * w;    // hands a touch forward of the hips
+      pos[i] += 0.035 * w * Math.min(1, Math.abs(dz) / 0.4);   // hands hang a touch forward of the hips
       const ny = nor[i + 1], nz = nor[i + 2];
       nor[i + 1] = ny * c - nz * sn;
       nor[i + 2] = ny * sn + nz * c;
@@ -63,7 +72,7 @@ const Miku = (() => {
     for (const p of meta.prims) {
       const pos = new Float32Array(buf, p.pos, p.vcount * 3);
       const nor = new Float32Array(buf, p.nor, p.vcount * 3);
-      lowerArms(pos, nor);
+      if (!/[?&]tpose/.test(location.search)) lowerArms(pos, nor);   // ?tpose shows the source pose, for checking
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
