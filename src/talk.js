@@ -17,6 +17,7 @@ const Talk = (() => {
   let S = null;                 // the story state (affection, flags, name)
   let stack = [], onDone = null, running = false;
   let line = null, shown = 0, typing = false, choices = null, waitT = 0, asking = false;
+  let current = null, lineCount = 0;      // the line on screen now, for her gestures
 
   function init(state) {
     S = state;
@@ -66,6 +67,9 @@ const Talk = (() => {
     el.className = 'talk-' + kind;
     nameEl.textContent = kind === 'm' || kind === 's' ? 'Miku' : kind === 'y' ? (S.name || 'You') : '';
     line = kind === 's' ? '♪ ' + text + ' ♪' : kind === 'y' ? '“' + text + '”' : text;
+    // She voices her own lines (and sings the sung ones), Vocaloid style.
+    if (kind === 'm' || kind === 's') Sound.say(text, kind); else Sound.hush();
+    current = { kind, text, id: ++lineCount };
     choices = null;
     choicesEl.innerHTML = '';
     textEl.textContent = '';
@@ -104,7 +108,7 @@ const Talk = (() => {
     step();
   }
 
-  function hide() { el.classList.add('hidden'); line = null; }
+  function hide() { el.classList.add('hidden'); line = null; current = null; }
 
   function askName() {
     asking = true;
@@ -125,6 +129,7 @@ const Talk = (() => {
   function finish() {
     running = false;
     hide();
+    Sound.hush();
     choicesEl.innerHTML = '';
     const d = onDone; onDone = null;
     if (d) d();
@@ -153,5 +158,5 @@ const Talk = (() => {
     return false;
   }
 
-  return { init, run, update, key, get active() { return running; }, get asking() { return asking; } };
+  return { init, run, update, key, get active() { return running; }, get asking() { return asking; }, get current() { return current; } };
 })();

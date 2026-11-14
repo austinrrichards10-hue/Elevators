@@ -63,7 +63,7 @@
   const angleDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
   let readyCb = null, isReady = false;
   Miku.load((m) => {
-    if (m) { miku.obj = m.group; placeMiku('cab'); }
+    if (m) { miku.obj = m.group; miku.anim = m.update; placeMiku('cab'); }
     isReady = true;
     if (readyCb) readyCb();
   });
@@ -85,6 +85,7 @@
     }
     miku.obj.visible = true;
     miku.yaw = miku.viewYaw;
+    anim.w = 0;
     miku.obj.rotation.y = miku.yaw;
   }
 
@@ -185,22 +186,83 @@
     player.bob += (target - player.bob) * Math.min(1, dt * 10);
   }
 
-  // ---------- Miku's facing ----------
+  // ---------- Miku: turning, looking, gesturing ----------
+  // Her body turns on a spring (it eases off and settles, no snapping), and her head leads it:
+  // the head turns to whatever she's looking at first and the body comes round after. While she
+  // talks she gestures to suit the line; when she's quiet she stands with her hands behind her
+  // back, shifts now and then, and glances about (and at you, if you're close).
   const tmpV = new THREE.Vector3();
+  const anim = { w: 0, pose: 'behind', lineId: -1, quietT: 0, sing: 0, idleT: 0, idlePose: 'behind', glance: { yaw: 0, pitch: 0 }, glanceT: 0, atYou: false };
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  function poseFor(cur) {
+    const tx = cur.text.toLowerCase();
+    if (cur.kind === 's') return ['reach', 'heart', 'chest', 'reach', 'clasp'][anim.sing++ % 5];
+    if (cur.kind === 'n') {
+      if (/laugh|grin/.test(tx)) return 'giggle';
+      if (/pink|ducks her head|embarrass|quiet/.test(tx)) return 'shy';
+      if (/hand/.test(tx) && /your|her/.test(tx)) return 'clasp';
+      return null;
+    }
+    if (cur.kind !== 'm') return null;
+    if (/\b(hi|hello|goodnight|bye|welcome)\b/.test(tx)) return 'wave';
+    if (/\b(ha|haha|hah)\b|ridiculous|stupid|\(laugh/.test(tx)) return 'giggle';
+    if (/^…|^\.\.\.|sorry|^oh\.$|^okay\.$|i love you|you can't just/.test(tx)) return 'shy';
+    if (/\?/.test(tx)) return pick(['ask', 'explainR', 'ask']);
+    if (/!/.test(tx)) return pick(['excited', 'explainL', 'excited']);
+    if (/maybe|think|huh|wonder/.test(tx)) return 'think';
+    if (/\bme\b|\bmy\b|\bi'm\b/.test(tx) && Math.random() < 0.4) return 'chest';
+    return pick(['explainR', 'explainL', 'clasp', 'explainR', 'behind']);
+  }
+
   function updateMiku(dt, t) {
     if (!miku.obj) return;
-    let want = miku.viewYaw + Math.sin(t * 0.13) * 0.05, rate = 1.2;
-    if (miku.face === 'cam' || miku.face === 'player') {
-      // Toward the camera, in her parent's space.
-      tmpV.copy(camera.position);
-      miku.obj.parent.worldToLocal(tmpV);
-      want = Math.atan2(-(tmpV.x - miku.x), -(tmpV.z - miku.z));
-      rate = 3;
-    } else if (typeof miku.face === 'number') { want = miku.face; rate = 2.5; }
-    miku.yaw += angleDiff(want, miku.yaw) * Math.min(1, dt * rate);
+    const facing = miku.face === 'cam' || miku.face === 'player';
+    let want = miku.viewYaw + Math.sin(t * 0.13) * 0.04;
+    tmpV.copy(camera.position);
+    miku.obj.parent.worldToLocal(tmpV);
+    const toCam = Math.atan2(-(tmpV.x - miku.x), -(tmpV.z - miku.z));
+    const camDist = Math.hypot(tmpV.x - miku.x, tmpV.z - miku.z);
+    if (facing) want = toCam;
+    else if (typeof miku.face === 'number') want = miku.face;
+    const K = facing ? 9 : 4, C = 2 * Math.sqrt(K) * 0.95;
+    anim.w += (K * angleDiff(want, miku.yaw) - C * anim.w) * dt;
+    miku.yaw += anim.w * dt;
     miku.obj.rotation.y = miku.yaw;
-    // Breathing.
-    miku.obj.scale.y = 1 + Math.sin(t * 1.9) * 0.004;
+    miku.obj.updateMatrixWorld(true);
+    if (!miku.anim) return;
+
+    // Pose from what's being said.
+    const cur = Talk.current;
+    const speaking = Sound.speaking > 0;
+    if (cur && cur.id !== anim.lineId) {
+      anim.lineId = cur.id;
+      const p = poseFor(cur);
+      if (p) anim.pose = p;
+      anim.quietT = 0;
+    }
+    if (!cur || (!speaking && cur.kind !== 's')) anim.quietT += dt;
+    // Quiet for a while: back to standing at ease, shifting now and then.
+    if (anim.quietT > (cur ? 3.5 : 1.2)) {
+      anim.idleT -= dt;
+      if (anim.idleT <= 0) { anim.idlePose = pick(['behind', 'behind', 'behind', 'clasp', 'sides']); anim.idleT = 9 + Math.random() * 9; }
+      anim.pose = anim.idlePose;
+    }
+
+    // Where she looks.
+    let lookAt = null, glance = null;
+    if (facing) lookAt = camera.position;
+    else {
+      anim.glanceT -= dt;
+      if (anim.glanceT <= 0) {
+        anim.glanceT = 2.5 + Math.random() * 4.5;
+        const camAngle = angleDiff(toCam, miku.yaw);
+        anim.atYou = camDist < 3.5 && Math.abs(camAngle) < 1.6 && Math.random() < 0.3;
+        anim.glance = { yaw: (Math.random() - 0.5) * 0.7, pitch: (Math.random() - 0.4) * 0.25 };
+      }
+      if (anim.atYou && state.mode === 'play') lookAt = camera.position;
+      else glance = cur && cur.kind === 's' ? { yaw: anim.glance.yaw * 0.4, pitch: 0.14 } : anim.glance;
+    }
+    miku.anim(dt, t, { pose: anim.pose, lookAt, glance, speaking: speaking || (cur && cur.kind === 's') });
   }
 
   // ---------- The ride ----------

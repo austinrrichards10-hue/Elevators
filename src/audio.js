@@ -57,8 +57,10 @@ const Sound = (() => {
         [72, 2], [69, 1], [72, 1], [76, 1.5], [74, 0.5], [72, 1], [67, 1], [74, 2], [72, 1], [70, 1], [72, 3], [null, 1],
       ],
     },
+    // Her song: the backing only (chords and strings). She sings the tune herself, live, with
+    // the words (see say() below), so the melody notes here are what her voice follows.
     song: {
-      bpm: 70, lead: 'voice', breath: 1.5,
+      bpm: 70, lead: 'none', breath: 1.5,
       bars: [Am, F, C, G, Am, F, C, G, F, G, Em, Am, F, G, C, C],
       melody: [
         [76, 1], [76, 1], [74, 1], [72, 1], [72, 1.5], [69, 0.5], [69, 2], [67, 1], [72, 1], [76, 1], [79, 1], [74, 3], [null, 1],
@@ -175,6 +177,7 @@ const Sound = (() => {
       current = null;
     }
     if (!name) return;
+    if (name === 'song') sungNote = 0;
     const tr = TRACKS[name];
     const BEAT = 60 / tr.bpm;
     const bus = ctx.createGain();
@@ -207,7 +210,7 @@ const Sound = (() => {
           if (b >= mi * 4 && b < mi * 4 + 4) {
             const when = sway(barTime + (b - mi * 4) * BEAT);
             if (tr.lead === 'voice') { voice(voiceBus, n, when, d * BEAT * 0.95, 0.5); piano(pianoBus, n - 12, when, d * BEAT, 0.25); }
-            else piano(pianoBus, n, when, d * BEAT, 0.62 * lift);
+            else if (tr.lead === 'piano') piano(pianoBus, n, when, d * BEAT, 0.62 * lift);
           }
         }
         bar++;
@@ -218,6 +221,176 @@ const Sound = (() => {
     current = { name, bus, timer: setInterval(tick, 500) };
   }
   let pending = 'sad';
+
+  // ---------- Her voice ----------
+  // A small singing synth in the Vocaloid manner: every line she says is sung, syllable by
+  // syllable. Each syllable gets its consonant (a hiss, a tap, a hum) and its vowel, shaped by
+  // formant filters on a bright buzzy tone, and the pitch glides from note to note. Spoken lines
+  // follow a speech-like tune on a pentatonic scale (rising for questions, falling at the end of
+  // a sentence); sung lines follow the melody of her song, note by note.
+  const FORMANTS = {
+    a: [900, 1350, 2950], e: [560, 2150, 3050], i: [330, 2750, 3550], o: [560, 960, 2850], u: [390, 1050, 2750],
+    n: [280, 1150, 2700],
+  };
+  const SPEAK_SCALE = [62, 64, 67, 69, 72, 74, 76, 79];
+  const SONG_NOTES = TRACKS.song.melody;
+  const SONG_BEAT = 60 / TRACKS.song.bpm;
+  let sungNote = 0, voiceBus = null, utter = null, speakingUntil = 0;
+
+  function vowelOf(v) {
+    if (/^(ee|ie|ea|ey|i|y)/.test(v)) return 'i';
+    if (/^(oo|ou|u|ew)/.test(v)) return 'u';
+    if (/^(o)/.test(v)) return 'o';
+    if (/^(e|ai|ay|ei)/.test(v)) return 'e';
+    return 'a';
+  }
+
+  function syllables(text) {
+    const out = [];
+    const tokens = text.toLowerCase().replace(/[“”"♪()]/g, '').split(/(\s+|[,.!?…;:—\/-]+)/);
+    for (const tok of tokens) {
+      if (!tok || !tok.trim()) continue;
+      if (/^[,.!?…;:—\/-]+$/.test(tok)) {
+        out.push({ pause: /[.!?…]/.test(tok) ? 0.3 : tok.includes('/') ? 0.22 : 0.14, q: tok.includes('?'), end: /[.!?…]/.test(tok) });
+        continue;
+      }
+      const w = tok.replace(/[^a-z]/g, '');
+      if (!w) continue;
+      const parts = w.match(/[^aeiouy]*[aeiouy]+(?:[^aeiouy]+$)?/g) || [w + 'a'];
+      parts.forEach((p, i) => {
+        const m = /^([^aeiouy]*)([aeiouy]+)(.*)$/.exec(p) || ['', p, 'a', ''];
+        out.push({ onset: m[1], vowel: vowelOf(m[2]), coda: m[3], stress: i === 0 });
+      });
+    }
+    return out;
+  }
+
+  function setupVoice() {
+    voiceBus = ctx.createGain();
+    voiceBus.gain.value = 1;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.ratio.value = 3;
+    voiceBus.connect(comp).connect(master);
+    const verb = reverb(2.2);
+    const wet = ctx.createGain(); wet.gain.value = 0.22;
+    comp.connect(verb).connect(wet).connect(master);
+  }
+
+  function hush() {
+    if (!utter) return;
+    const u = utter; utter = null;
+    const now = ctx.currentTime;
+    u.amp.gain.cancelScheduledValues(now);
+    u.amp.gain.setTargetAtTime(0, now, 0.03);
+    u.noiseGain.gain.cancelScheduledValues(now);
+    u.noiseGain.gain.setTargetAtTime(0, now, 0.02);
+    for (const o of u.oscs) { try { o.stop(now + 0.25); } catch (e) { /* already stopped */ } }
+    speakingUntil = now;
+  }
+
+  // Sings a line. kind 'm' = speaking, 's' = singing her song. Returns how long it lasts.
+  function say(text, kind) {
+    if (!ctx) return 0;
+    hush();
+    const syl = syllables(text);
+    if (!syl.length) return 0;
+    const singing = kind === 's';
+    const t0 = ctx.currentTime + 0.04;
+    const out = ctx.createGain(); out.gain.value = singing ? 0.62 : 0.4; out.connect(voiceBus);
+
+    // Source: a bright saw with a little square for buzz, and vibrato.
+    const osc = ctx.createOscillator(); osc.type = 'sawtooth';
+    const osc2 = ctx.createOscillator(); osc2.type = 'square'; osc2.detune.value = 6;
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.6;
+    const vibAmt = ctx.createGain(); vibAmt.gain.value = 0;
+    vib.connect(vibAmt); vibAmt.connect(osc.frequency); vibAmt.connect(osc2.frequency);
+    const src = ctx.createGain();
+    const g2 = ctx.createGain(); g2.gain.value = 0.22;
+    osc.connect(src); osc2.connect(g2).connect(src);
+    const amp = ctx.createGain(); amp.gain.value = 0;
+    src.connect(amp);
+    const fl = [[7, 1], [11, 0.6], [14, 0.32]].map(([q, gain], k) => {
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = q; f.frequency.value = FORMANTS.a[k];
+      const g = ctx.createGain(); g.gain.value = gain;
+      amp.connect(f).connect(g).connect(out);
+      return f;
+    });
+    const air = ctx.createBiquadFilter(); air.type = 'highpass'; air.frequency.value = 3800;
+    const airG = ctx.createGain(); airG.gain.value = 0.06;
+    amp.connect(air).connect(airG).connect(out);
+    // Consonant noise.
+    const noise = ctx.createBufferSource(); noise.buffer = noiseBuffer(1, false); noise.loop = true;
+    const nf = ctx.createBiquadFilter(); nf.type = 'highpass'; nf.frequency.value = 5000;
+    const noiseGain = ctx.createGain(); noiseGain.gain.value = 0;
+    noise.connect(nf).connect(noiseGain).connect(out);
+
+    let t = t0, step = 4 + Math.floor(Math.random() * 2);
+    const setF = (vowel, at, tc) => FORMANTS[vowel].forEach((fr, k) => fl[k].frequency.setTargetAtTime(fr * (singing ? 1.04 : 1.08), at, tc));
+    let first = true;
+    for (let i = 0; i < syl.length; i++) {
+      const s = syl[i];
+      if (s.pause !== undefined) {
+        amp.gain.setValueAtTime(amp.gain.value, t);
+        amp.gain.linearRampToValueAtTime(0, t + 0.04);
+        t += singing ? s.pause * 0.8 : s.pause;
+        continue;
+      }
+      // Pitch and length.
+      let note, dur;
+      if (singing) {
+        while (SONG_NOTES[sungNote % SONG_NOTES.length][0] === null) { t += SONG_NOTES[sungNote % SONG_NOTES.length][1] * SONG_BEAT * 0.3; sungNote++; }
+        const [n, beats] = SONG_NOTES[sungNote % SONG_NOTES.length];
+        sungNote++;
+        note = n;
+        dur = Math.min(0.75, Math.max(0.2, beats * SONG_BEAT * 0.48));
+      } else {
+        // A speech-like contour: wander round the middle, fall at the end, rise for a question.
+        const next = syl[i + 1], endish = !next || next.pause !== undefined;
+        const q = endish && next && next.q;
+        step += Math.round((Math.random() - 0.5) * 2.2);
+        step = Math.max(2, Math.min(6, step));
+        let k = step;
+        if (endish) k = q ? Math.min(7, step + 2) : Math.max(1, step - 2);
+        if (s.stress && Math.random() < 0.35) k = Math.min(7, k + 1);
+        note = SPEAK_SCALE[k];
+        dur = 0.105 + (s.stress ? 0.035 : 0) + Math.min(0.06, s.coda.length * 0.018) + (endish ? 0.09 : 0);
+      }
+      const f0 = hz(note);
+      const glide = singing ? 0.045 : 0.022;
+      if (first) { osc.frequency.setValueAtTime(f0, t); osc2.frequency.setValueAtTime(f0, t); first = false; }
+      else { osc.frequency.setTargetAtTime(f0, t, glide); osc2.frequency.setTargetAtTime(f0, t, glide); }
+      const level = singing ? 0.9 : (s.stress ? 0.85 : 0.7);
+
+      // The consonant at the start.
+      const on = s.onset;
+      let tv = t;
+      if (/^(sh|ch|j)/.test(on)) { nf.type = 'bandpass'; nf.frequency.setValueAtTime(2800, t); noiseGain.gain.setValueAtTime(0, t); noiseGain.gain.linearRampToValueAtTime(0.5, t + 0.02); noiseGain.gain.linearRampToValueAtTime(0, t + 0.07); tv = t + 0.06; amp.gain.setValueAtTime(0, t); }
+      else if (/^(s|z|x|c[eiy])/.test(on + s.vowel)) { nf.type = 'highpass'; nf.frequency.setValueAtTime(5200, t); noiseGain.gain.setValueAtTime(0, t); noiseGain.gain.linearRampToValueAtTime(0.45, t + 0.015); noiseGain.gain.linearRampToValueAtTime(0, t + 0.065); tv = t + 0.055; amp.gain.setValueAtTime(0, t); }
+      else if (/^(f|h|th|v)/.test(on)) { nf.type = 'highpass'; nf.frequency.setValueAtTime(2200, t); noiseGain.gain.setValueAtTime(0, t); noiseGain.gain.linearRampToValueAtTime(0.2, t + 0.015); noiseGain.gain.linearRampToValueAtTime(0, t + 0.05); tv = t + 0.04; amp.gain.setValueAtTime(0, t); }
+      else if (/^[tdkgpbqc]/.test(on)) { nf.type = 'bandpass'; nf.frequency.setValueAtTime(/^[pb]/.test(on) ? 1200 : /^[kgqc]/.test(on) ? 2400 : 3800, t); amp.gain.setValueAtTime(0, t); noiseGain.gain.setValueAtTime(0.4, t + 0.012); noiseGain.gain.linearRampToValueAtTime(0, t + 0.03); tv = t + 0.025; }
+      else if (/^[mn]/.test(on)) { setF('n', t, 0.006); amp.gain.setValueAtTime(level * 0.45, t + 0.005); tv = t + 0.05; }
+      else if (/^[lrwy]/.test(on)) { setF(/^[wr]/.test(on) ? 'u' : 'i', t, 0.006); amp.gain.setValueAtTime(level * 0.5, t + 0.005); tv = t + 0.035; }
+      else amp.gain.setValueAtTime(Math.min(amp.gain.value, level * 0.4), t);
+      // The vowel.
+      setF(s.vowel, tv, singing ? 0.03 : 0.015);
+      amp.gain.linearRampToValueAtTime(level, tv + 0.03);
+      const end = t + Math.max(dur, tv - t + 0.06);
+      // Long sung notes bloom into vibrato.
+      if (singing && dur > 0.45) { vibAmt.gain.setValueAtTime(0, tv); vibAmt.gain.linearRampToValueAtTime(f0 * 0.018, end - 0.05); vibAmt.gain.setValueAtTime(0, end); }
+      amp.gain.setValueAtTime(level, end - 0.03);
+      amp.gain.linearRampToValueAtTime(level * (singing ? 0.55 : 0.3), end);
+      // A trailing s or t.
+      if (/s$|z$/.test(s.coda)) { nf.type = 'highpass'; nf.frequency.setValueAtTime(5200, end - 0.03); noiseGain.gain.setValueAtTime(0, end - 0.03); noiseGain.gain.linearRampToValueAtTime(0.3, end); noiseGain.gain.linearRampToValueAtTime(0, end + 0.04); }
+      t = end;
+    }
+    amp.gain.linearRampToValueAtTime(0, t + 0.08);
+    const oscs = [osc, osc2, vib, noise];
+    for (const o of oscs) { o.start(t0); o.stop(t + 0.3); }
+    utter = { amp, noiseGain, oscs };
+    speakingUntil = t;
+    setTimeout(() => { if (utter && utter.amp === amp) utter = null; }, (t - ctx.currentTime + 0.5) * 1000);
+    return t - t0;
+  }
 
   function start() {
     if (ctx) { ctx.resume(); return; }
@@ -243,6 +416,7 @@ const Sound = (() => {
     wind = loopNoise(true, 'bandpass', 500, 0.7, 0.05);
     city = loopNoise(false, 'lowpass', 600, 0.5, 0.0);
     setupMusic();
+    setupVoice();
     music(pending);
   }
 
@@ -283,7 +457,9 @@ const Sound = (() => {
   }
 
   return {
-    start, update, chime, toggleMute, music,
+    start, update, chime, toggleMute, music, say, hush,
+    // 0..1: how much she's voicing right now, for her mouth-and-body movement.
+    get speaking() { return ctx ? (ctx.currentTime < speakingUntil ? 1 : 0) : 0; },
     set ambience(v) { ambience = v; },
     get muted() { return muted; },
   };
