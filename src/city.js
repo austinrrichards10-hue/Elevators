@@ -3,6 +3,9 @@
 const City = (() => {
   const TOWER_HALF = 17;      // the tower is 34 m square
   const TOWER_TOP = 320;
+  // The landing on floor 70 where the ride starts: a room inside the tower behind the car's
+  // doors. Floor height, half-width, depth back from the tower face, height, doorway half-width.
+  const LANDING = { y: 280, halfW: 5, depth: 8, h: 3.6, door: 0.6 };
   const BLOCK = 86;           // block pitch, road centre to road centre
   const ROAD = 16;
   const EXTENT = 1450;        // city reaches this far from the tower
@@ -241,8 +244,20 @@ const City = (() => {
     }
 
     // The tower itself: plain dark glass with lit offices, and a crown on top.
+    // The storey with the floor-70 landing is built in pieces round the room, with a doorway
+    // in the face where the elevator stops, so you can see in and out through it.
     const towerTint = new THREE.Color(0x10141f);
-    batch.box(0, 0, 0, TOWER_HALF * 2, TOWER_TOP, TOWER_HALF * 2, towerTint, 0, 0);
+    const L = LANDING, TH = TOWER_HALF;
+    const b0 = L.y - 0.5, b1 = L.y + L.h + 0.4, roomZ = TH - L.depth;
+    batch.box(0, 0, 0, TH * 2, b0, TH * 2, towerTint, 0, 0);
+    batch.box(0, b1, 0, TH * 2, TOWER_TOP - b1, TH * 2, towerTint, 0, 0);
+    const piece = (x0, x1, z0, z1, y0, y1) => batch.box((x0 + x1) / 2, y0, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, towerTint, 0, 0);
+    piece(-TH, -L.halfW, -TH, TH, b0, b1);
+    piece(L.halfW, TH, -TH, TH, b0, b1);
+    piece(-L.halfW, L.halfW, -TH, roomZ, b0, b1);
+    piece(-L.halfW, -L.door, TH - 0.3, TH, b0, b1);
+    piece(L.door, L.halfW, TH - 0.3, TH, b0, b1);
+    piece(-L.door, L.door, TH - 0.3, TH, L.y + 2.4, b1);
     batch.box(0, TOWER_TOP, 0, TOWER_HALF * 1.4, 16, TOWER_HALF * 1.4, towerTint, 0.25, 0.5);
     tops.push(0, TOWER_TOP + 16 + 40, 0);
 
@@ -264,7 +279,11 @@ const City = (() => {
     const braces = Math.floor(TOWER_TOP / FLOOR_H);
     const brace = new THREE.InstancedMesh(new THREE.BoxGeometry(3.4, 0.16, 0.16), railMat, braces);
     const bm = new THREE.Matrix4();
-    for (let i = 0; i < braces; i++) brace.setMatrixAt(i, bm.makeTranslation(0, i * FLOOR_H + 2, TOWER_HALF + 0.1));
+    for (let i = 0; i < braces; i++) {
+      const y = i * FLOOR_H + 2;
+      const clear = y > LANDING.y - 0.5 && y < LANDING.y + 2.6;     // not across the landing doorway
+      brace.setMatrixAt(i, clear ? bm.makeScale(0, 0, 0) : bm.makeTranslation(0, y, TOWER_HALF + 0.1));
+    }
     scene.add(brace);
     // A strip of tiny teal lights either side of the track.
     const strip = [];
@@ -360,5 +379,5 @@ const City = (() => {
     return { update };
   }
 
-  return { build, TOWER_HALF, TOWER_TOP, FLOOR_H };
+  return { build, TOWER_HALF, TOWER_TOP, FLOOR_H, LANDING };
 })();

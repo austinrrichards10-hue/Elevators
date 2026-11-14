@@ -15,9 +15,10 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 
 ## What's in it
 
-- **The ride**: the car rides the outside of the tower, open to the city. It starts at floor 70, hangs still for 20 seconds at floors 49, 28 and 10 so you can look out, and ends on the ground.
+- **The landing**: you start inside the tower on floor 70, in a small, dim lobby with a bench, a dead plant and one ceiling light that keeps flickering. The elevator's doors stand open at the far end with Miku inside. Walk in; the doors close behind you and the car sets off.
+- **The ride**: the car rides the outside of the tower, open to the city. It leaves floor 70, hangs still for 20 seconds at floors 49, 28 and 10 so you can look out, and ends on the ground.
 - **The building bands**: four times on the way down, the car slides through a band of raw concrete wrapped round the tower, shut in for about 7 seconds. Inside it's dark and water-stained, the lamps are weak, dim or dead and flicker, the car's light sinks to amber, and the music goes muffled as if through the walls.
-- **Start screen**: the camera drifts outside the car, looking in at Miku with the skyline behind her.
+- **Start screen**: the camera drifts in the landing, looking through the open doors at Miku in the car.
 - **Miku**: the Sanrio x Project Sekai Miku, in her blue pinafore dress with the apple bag. She's a rigged model; she stands with her hands clasped behind her back, posed by solving each arm's bones to reach the small of her back. When you talk to her she turns to face you, then turns back to the view when you're done. What she says first depends on how far down the car is. You can ask her what she's looking at, whether she rides this a lot, who she is and what she thinks of the city. Walking away ends the conversation.
 - **The car**: nine glass panes face the city, with a handrail round them at waist height on brackets. The three steel panels at the back hold the doors, a floor readout and a call button. There's a ring light in the ceiling and a teal light ring round the floor's edge. The car hangs on two cables and sways slightly as it moves.
 - **The city**: low-poly and flat-shaded. About 2,500 towers with lit windows, three downtown clusters, setbacks and crowns, red aviation lights on the tallest roofs, parks, streetlights and 1,400 cars of moving headlights and tail lights. There's a faceted sky that glows purple at the horizon, stars, a low moon and mountains around the edge.
@@ -29,7 +30,7 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 - `src/talk.js`: the conversation with Miku, including everything she says.
 - `src/miku.js`: loads Miku with three.js's GLTF loader, hides the rig's physics-collider meshes, scales her to height and poses her arms.
 - `src/elevator.js`: the glass car.
-- `src/building.js`: the concrete bands the car passes through, and where it stops.
+- `src/building.js`: the floor-70 landing, the concrete bands the car passes through, and where it stops.
 - `src/city.js`: the city, sky and the tower.
 - `src/audio.js`: the sound.
 - `models/miku.js`: the model (a .glb, about 3 MB), embedded as a script by `tools/embedglb.ps1`.

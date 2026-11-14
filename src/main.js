@@ -30,6 +30,11 @@
 
   const CAB_Z = City.TOWER_HALF + 0.42 + cab.R;
   const building = Building.build(scene, CAB_Z);
+  const landing = Building.buildLanding(scene);
+  // The landing room and the doorway between it and the car, in the car's own space (the car
+  // waits at the landing until you're aboard, so the two line up).
+  const LND = City.LANDING;
+  const ROOM_Z0 = City.TOWER_HALF - LND.depth - CAB_Z, ROOM_Z1 = City.TOWER_HALF - 0.31 - CAB_Z;
   const STOPS = Building.STOPS;
   const START_Y = STOPS[0], END_Y = STOPS[STOPS.length - 1];
   const MAX_SPEED = 1.6, ACCEL = 0.25;
@@ -50,8 +55,13 @@
     introT: 0,
     departAt: 0,
     stop: 1,                // index in STOPS of where the car is heading next
+    doors: 1,               // 0 shut .. 1 open, both the car's and the landing's
+    doorTarget: 1,
+    boarded: false,
+    closeAt: 0,
   };
-  const player = { x: -0.45, z: -0.75, yaw: Math.PI + 0.25, pitch: -0.05, bob: 0, step: 0 };
+  // You start in the landing, a few steps back from the open doors, facing the car.
+  const player = { x: 0.15, z: ROOM_Z0 + 2.6, yaw: Math.PI, pitch: -0.03, bob: 0, step: 0 };
   const keys = {};
 
   // ---------- Miku: at the glass, looking out over the city. ----------
@@ -74,15 +84,11 @@
     startBtn.textContent = 'Begin';
   });
 
-  // ---------- Title-screen camera: drifting outside the glass, looking in at her. ----------
-  const titleCam = (t) => {
-    const a = 0.55 + Math.sin(t * 0.09) * 0.22;
-    const r = 2.9;
-    return {
-      pos: new THREE.Vector3(MIKU_SPOT.x + Math.sin(a) * r, 1.5 + Math.sin(t * 0.17) * 0.1, MIKU_SPOT.z + Math.cos(a) * r),
-      target: new THREE.Vector3(MIKU_SPOT.x - 0.35, 1.05, MIKU_SPOT.z - 0.2),
-    };
-  };
+  // ---------- Title-screen camera: in the dim landing, looking through the open doors at her. ----------
+  const titleCam = (t) => ({
+    pos: new THREE.Vector3(Math.sin(t * 0.11) * 0.35, 1.6 + Math.sin(t * 0.17) * 0.05, ROOM_Z0 + 3.4 + Math.sin(t * 0.07) * 0.4),
+    target: new THREE.Vector3(MIKU_SPOT.x * 0.6, 1.3, MIKU_SPOT.z),
+  });
   const tmpM = new THREE.Matrix4();
   const lookQuat = (pos, target) => new THREE.Quaternion().setFromRotationMatrix(tmpM.lookAt(pos, target, new THREE.Vector3(0, 1, 0)));
   const fpQuat = () => new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
@@ -179,6 +185,12 @@
   }
 
   // ---------- Simulation ----------
+  // Where you can stand: inside the car, and, while the doors are open, the doorway and the landing.
+  const inCar = (x, z) => Math.hypot(x, z) < ROOM - BODY_R;
+  const inDoorway = (x, z) => Math.abs(x) < 0.32 && z > ROOM_Z1 - 0.5 && z < -0.9;
+  const inLanding = (x, z) => Math.abs(x) < LND.halfW - BODY_R && z > ROOM_Z0 + BODY_R && z < ROOM_Z1 - BODY_R;
+  const canStand = (x, z) => inCar(x, z) || (state.doors > 0.85 && (inDoorway(x, z) || inLanding(x, z)));
+
   function walk(dt) {
     let f = 0, s = 0;
     if (!Talk.active) {
@@ -191,12 +203,20 @@
     if (moving) {
       const len = Math.hypot(f, s);
       const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-      player.x += ((-sy * f) + (cy * s)) / len * WALK * dt;
-      player.z += ((-cy * f) + (-sy * s)) / len * WALK * dt;
+      const dx = ((-sy * f) + (cy * s)) / len * WALK * dt;
+      const dz = ((-cy * f) + (-sy * s)) / len * WALK * dt;
+      // Walk where there's floor: slide along walls by trying each axis on its own.
+      if (canStand(player.x + dx, player.z + dz)) { player.x += dx; player.z += dz; }
+      else if (canStand(player.x + dx, player.z)) player.x += dx;
+      else if (canStand(player.x, player.z + dz)) player.z += dz;
+      // In the doorway, ease toward its middle so you don't snag on the frame.
+      if (inDoorway(player.x, player.z)) player.x *= 1 - Math.min(1, dt * 6);
+      // Walking at the wall just beside the doorway guides you into it.
+      else if (!state.boarded && player.z > ROOM_Z1 - 1.1 && player.z < ROOM_Z1 && Math.abs(player.x) < 1.3 && dz > 0) player.x *= 1 - Math.min(1, dt * 3);
       // Stay inside the car...
       const d = Math.hypot(player.x, player.z);
       const room = ROOM - BODY_R;
-      if (d > room) { player.x *= room / d; player.z *= room / d; }
+      if (state.boarded && d > room) { player.x *= room / d; player.z *= room / d; }
       // ...and don't walk through her.
       if (miku.obj) {
         const mx = player.x - MIKU_SPOT.x, mz = player.z - MIKU_SPOT.z;
@@ -287,9 +307,7 @@
       if (k >= 1) {
         state.mode = document.pointerLockElement === canvas ? 'play' : 'paused';
         if (state.mode === 'paused') $('pause').classList.remove('hidden');
-        Sound.chime();
-        showHint('Mouse to look around · WASD to walk · E to talk', 8);
-        state.departAt = state.time + 1.6;
+        showHint('Mouse to look around · WASD to walk · Step into the elevator', 10);
       }
     } else if (state.mode === 'play') {
       walk(dt);
@@ -302,6 +320,19 @@
     if (state.mode !== 'play') prompt.classList.add('hidden');
 
     if (!paused) {
+      // Once you're aboard, the doors close behind you, and then the car sets off.
+      if (state.mode === 'play' && !state.boarded && inCar(player.x, player.z) && player.z > -1.0) {
+        state.boarded = true;
+        state.closeAt = t + 1.4;
+        showHint('E to talk to Miku', 6);
+      }
+      if (state.closeAt && t >= state.closeAt) { state.closeAt = 0; state.doorTarget = 0; Sound.chime(); }
+      const was = state.doors;
+      state.doors += Math.sign(state.doorTarget - state.doors) * Math.min(Math.abs(state.doorTarget - state.doors), dt * 0.55);
+      if (state.boarded && was > 0 && state.doors === 0) state.departAt = t + 1.5;
+      cab.setDoors(state.doors);
+      landing.setDoors(state.doors);
+      landing.update(t);
       if (state.departAt && t >= state.departAt) {
         state.departAt = 0;
         state.descending = true;
@@ -330,6 +361,8 @@
 
   // For debugging from the console.
   window.ELEVATORS = { state, player, miku, camera, scene, Talk, resume: () => { state.mode = 'paused'; resume(); }, startTalk };
+  cab.setDoors(1);
+  landing.setDoors(1);
 
   updateMuteLabels();
   updateCab(0);

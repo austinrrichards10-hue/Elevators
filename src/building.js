@@ -135,7 +135,88 @@ const Building = (() => {
     return { update, openness };
   }
 
+  // ---------- The floor-70 landing, where you start. ----------
+  // A small, dim lobby inside the tower: dark stone floor, panelled walls, one tired ceiling light
+  // that flickers, a bench, and the elevator's hall doors standing open with the car beyond.
+  function signTexture(lines, w, h, color) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    g.fillStyle = '#07090c'; g.fillRect(0, 0, w, h);
+    g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+    lines.forEach(([text, size, y]) => { g.font = `${size}px Consolas, monospace`; g.fillText(text, w / 2, y); });
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  function buildLanding(scene) {
+    const L = City.LANDING, TH = City.TOWER_HALF;
+    const y = L.y, z0 = TH - L.depth, zF = TH - 0.31, H = L.h;
+    const DOOR = 0.42;                     // the hall doorway's half-width
+    const group = new THREE.Group();
+    scene.add(group);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1c1d22, roughness: 0.3, metalness: 0.15 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 0.8, metalness: 0.05 });
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.95 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x6c7380, metalness: 0.85, roughness: 0.3, flatShading: true });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x101114, roughness: 0.6, metalness: 0.4 });
+    const panel = new THREE.MeshBasicMaterial({ color: 0xffe7c4 });
+
+    const plane = (w, h, mat, x, py, z, rx, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, py, z); m.rotation.set(rx, ry, 0); group.add(m); return m; };
+    const box = (w, h, d, mat, x, py, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, py, z); group.add(m); return m; };
+    const W = L.halfW * 2, D = zF - z0;
+    plane(W, D, floorMat, 0, y, z0 + D / 2, -Math.PI / 2, 0);
+    plane(W, D, ceilMat, 0, y + H, z0 + D / 2, Math.PI / 2, 0);
+    plane(W, H, wallMat, 0, y + H / 2, z0, 0, 0);                                    // back wall
+    plane(D, H, wallMat, -L.halfW, y + H / 2, z0 + D / 2, 0, Math.PI / 2);            // left
+    plane(D, H, wallMat, L.halfW, y + H / 2, z0 + D / 2, 0, -Math.PI / 2);            // right
+    // Front wall, round the doorway (2.2 m tall).
+    const side = L.halfW - DOOR;
+    plane(side, H, wallMat, -(DOOR + side / 2), y + H / 2, zF, 0, Math.PI);
+    plane(side, H, wallMat, DOOR + side / 2, y + H / 2, zF, 0, Math.PI);
+    plane(DOOR * 2, H - 2.2, wallMat, 0, y + 2.2 + (H - 2.2) / 2, zF, 0, Math.PI);
+    // Skirting and a dado rail, to make it read as a room.
+    box(W, 0.12, 0.03, dark, 0, y + 0.06, z0 + 0.02);
+    for (const s of [-1, 1]) box(0.03, 0.12, D, dark, s * (L.halfW - 0.02), y + 0.06, z0 + D / 2);
+    // The doorway: a steel frame, the floor readout above it and a call button beside it.
+    box(0.06, 2.26, 0.12, steel, -DOOR - 0.03, y + 1.13, zF - 0.03);
+    box(0.06, 2.26, 0.12, steel, DOOR + 0.03, y + 1.13, zF - 0.03);
+    box(DOOR * 2 + 0.12, 0.06, 0.12, steel, 0, y + 2.23, zF - 0.03);
+    plane(0.5, 0.2, new THREE.MeshBasicMaterial({ map: signTexture([['70  ▼', 64, 50]], 256, 100, '#7ff0e6') }), 0, y + 2.55, zF - 0.01, 0, Math.PI);
+    box(0.1, 0.22, 0.03, steel, 0.75, y + 1.15, zF - 0.02);
+    box(0.035, 0.035, 0.02, new THREE.MeshBasicMaterial({ color: 0x39c5bb }), 0.75, y + 1.15, zF - 0.04);
+    // A sign on the left wall.
+    plane(1.6, 0.5, new THREE.MeshBasicMaterial({ map: signTexture([['OBSERVATION ELEVATOR', 34, 40], ['FLOOR 70  ·  DOWN ONLY', 24, 84], ], 512, 128, '#cfc6b6') }), -L.halfW + 0.01, y + 1.9, zF - 1.6, 0, Math.PI / 2);
+    // A bench against the right wall, and a dead plant.
+    box(0.45, 0.08, 1.6, new THREE.MeshStandardMaterial({ color: 0x3a2e26, roughness: 0.7 }), L.halfW - 0.35, y + 0.45, z0 + 3.2);
+    for (const dz of [-0.65, 0.65]) box(0.4, 0.42, 0.06, steel, L.halfW - 0.35, y + 0.21, z0 + 3.2 + dz);
+    box(0.4, 0.45, 0.4, dark, -L.halfW + 0.45, y + 0.225, z0 + 0.6);
+    const stalk = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.9, 5), new THREE.MeshStandardMaterial({ color: 0x3a3424, flatShading: true }));
+    stalk.position.set(-L.halfW + 0.45, y + 0.9, z0 + 0.6); stalk.rotation.z = 0.15; group.add(stalk);
+    // Ceiling panels: one working, one dead, one that flickers.
+    box(1.1, 0.03, 0.6, panel, 0, y + H - 0.02, zF - 1.6);
+    box(1.1, 0.03, 0.6, dark, 0, y + H - 0.02, z0 + 1.8);
+    const flickPanel = box(1.1, 0.03, 0.6, new THREE.MeshBasicMaterial({ color: 0xffe7c4 }), 0, y + H - 0.02, z0 + 4.5);
+    const light = new THREE.PointLight(0xffd9a8, 6, 9, 1.5);
+    light.position.set(0, y + H - 0.4, zF - 1.6);
+    group.add(light);
+    const light2 = new THREE.PointLight(0xffd9a8, 3, 7, 1.5);
+    light2.position.set(0, y + H - 0.4, z0 + 4.5);
+    group.add(light2);
+
+    // Hall doors: two steel leaves in the wall, sliding apart into it.
+    const leaves = [-1, 1].map((s) => box(DOOR, 2.2, 0.04, steel, s * DOOR / 2, y + 1.1, zF + 0.12));
+    function setDoors(k) { leaves.forEach((m, i) => { m.position.x = (i ? 1 : -1) * DOOR * (0.5 + k); }); }
+
+    function update(t) {
+      const n = Math.sin(t * 9.3) * Math.sin(t * 4.1 + 2) * Math.sin(t * 1.7);
+      const on = n < 0.4 ? 1 : 0.08;
+      flickPanel.material.color.setRGB(on, on * 0.9, on * 0.75);
+      light2.intensity = 3 * on;
+    }
+    return { setDoors, update };
+  }
+
   const floorOf = (D) => Math.max(1, Math.round(D / City.FLOOR_H));
 
-  return { build, STOPS, floorOf };
+  return { build, buildLanding, STOPS, floorOf };
 })();

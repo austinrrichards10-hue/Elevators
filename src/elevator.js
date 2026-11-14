@@ -73,8 +73,12 @@ const Elevator = (() => {
     const glass = add(new THREE.CylinderGeometry(R, R, H, 9, 1, true, GLASS_START, GLASS_LEN), glassMat, 0, H / 2, 0);
     glass.renderOrder = 2;
 
-    // Steel at the back, facing the tower.
-    add(new THREE.CylinderGeometry(R, R, H, 3, 1, true, GLASS_START + GLASS_LEN, 2 * Math.PI - GLASS_LEN), wallMat, 0, H / 2, 0);
+    // Steel at the back, facing the tower: three faces, the middle one with the doorway in it.
+    const STEEL0 = GLASS_START + GLASS_LEN, FACE = (2 * Math.PI - GLASS_LEN) / 3;
+    add(new THREE.CylinderGeometry(R, R, H, 1, 1, true, STEEL0, FACE), wallMat, 0, H / 2, 0);
+    add(new THREE.CylinderGeometry(R, R, H, 1, 1, true, STEEL0 + 2 * FACE, FACE), wallMat, 0, H / 2, 0);
+    const DOOR_H = 2.15;
+    add(new THREE.CylinderGeometry(R, R, H - DOOR_H, 1, 1, true, STEEL0 + FACE, FACE), wallMat, 0, DOOR_H + (H - DOOR_H) / 2, 0);
 
     // Mullions between the panes, and frame bands top and bottom.
     for (let i = 0; i <= 9; i++) {
@@ -106,7 +110,11 @@ const Elevator = (() => {
     // Doors on the middle steel face, and the floor readout above them.
     const faceZ = -R * Math.cos(Math.PI / SEG) + 0.03;
     const doorMat = new THREE.MeshStandardMaterial({ color: 0x8a92a3, metalness: 0.85, roughness: 0.3, flatShading: true });
-    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.39, 2.15, 0.03), doorMat, s * 0.2, 1.075, faceZ);
+    // The two leaves slide apart, behind the steel faces either side.
+    const doors = [-1, 1].map((s) => add(new THREE.BoxGeometry(0.39, 2.15, 0.03), doorMat, s * 0.2, 1.075, faceZ - 0.04));
+    const setDoors = (k) => doors.forEach((d, i) => { d.position.x = (i ? 1 : -1) * (0.2 + 0.4 * k); });
+    // A steel sill bridging the gap to the landing.
+    add(new THREE.BoxGeometry(0.84, 0.04, 0.6), trim, 0, -0.02, faceZ - 0.28);
     add(new THREE.BoxGeometry(0.88, 0.08, 0.05), trim, 0, 2.19, faceZ);
     const display = floorDisplay();
     add(new THREE.PlaneGeometry(0.42, 0.16), new THREE.MeshBasicMaterial({ map: display.tex }), 0, 2.4, faceZ + 0.01);
@@ -114,10 +122,13 @@ const Elevator = (() => {
     add(new THREE.BoxGeometry(0.12, 0.3, 0.02), trim, 0.62, 1.2, faceZ + 0.08).rotation.y = -0.5;
     add(new THREE.CylinderGeometry(0.02, 0.02, 0.02, 8), teal, 0.62, 1.24, faceZ + 0.1).rotation.x = Math.PI / 2;
 
-    // The carriage that clamps the car to the tower's rails.
-    add(new THREE.BoxGeometry(1.9, H + 0.8, 0.5), metal, 0, H / 2, -R - 0.12);
+    // The carriage that clamps the car to the tower's rails, open in the middle for the doorway.
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.5, H + 0.8, 0.5), metal, s * 0.7, H / 2, -R - 0.12);
+    const top0 = DOOR_H + 0.1, top1 = H + 0.4;
+    add(new THREE.BoxGeometry(0.9, top1 - top0, 0.5), metal, 0, (top0 + top1) / 2, -R - 0.12);
+    add(new THREE.BoxGeometry(0.9, 0.34, 0.5), metal, 0, -0.23, -R - 0.12);
 
-    return { group: cab, R, H, setFloor: display.set };
+    return { group: cab, R, H, setFloor: display.set, setDoors, backZ: faceZ };
   }
 
   return { build, R, H };
