@@ -44,5 +44,31 @@ const Settings = (() => {
     if (d) d();
   }
 
+  // The blue light cursor: follows the mouse with a little glowing trail, swells over anything
+  // clickable, and hides while the mouse is captured for looking around.
+  (function cursor() {
+    const c = document.getElementById('cursor');
+    if (!c) return;
+    let lastTrail = 0;
+    document.addEventListener('mousemove', (e) => {
+      if (document.pointerLockElement) return;
+      c.classList.remove('gone');
+      c.style.left = e.clientX + 'px'; c.style.top = e.clientY + 'px';
+      c.classList.toggle('hover', !!e.target.closest('button, li, input, label, a, select, .item, [data-tab]'));
+      const now = performance.now();
+      if (now - lastTrail > 40) {
+        lastTrail = now;
+        const t = document.createElement('i'); t.className = 'cursor-trail';
+        t.style.left = e.clientX + 'px'; t.style.top = e.clientY + 'px';
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 520);
+      }
+    });
+    document.addEventListener('mousedown', () => c.classList.add('down'));
+    document.addEventListener('mouseup', () => c.classList.remove('down'));
+    document.addEventListener('pointerlockchange', () => c.classList.toggle('gone', !!document.pointerLockElement));
+    document.addEventListener('mouseleave', () => c.classList.add('gone'));
+  })();
+
   return { values, bind, open, close, apply };
 })();

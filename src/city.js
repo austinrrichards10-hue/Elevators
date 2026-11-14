@@ -11,6 +11,7 @@ const City = (() => {
   const RESERVED = {
     '1,2': { w: 36, d: 30, h: 52, l: 0.09 },
     '-1,2': { w: 34, d: 34, h: 176, l: 0.07 },
+    '-1,1': { shops: true },        // the shopping street (built in src/street.js)
   };
   const BLOCK = 86;           // block pitch, road centre to road centre
   const ROAD = 16;
@@ -18,6 +19,28 @@ const City = (() => {
   const FLOOR_H = 4;          // window texture: one floor every 4 m...
   const WIN_W = 3;            // ...and one window every 3 m
   const TEX_CELLS = 16;
+
+  let skyData = null;
+  const skyExtras = {};
+  // Where the buildings stand, for walking the streets: [x0, x1, z0, z1] per box, by block.
+  const footprints = new Map();
+  const cellOf = (x, z) => Math.round(x / 86) + ',' + Math.round(z / 86);
+  function addFootprint(cx, cz, w, d) {
+    const f = [cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2];
+    for (const dx of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
+      const key = cellOf(cx + dx * w / 2, cz + dz * d / 2);
+      if (!footprints.has(key)) footprints.set(key, []);
+      const list = footprints.get(key);
+      if (!list.includes(f)) list.push(f);
+    }
+  }
+  // Is (x, z) clear of every building, with r to spare?
+  function clearAt(x, z, r) {
+    const list = footprints.get(cellOf(x, z));
+    if (!list) return true;
+    for (const b of list) if (x > b[0] - r && x < b[1] + r && z > b[2] - r && z < b[3] + r) return false;
+    return true;
+  }
 
   // Small seeded random so the city is the same every time.
   let seed = 1337;
@@ -114,6 +137,19 @@ const City = (() => {
     const sky = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
     sky.renderOrder = -10;
     scene.add(sky);
+    // The same dome by day: deep blue overhead fading to a pale, warm horizon.
+    const night = Float32Array.from(colors);
+    const day = new Float32Array(colors.length), dusk = new Float32Array(colors.length);
+    const dTop = new THREE.Color(0x2f6fc4), dMid = new THREE.Color(0x7fb6e8), dHaze = new THREE.Color(0xe8e4d8);
+    const sTop = new THREE.Color(0x1f2a5a), sMid = new THREE.Color(0x8a5a8a), sHaze = new THREE.Color(0xf29a5a);
+    for (let i = 0; i < p.count; i += 3) {
+      const h = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3 / R;
+      const k = Math.min(1, Math.max(0, (h + 0.03) / 0.5));
+      const a = dHaze.clone().lerp(dMid, Math.min(1, k * 2.2)).lerp(dTop, Math.max(0, k * 1.6 - 0.6));
+      const b = sHaze.clone().lerp(sMid, Math.min(1, k * 2.5)).lerp(sTop, Math.max(0, k * 1.6 - 0.5));
+      for (let j = 0; j < 3; j++) { day.set([a.r, a.g, a.b], (i + j) * 3); dusk.set([b.r, b.g, b.b], (i + j) * 3); }
+    }
+    skyData = { attr: geo.attributes.color, night, day, dusk };
 
     // Stars, thinning toward the glowing horizon.
     const sp = [];
@@ -124,7 +160,9 @@ const City = (() => {
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-    scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfdcff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.85, depthWrite: false })));
+    const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfdcff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.85, depthWrite: false }));
+    scene.add(stars);
+    skyExtras.stars = stars;
 
     // A low, faceted moon off to the right of the view, with a soft halo.
     const moonDir = new THREE.Vector3(0.55, 0.32, 0.77).normalize();
@@ -144,6 +182,7 @@ const City = (() => {
     halo.scale.set(700, 700, 1);
     halo.position.copy(moon.position);
     scene.add(halo);
+    skyExtras.moon = moon; skyExtras.halo = halo;
     return moonDir;
   }
 
@@ -181,10 +220,12 @@ const City = (() => {
     const moonDir = buildSky(scene);
     buildMountains(scene);
 
-    scene.add(new THREE.HemisphereLight(0x3a4a8a, 0x1a0f0a, 0.9));
+    const hemi = new THREE.HemisphereLight(0x3a4a8a, 0x1a0f0a, 0.9);
+    scene.add(hemi);
     const moonLight = new THREE.DirectionalLight(0x9fb0ff, 0.6);
     moonLight.position.copy(moonDir).multiplyScalar(100);
     scene.add(moonLight);
+    Object.assign(daylightRefs, { scene, hemi, moonLight });
 
     // Ground and roads.
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(7000, 7000), new THREE.MeshLambertMaterial({ color: 0x0a0b12 }));
@@ -214,8 +255,10 @@ const City = (() => {
         if (bx === 0 && bz === 0) continue;                       // the tower's own block
         const res = RESERVED[bx + ',' + bz];
         if (res) {                                                // a building the story uses
+          if (res.shops) continue;
           tint.setHSL(0.62, 0.2, res.l);
           batch.box(cx, 0, cz, res.w, res.h, res.d, tint, 0.25, 0.5);
+          addFootprint(cx, cz, res.w, res.d);
           tops.push(cx, res.h + 1.5, cz);
           continue;
         }
@@ -238,6 +281,7 @@ const City = (() => {
           tint.setHSL(0.6 + rand() * 0.08, 0.15 + rand() * 0.2, 0.06 + rand() * 0.07);
           const uOff = Math.floor(rand() * TEX_CELLS) / TEX_CELLS, vOff = Math.floor(rand() * TEX_CELLS) / TEX_CELLS;
           batch.box(x, 0, z, w, h, d, tint, uOff, vOff);
+          addFootprint(x, z, w, d);
           let top = h;
           // Setbacks on the taller towers, and the odd crown on top.
           if (h > 70 && rand() < 0.7) {
@@ -261,6 +305,8 @@ const City = (() => {
     // in the face where the elevator stops, so you can see in and out through it.
     const towerTint = new THREE.Color(0x10141f);
     const L = LANDING, TH = TOWER_HALF;
+    addFootprint(0, 0, TH * 2, TH * 2);
+    addFootprint(0, TH + 2.3, 4.4, 4.6);      // the glass car's shaft at the foot of the tower
     const b0 = L.y - 0.5, b1 = L.y + L.h + 0.4, roomZ = TH - L.depth;
     batch.box(0, 0, 0, TH * 2, b0, TH * 2, towerTint, 0, 0);
     batch.box(0, b1, 0, TH * 2, TOWER_TOP - b1, TH * 2, towerTint, 0, 0);
@@ -275,6 +321,7 @@ const City = (() => {
     tops.push(0, TOWER_TOP + 16 + 40, 0);
 
     const buildingMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 1.15 });
+    daylightRefs.buildingMat = buildingMat;
     scene.add(batch.mesh(buildingMat));
 
     // Tower antenna.
@@ -396,5 +443,42 @@ const City = (() => {
     return { update };
   }
 
-  return { build, TOWER_HALF, TOWER_TOP, FLOOR_H, LANDING, BLOCK };
+  // ---------- Day and night ----------
+  // k: 0 is deep night, 1 is full day; in between the sky goes through a warm dusk.
+  const daylightRefs = {};
+  let lastK = -1;
+  const C = (h) => new THREE.Color(h);
+  const NIGHT = { hemiSky: C(0x3a4a8a), hemiGround: C(0x1a0f0a), hemi: 0.9, sun: C(0x9fb0ff), sunI: 0.6, fog: C(0x24183a), fogD: 0.00078, bg: C(0x03050f) };
+  const DAY = { hemiSky: C(0xcfe4ff), hemiGround: C(0x6a5a4a), hemi: 2.1, sun: C(0xfff1d8), sunI: 2.4, fog: C(0xb8cde0), fogD: 0.00045, bg: C(0x8fbfea) };
+  const DUSK = { hemiSky: C(0x9a7aa8), hemiGround: C(0x3a2418), hemi: 1.4, sun: C(0xffa060), sunI: 1.4, fog: C(0x8a6a7a), fogD: 0.0006, bg: C(0x6a4a6a) };
+  function setDaylight(k) {
+    k = Math.max(0, Math.min(1, k));
+    if (Math.abs(k - lastK) < 0.004) return;
+    lastK = k;
+    const R = daylightRefs;
+    // Night -> dusk -> day.
+    const a = k < 0.5 ? NIGHT : DUSK, b = k < 0.5 ? DUSK : DAY, t = k < 0.5 ? k * 2 : (k - 0.5) * 2;
+    R.hemi.color.copy(a.hemiSky).lerp(b.hemiSky, t);
+    R.hemi.groundColor.copy(a.hemiGround).lerp(b.hemiGround, t);
+    R.hemi.intensity = a.hemi + (b.hemi - a.hemi) * t;
+    R.moonLight.color.copy(a.sun).lerp(b.sun, t);
+    R.moonLight.intensity = a.sunI + (b.sunI - a.sunI) * t;
+    R.scene.fog.color.copy(a.fog).lerp(b.fog, t);
+    R.scene.fog.density = a.fogD + (b.fogD - a.fogD) * t;
+    R.scene.background.copy(a.bg).lerp(b.bg, t);
+    // Office windows go dim by day; the buildings themselves lighten.
+    R.buildingMat.emissiveIntensity = 1.15 * (1 - k * 0.85);
+    R.buildingMat.color.setScalar(1 + k * 4.5);
+    // The sky dome.
+    if (skyData) {
+      const out = skyData.attr.array, A = k < 0.5 ? skyData.night : skyData.dusk, B = k < 0.5 ? skyData.dusk : skyData.day;
+      for (let i = 0; i < out.length; i++) out[i] = A[i] + (B[i] - A[i]) * t;
+      skyData.attr.needsUpdate = true;
+    }
+    if (skyExtras.stars) skyExtras.stars.material.opacity = 0.85 * Math.max(0, 1 - k * 2.2);
+    if (skyExtras.halo) skyExtras.halo.material.opacity = 0.35 * Math.max(0, 1 - k * 2);
+    if (skyExtras.moon) skyExtras.moon.visible = k < 0.6;
+  }
+
+  return { build, TOWER_HALF, TOWER_TOP, FLOOR_H, LANDING, BLOCK, clearAt, addFootprint, setDaylight };
 })();

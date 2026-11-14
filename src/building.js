@@ -203,6 +203,25 @@ const Building = (() => {
     light2.position.set(0, y + H - 0.4, z0 + 4.5);
     group.add(light2);
 
+    // The end of your office, where you work: a row of desks along the back wall, everyone's
+    // screen asleep but yours, the company name on the wall, a water cooler.
+    const deskM = new THREE.MeshStandardMaterial({ color: 0xd8d2c8, roughness: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const x = -3.6 + i * 2.4;
+      box(1.6, 0.04, 0.75, deskM, x, y + 0.74, z0 + 0.5);
+      for (const s of [-1, 1]) box(0.04, 0.72, 0.7, dark, x + s * 0.76, y + 0.36, z0 + 0.5);
+      box(0.6, 0.36, 0.03, dark, x, y + 1.1, z0 + 0.3);
+      const mine = i === 1;
+      box(0.56, 0.32, 0.005, mine ? new THREE.MeshBasicMaterial({ color: 0x4fa8c8 }) : new THREE.MeshStandardMaterial({ color: 0x08090c, roughness: 0.2 }), x, y + 1.1, z0 + 0.32);
+      box(0.45, 0.02, 0.15, dark, x, y + 0.77, z0 + 0.65);
+      const chair = box(0.48, 0.08, 0.48, new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.8 }), x + (i % 2 ? 0.2 : -0.15), y + 0.48, z0 + 1.25);
+      chair.rotation.y = (i - 1.5) * 0.3;
+      box(0.45, 0.5, 0.06, new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.8 }), x + (i % 2 ? 0.2 : -0.15), y + 0.8, z0 + 1.5).rotation.y = (i - 1.5) * 0.3;
+    }
+    plane(2.4, 0.5, new THREE.MeshBasicMaterial({ map: signTexture([['LUMEN  CORP.', 56, 64]], 512, 112, '#7ff0e6') }), 0, y + 2.4, z0 + 0.01, 0, 0);
+    box(0.32, 1.1, 0.32, new THREE.MeshStandardMaterial({ color: 0xe9e1d6, roughness: 0.5 }), L.halfW - 0.4, y + 0.55, z0 + 1.2);
+    box(0.26, 0.38, 0.26, new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.6 }), L.halfW - 0.4, y + 1.3, z0 + 1.2);
+
     // Hall doors: two steel leaves in the wall, sliding apart into it.
     const leaves = [-1, 1].map((s) => box(DOOR, 2.2, 0.04, steel, s * DOOR / 2, y + 1.1, zF + 0.12));
     function setDoors(k) { leaves.forEach((m, i) => { m.position.x = (i ? 1 : -1) * DOOR * (0.5 + k); }); }

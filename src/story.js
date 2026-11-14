@@ -54,7 +54,8 @@ const Story = (() => {
     view: { space: 'cab', pos: [-0.45, 1.75, -0.95], look: [0.6, -2, 16] },
     side: { space: 'cab', pos: [1.05, 1.5, 0.35], look: [0.3, 1.3, 1.12] },
   };
-  const cab = (n) => ({ do: () => Game.shot(CAB[n]) });
+  // A camera shot in the car, for cinematic rides (ignored when you're walking about in it).
+  const cab = (n) => ({ do: () => { if (Game.state.mode === 'scene') Game.shot(CAB[n]); } });
   const face = (f) => ({ do: () => Game.mikuFace(f) });
   const music = (m) => ({ do: () => Sound.music(m) });
   const dawn = (k) => ({ do: () => Game.dawn(k) });
@@ -152,34 +153,87 @@ const Story = (() => {
     "n: She steps out into the street and turns up her collar, and the city takes her.",
   ];
 
+  // Halfway down the first night, leaning on the rail, she tells you about Hana.
+  const HANA = [
+    { do: () => Game.slowCar(0.22) },
+    "n: The car slows as it slides into the dark between the towers. Her hands tighten on the rail.",
+    "m: Can I tell you something? You don't have to say anything. I just… haven't said it out loud in a while.",
+    { c: [
+      { t: "I'm listening.", a: 1 },
+      { t: 'Of course.', a: 1 },
+    ] },
+    "m: I used to ride this with someone. Her name was Hana.",
+    "m: We met at music school. She played guitar like she was angry at it, and I sang like I was apologizing. We were terrible. We were perfect.",
+    "m: We even had a name. Floor Seventy. Because this is where we'd come after rehearsal, and she said it was the only place in the city high enough to be heard.",
+    "m: We had a whole plan. Write twelve songs. Play every basement in the city. Get signed by someone who wears sunglasses indoors. Buy a place with a real window.",
+    "n: She laughs, and it doesn't quite come out right.",
+    "m: Last spring, a label called. A real one. They wanted to meet us. Both of us. That Friday.",
+    "m: On the Wednesday, Hana was cycling home from her shift, and a truck didn't see her.",
+    "n: The car hums. Far below, the city goes on, not knowing.",
+    "m: I went to the meeting anyway. I don't know why. I sat across from a man in sunglasses and I couldn't sing a single note. He was very kind about it.",
+    "m: So now it's just me. In basements. Singing her half of the harmonies in my head.",
+    { c: [
+      { t: "I'm so sorry, Miku.", a: 1, then: ["m: Thank you. Everyone says it. You said it like you meant it."] },
+      { t: "None of that was your fault.", a: 2, then: ["m: …I know. Some days I know."] },
+      { t: 'Say nothing. Just stay beside her.', a: 2, set: 'stood', then: ["n: You don't say anything. You stay there, shoulder to shoulder with her at the rail.", "n: After a while, her shoulder leans into yours. Just slightly."] },
+    ] },
+    "m: The thing is… after that, I stopped letting people get close. Friends. Anyone.",
+    "m: Because everyone you let in is someone the world can take away.",
+    "m: It's easier to ride this alone. Strangers in an elevator. You get off at the bottom, and nobody owes anybody anything.",
+    "m: …I don't know why I'm telling you this. You're a stranger. Maybe that's why.",
+    { c: [
+      { t: 'Maybe strangers are a good place to start.', a: 2, set: 'start', then: ["n: She looks at you for a long moment.", "m: …Maybe."] },
+      { t: "You don't have to be alone.", a: 1, then: ["m: I know. I'm just scared. That's all. That's the whole thing."] },
+      { t: 'Thank you for telling me.', a: 1, then: ["m: Thank you for listening. I mean it."] },
+    ] },
+    { do: (S) => { S.flags.hana = true; Game.slowCar(1); } },
+    "n: The car picks up speed again. The lights below rush up to meet you.",
+  ];
+
+  // Chapter 1's ride: continuous, about a minute from the top, with things she says at
+  // particular heights on the way down. The car never stops for her; it slows while she tells
+  // you about Hana, then carries on.
   function chapterRide() {
     return new Promise((resolve) => {
       const pending = [];
-      let busy = false, met = false, idle = 0;
+      let busy = false, met = false, idle = 0, done = false;
       const drain = async () => {
         if (busy) return;
-        busy = true; Game.hold(true);
+        busy = true;
         while (pending.length) {
-          Game.mikuFace('player');
+          if (!Game.leaning) Game.mikuFace('player');
           await say(pending.shift());
         }
         Game.mikuFace('view');
-        busy = false; Game.hold(false);
+        busy = false;
       };
       const meetFirst = () => { if (!met) { met = true; pending.push(MEET); } };
-      Game.hooks.board = () => Game.hint("She's at the glass. Walk up to her and press E.", 9);
+      // [height, script, already run]
+      const beats = [[245, STOP_BEATS[1]], [205, STOP_BEATS[2]], [165, 'lean'], [148, HANA], [55, STOP_BEATS[3]]];
+      Game.hooks.board = () => Game.hint("She's at the glass. Walk up to her and press E.", 8);
       Game.hooks.canTalk = () => !busy;
-      Game.hooks.talk = () => {
-        if (!met) meetFirst(); else pending.push(IDLE[idle++ % IDLE.length]);
-        drain();
-      };
-      Game.hooks.stop = (i) => { meetFirst(); if (STOP_BEATS[i]) pending.push(STOP_BEATS[i]); drain(); };
+      Game.hooks.talk = () => { if (!met) meetFirst(); else pending.push(IDLE[idle++ % IDLE.length]); drain(); };
+      Game.hooks.lean = (on) => { if (on) Game.hint('E or walk to stand up', 4); };
+      const watch = setInterval(() => {
+        if (done) return clearInterval(watch);
+        const y = Game.cabY;
+        if (Game.state.descending && y < 268) meetFirst();
+        for (const b of beats) {
+          if (b[2] || y > b[0]) continue;
+          b[2] = true;
+          if (b[1] === 'lean') { if (!Game.leaning) Game.hint('Stand at the rail beside her and press E to lean on it with her.', 8); continue; }
+          if (b[1] === HANA && !Game.leaning) pending.push(["m: Come and stand by the glass a minute? The view's better from the rail."]);
+          pending.push(b[1]);
+        }
+        if (pending.length && !busy) drain();
+      }, 250);
       Game.hooks.arrive = async () => {
         meetFirst(); pending.push(GROUND);
         await until(() => !busy);
         drain();
         await wait(0.2);
         await until(() => !busy);
+        done = true;
         for (const k in Game.hooks) Game.hooks[k] = null;
         resolve();
       };
@@ -189,9 +243,14 @@ const Story = (() => {
   async function ch1() {
     Sound.music('sad');
     Game.titleMode();
-    Game.newRide({ playable: true, stops: true, speed: 1 });
-    Game.firstPerson(() => Game.hint('Mouse to look · WASD to walk · Step into the elevator', 10), true);
+    Game.newRide({ playable: true, stops: false, speed: 1 });
+    Game.firstPerson(null, true);
     await fadeIn();
+    await say([
+      "n: Another late night at the office. Everyone else went home hours ago. The screens are all asleep.",
+      "n: You shut your laptop, grab your bag, and head for the only elevator still running at this hour: the glass one, on the outside of the tower.",
+    ]);
+    Game.hint('Mouse to look · WASD to walk · Step into the elevator', 10);
     await chapterRide();
     await wait(1.5);
     return 1;
@@ -200,6 +259,28 @@ const Story = (() => {
   // ======================================================================================
   // Chapter 2: Same Time Tomorrow.
   // ======================================================================================
+  // Night rides you walk into yourself: you arrive on the floor-70 landing, step into the car,
+  // and talk with her in first person as it sinks slowly away from the landing.
+  async function walkInRide(intro) {
+    Game.titleMode();
+    Game.newRide({ playable: true, stops: false, speed: 1 });
+    Game.slowCar(0.18);
+    Game.firstPerson(null, true);
+    await fadeIn();
+    if (intro) await say(intro);
+    Game.hint('Step into the elevator', 6);
+    await until(() => Game.state.boarded);
+    await until(() => Game.state.descending);
+    Game.mikuFace('player');
+  }
+  // The end of a ride: the car speeds up, and after a few seconds the camera pulls away.
+  async function panAway() {
+    Game.mikuFace('view');
+    Game.slowCar(1);
+    await wait(3.5);
+    Game.panAway();
+    await wait(3);
+  }
   async function rideScene(speed = 0.5) {
     Game.newRide({ playable: false, stops: false, speed });
     Game.shot(CAB.two, true);
@@ -214,10 +295,11 @@ const Story = (() => {
 
   async function ch2() {
     Sound.music('sad');
-    await rideScene(0.45);
+    await walkInRide([
+      "n: You take the fast elevator up to seventy. Across the landing, the doors of the glass car are already open.",
+      "n: She's inside, at the glass. She's holding two cans of coffee from the vending machine.",
+    ]);
     await say([
-      "n: The next night, you take the fast elevator up to seventy. The doors of the glass car are already open.",
-      "n: She's inside. She's holding two cans of coffee from the vending machine on the landing.",
       "m: You came.",
       "m: I didn't know which kind you like, so I got one sweet and one black. I'm going to pretend I like whichever one you don't pick.",
       { c: [
@@ -269,7 +351,7 @@ const Story = (() => {
       "m: I'm on second. After a man who plays the saw.",
       "m: Don't be late. He's very moving. People cry.",
     ]);
-    await landRide();
+    await panAway();
     return 2;
   }
 
@@ -409,9 +491,10 @@ const Story = (() => {
   // ======================================================================================
   async function ch5() {
     Sound.music('sad');
-    await rideScene(0.45);
+    await walkInRide([
+      "n: Autumn. The glass is cold to the touch now. She's in the car already, in a scarf the color of the inside of a lemon.",
+    ]);
     await say([
-      "n: Autumn. The glass is cold to the touch now. She wears a scarf the color of the inside of a lemon.",
       "n: Tonight she doesn't say anything when the doors close. She's holding a piece of paper.",
       cab('close'),
       "m: Did you see the notice? On the landing?",
@@ -438,9 +521,9 @@ const Story = (() => {
         { t: 'Come see my place. It has a window.', a: 2, then: ["n: She turns all the way round.", "m: …Your window.", "m: The one I've been getting moon pictures from for two months.", "m: Yes. Okay. Show me your window."] },
         { t: "We'll ride it every night until it closes.", a: 1, set: 'everyNight', then: ["m: Every night?", "m: Okay. Every night. Even the rainy ones.", "m: …And after?", "y: After, come and see my window.", "m: …Okay. Yes. After."] },
       ] },
-      "n: The car reaches the bottom. For a long moment, neither of you moves to get off.",
+      "n: The car keeps sinking. For a long moment, neither of you says anything at all.",
     ]);
-    await landRide();
+    await panAway();
     return 5;
   }
 
@@ -631,109 +714,132 @@ const Story = (() => {
   const pickLine = (list) => list[chatI++ % list.length];
   const clearHooks = () => { for (const k in Game.hooks) Game.hooks[k] = null; Game.setUsables([]); };
 
-  // ---------- At home ----------
-  // The things you can use in your apartment. `canSleep` is true, or a reason you can't yet;
-  // `onSleep` ends the day. `withMiku`: she's home too (no going out alone).
-  function homeUsables(canSleep, onSleep, withMiku) {
-    const at = Game.places.home.at;
+  // ---------- At home and about town ----------
+  // What tonight needs, before each chapter that follows a day: walk to the tower, head out,
+  // answer the door, or set an alarm.
+  const TONIGHT = {
+    1: { kind: 'tower', goal: 'Tonight: Miku rides the glass elevator at midnight. Walk to the tower after 9 PM.' },
+    2: { kind: 'door', goal: "Tonight: Miku's show at the Blue Room. Head out your front door after 9 PM.", label: 'Head out to the Blue Room' },
+    3: { kind: 'door', goal: "Tonight: Miku's roof. Head out your front door after 9 PM.", label: "Head over to Miku's building" },
+    4: { kind: 'tower', goal: 'Tonight: the glass elevator, with Miku. Walk to the tower after 9 PM.' },
+    5: { kind: 'knock', goal: 'Tonight: Miku is coming to see your window. Be home after 9 PM.' },
+    7: { kind: 'alarm', goal: 'The last ride is at dawn. Go to bed after 9 PM and set an alarm for 4 AM.' },
+  };
+  const night = () => Town.isNight();
+
+  // The apartment's usable things. opts: { night (just home after a chapter: only sleep),
+  // T (tonight), onGo (tonight's thing happens), onSleep, canSleep, withMiku }
+  function setHome(opts) {
+    const at = Game.places.home.at, T = opts.T;
     Game.hooks.phone = () => Life.openPhone();
     Game.setUsables([
-      { ...at.computer, r: 1.3, label: 'Use the computer', use: () => Life.openPC() },
-      { ...at.bed, r: 1.5, label: 'Go to bed', use: async () => {
-        const ok = canSleep();
-        if (ok !== true) { Game.hint(ok, 3); return; }
+      { ...at.computer, r: 1.3, label: 'Use the computer', use: () => { Life.openPC(); } },
+      { ...at.bed, r: 1.8, label: opts.night || (T && T.kind === 'alarm' && night()) ? 'Go to bed' : opts.onSleep ? 'Go to bed' : 'Nap until evening', use: async () => {
+        if (opts.canSleep) { const ok = opts.canSleep(); if (ok !== true) { Game.hint(ok, 3); return; } }
         let yes = false;
-        await say([{ c: [{ t: 'Go to sleep', then: [{ do: () => { yes = true; } }] }, { t: 'Not yet' }] }]);
-        if (yes) { clearHooks(); onSleep(); }
+        const sleepNow = opts.night || opts.onSleep || (T && T.kind === 'alarm' && night());
+        await say([{ c: [{ t: sleepNow ? (T && T.kind === 'alarm' ? 'Set an alarm for 4 AM and sleep' : 'Go to sleep') : 'Nap until evening', then: [{ do: () => { yes = true; } }] }, { t: 'Not yet' }] }]);
+        if (!yes) return;
+        if (sleepNow) { clearHooks(); (opts.onSleep || opts.onGo)(); }
+        else { await fadeOut(); state.clock = Math.max(state.clock, 20.75); await fadeIn(); Game.hint('You wake up as the city lights come on.', 4); setHome(opts); }
       } },
-      { ...at.door, r: 1.4, label: withMiku ? 'Front door' : 'Go out', use: () => (withMiku ? Game.hint("You're staying in with Miku tonight.", 3) : goOut()) },
-      { ...at.window, r: 1.6, label: 'Look out of the window', use: () => say([pickLine(VIEW_LINES)]) },
+      { ...at.door, r: 1.4, label: doorLabel(opts), use: () => useDoor(opts) },
+      { ...at.stove, r: 1.4, label: 'Cook something', use: () => Town.cook() },
+      { ...at.tv, r: 3.2, label: 'Turn the TV on or off', use: () => { tvOn = !tvOn; Game.places.home.tv(tvOn); } },
+      { ...at.scope, r: 1.4, label: 'Look through the telescope', use: () => say([night() ? "n: You find the tower. Down its side, a tiny lit car. If you squint, there's someone at the glass." : "n: In daylight the glass car is just a glint on the tower's side, waiting for night."]) },
+      { ...at.window, r: 1.8, label: 'Look out of the window', use: () => say([pickLine(VIEW_LINES)]) },
       { ...at.keys, r: 1.3, label: 'Play the keyboard', use: () => { Sound.chime(); say([state.flags.number ? "n: You plunk out the first few notes of her song with one finger. It sounds better when she plays it." : "n: You play the three notes you know. The keyboard is mostly a very expensive shelf."]); } },
     ]);
   }
+  let tvOn = false;
+  function doorLabel(opts) {
+    if (opts.withMiku) return 'Front door';
+    if (opts.night) return 'Front door';
+    const T = opts.T;
+    if (T && T.kind === 'door' && night()) return T.label;
+    if (T && T.kind === 'knock' && night()) return "Someone's knocking… answer the door";
+    return 'Take the elevator down to the street';
+  }
+  async function useDoor(opts) {
+    if (opts.withMiku) return Game.hint("You're staying in with Miku tonight.", 3);
+    if (opts.night) return Game.hint("It's late. Get some sleep.", 3);
+    const T = opts.T;
+    if (T && (T.kind === 'door' || T.kind === 'knock') && night()) { clearHooks(); opts.onGo(); return; }
+    // Down in the building's elevator to the street.
+    Sound.blip('door');
+    await fadeOut();
+    Game.enterArea('city', Game.places.city.at.arriveHome);
+    Sound.music(null);
+    setCity(opts);
+    await fadeIn();
+    Game.hint(T && T.kind === 'tower' ? 'The glass tower is south, past the shops. Its lobby is at the foot of the glass car.' : 'Shops are along the street to the south. Your building door is behind you.', 7);
+  }
+  // Out in the city: the shops, your building's door, the glass tower's lobby.
+  function setCity(opts) {
+    const at = Game.places.city.at, T = opts.T;
+    Game.hooks.phone = () => Life.openPhone();
+    Game.setUsables([
+      ...Game.places.city.usables,
+      { ...at.homeDoor, r: 2.2, label: 'Go up to your apartment', use: async () => {
+        Sound.blip('door');
+        await fadeOut();
+        Game.enterHome(Game.places.home.at.start, null);
+        Sound.music('warm');
+        setHome(opts);
+        await fadeIn();
+      } },
+      { ...at.towerDoor, r: 2.4, label: T && T.kind === 'tower' && night() ? 'Ride up to floor 70' : 'Observation elevator', use: () => {
+        if (T && T.kind === 'tower' && night()) { clearHooks(); opts.onGo(); return; }
+        Game.hint(night() ? 'Not tonight. Miku will be here another night.' : "The glass elevator's quiet in the daytime. Miku rides it at night.", 4);
+      } },
+    ]);
+  }
+  // (Kept for chapter 7, where she's home with you.)
+  const homeUsables = (canSleep, onSleep, withMiku) => setHome({ canSleep, onSleep, withMiku });
   const VIEW_LINES = [
-    "n: Across the road the tower goes up into the dark. Down its side, small and slow, slides the glass car.",
-    "n: Somewhere down there, a bus sighs at a stop. Up here it's just the hum of the fridge and the lights.",
+    "n: Across the road the tower goes up into the sky. Down its side, small and slow, slides the glass car.",
+    "n: Somewhere down there, a bus sighs at a stop. Up here it's just the hum of the fridge.",
     "n: You count windows for a while. You lose count somewhere around four hundred.",
     "n: The red lights on the rooftops blink at nobody. You wave back, just in case.",
   ];
 
-  // A day at home between the story's nights. Ends when you go to bed.
+  // A day between the story's nights: home late, sleep, then a free day until tonight's thing.
   const CONVO_BEFORE = { 3: 'c3', 4: 'c4', 5: 'c5' };
   async function homeDay(next) {
+    const T = TONIGHT[next];
+    Town.fix();
     Sound.music(next >= 5 ? 'sad' : 'warm');
+    // Home, late, after the night.
+    state.clock = 1.2;
+    Game.setDaylight(0);
     if (next === 1) {
       await say([
         "n: You get home a little after one in the morning. Your apartment is on the fortieth floor of the tower across the road.",
         "n: You can't stop thinking about the girl in the glass elevator.",
       ]);
     }
-    Life.startDay(next === 7 ? 'c6a' : CONVO_BEFORE[next]);
     Game.enterHome(Game.places.home.at.start, null);
     Life.hud(true);
+    Town.setGoal('Get some sleep. Your bed is in the bedroom, through the doorway.');
     await fadeIn();
-    if (next === 1) Game.hint('This is home. Walk with WASD, look with the mouse, press E to use things, Q for your phone.', 9);
-    else Game.hint('Q for your phone · the computer is on the desk · bed is through the back door', 6);
-    await new Promise((resolve) => homeUsables(() => true, resolve, false));
+    if (next === 1) Game.hint('This is home. WASD to walk, mouse to look, E to use things, Q for your phone.', 9);
+    await new Promise((resolve) => setHome({ night: true, onSleep: resolve, T }));
+    // Morning.
+    await fadeOut();
     Life.endDay();
-  }
-
-  // Going out: the ramen stall or the park, on your own (and maybe she's there).
-  async function goOut() {
-    let where = null;
-    await say([
-      "n: Where to?",
-      { c: [
-        { t: 'The ramen stall ($8)', then: [{ do: () => { where = 'stall'; } }] },
-        { t: 'A walk in the park', then: [{ do: () => { where = 'park'; } }] },
-        { t: 'Stay in' },
-      ] },
-    ]);
-    if (!where) return;
-    if (where === 'stall' && state.money < 8) { Game.hint('You check your wallet. Maybe not tonight.', 3); return; }
-    const usables = Game.hooks.phone;
-    Life.hud(false);
-    await fadeOut();
-    const meet = where === 'stall' && state.flags.number && !state.flags.metAtStall;
-    Game.goTo(where);
-    if (!meet) Game.miku.obj.visible = false;
-    Game.shot(place(where, where === 'stall' ? 'close' : 'wide'), true);
-    Game.mikuFace('cam');
+    state.clock = 8;
+    Life.startDay(next === 7 ? 'c6a' : CONVO_BEFORE[next]);
+    Game.enterHome(Game.places.home.at.bedside, null);
+    Sound.music('warm');
+    Town.setGoal(T.goal);
     await fadeIn();
-    if (where === 'stall') {
-      state.money -= 8;
-      Sound.blip('coin');
-      if (meet) {
-        state.flags.metAtStall = true;
-        await say([
-          "n: There's someone already at the counter, hunched over a bowl, with a pencil in her hair.",
-          "m: …{name}? Are you following me?",
-          { c: [
-            { t: 'I could ask you the same thing.', a: 1, then: ["m: I was here first! The old man is my witness.", "n: The old man does not look up. He puts extra green onions in your bowl."] },
-            { t: 'Maybe a little.', a: 2, then: ["m: Oh. Okay. Ha! That's… okay. That's fine. Sit down."] },
-          ] },
-          "n: You eat side by side without saying much. It's the nicest quiet you've had in a while.",
-          "m: Same time tomorrow. Remember. You promised the elevator.",
-        ]);
-      } else {
-        await say([
-          "n: The old man nods at you like you're a regular. Maybe you are now.",
-          "n: The ramen is hot and salty and exactly right. You eat it watching the glass car go up and down the tower.",
-          ...(state.flags.number ? ["n: You take a picture of the bowl and send it to Miku. She replies in seconds: “EXTRA GREEN ONIONS?? 😤”"] : []),
-        ]);
-      }
-    } else {
-      await say([
-        "n: The park is quiet. A few fireflies drift between the trees, much too late in the year.",
-        "n: Above the tower, one star is bright enough to beat the city.",
-        ...(state.flags.number ? ["n: You send Miku a picture of it. She sends back: “that one's mine. i named it.”"] : []),
-      ]);
-    }
-    await fadeOut();
-    Game.enterHome(Game.places.home.at.start, null);
-    Game.hooks.phone = usables;
-    Life.hud(true);
-    await fadeIn();
+    Game.hint(next === 1 ? 'Morning. Shop, cook, work, or explore. The street is down the elevator by your front door.' : 'Good morning.', 8);
+    Town.running = true;
+    await new Promise((resolve) => setHome({ T, onGo: resolve }));
+    Town.running = false;
+    Town.setGoal('');
+    Game.setUsables([]);
+    if (T.kind === 'alarm') state.clock = 4.6;
   }
 
   async function ch7() {
@@ -756,6 +862,8 @@ const Story = (() => {
       await fadeOut();
       await card('Home', DAYS[d], `${DAYS.length - d} ${DAYS.length - d === 1 ? 'night' : 'nights'} until the last ride`, 2.4);
       Life.startDay(null);
+      Town.fix();
+      state.clock = 19.6;
       const spot = SPOTS[d % SPOTS.length];
       let spent = false;
       const enter = () => { Game.enterHome(Game.places.home.at.bedside, spot); Game.mikuFace('view'); Life.hud(true); };
@@ -768,17 +876,20 @@ const Story = (() => {
           Game.mikuFace('player');
           let pick = null, gift = null;
           const left = Object.keys(EVENINGS).filter((k) => !state.evenings.includes(k));
-          const bag = Life.giftsInBag();
+          const bag = [...Life.giftsInBag(), ...Town.dishesInBag()];
           await say([
             spent ? pickLine(HOME_CHAT) : d === 0 ? "m: First night as roommates! What should we do?" : d === DAYS.length - 1 ? "m: Last free night before the last ride. What do you want to do?" : "m: What should we do tonight?",
             { c: [
               ...(spent ? [] : [{ t: 'Plan tonight…', then: [{ c: [...left.map((k) => ({ t: EVENINGS[k].t, then: [{ do: () => { pick = k; } }] })), { t: 'Back' }] }] }]),
-              ...(bag.length ? [{ t: 'Give her something…', then: [{ c: [...bag.map((k) => ({ t: Life.GIFTS[k].name, then: [{ do: () => { gift = k; } }] })), { t: 'Back' }] }] }] : []),
+              ...(bag.length ? [{ t: 'Give her something…', then: [{ c: [...bag.map((k) => ({ t: (Life.GIFTS[k] || Town.DISHES[k]).name, then: [{ do: () => { gift = k; } }] })), { t: 'Back' }] }] }] : []),
               { t: 'Just chat', then: [pickLine(HOME_CHAT)] },
               { t: 'Never mind', then: [] },
             ] },
           ]);
-          if (gift) {
+          if (gift && Town.DISHES[gift]) {
+            state.food[gift]--; state.aff += 2; Sound.blip('heart');
+            await say(Town.DISHES[gift].react.map((l) => 'm: ' + l));
+          } else if (gift) {
             Life.takeGift(gift);
             await say(Life.giftToMiku(gift, false).map((l) => 'm: ' + l));
           }
@@ -947,6 +1058,8 @@ const Story = (() => {
         persist();
         Game.dawn(0);
         Life.showDecor();
+        Town.fix();
+        if (i !== 6) { state.clock = i === 7 ? 4.6 : 23.5; Game.setDaylight(0); }
         await card('Chapter ' + NUMS[i], CHAPTERS[i].title, CHAPTERS[i].sub);
         const next = await CHAPTERS[i].run();
         try { Life.addPhoto(Game.snapshot(), CHAPTERS[i].title); } catch (e) { /* no photo */ }
@@ -1012,6 +1125,7 @@ const Story = (() => {
   function boot() {
     Talk.init(state);
     Life.init(state);
+    Town.init(state);
     Settings.bind();
     Settings.apply();
     particles();

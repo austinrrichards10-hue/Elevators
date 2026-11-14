@@ -83,10 +83,12 @@ const Talk = (() => {
     choices = list.filter((c) => !c.if || c.if(S));
     el.classList.remove('hidden');
     if (!line) { nameEl.textContent = ''; textEl.textContent = ''; }
-    choicesEl.innerHTML = choices.map((c, i) => `<li data-n="${i}"><kbd>${i + 1}</kbd>${fill(c.t)}</li>`).join('');
+    choicesEl.innerHTML = choices.map((c, i) => `<li data-n="${i}" style="animation-delay:${i * 0.06}s"><span class="ch-mark">${c.a > 0 ? '♡' : '◆'}</span><span class="ch-text">${fill(c.t)}</span><span class="ch-arrow">›</span></li>`).join('');
+    el.classList.add('choosing');
     moreEl.classList.add('hidden');
     typing = false;
     if (line) textEl.textContent = line;
+    if (typeof Game !== 'undefined') Game.choosing(true);
   }
 
   function pick(n) {
@@ -94,6 +96,9 @@ const Talk = (() => {
     const c = choices[n];
     choices = null;
     choicesEl.innerHTML = '';
+    el.classList.remove('choosing');
+    Sound.blip('tick');
+    if (typeof Game !== 'undefined') Game.choosing(false);
     if (c.a) S.aff += c.a;
     if (c.set) S.flags[c.set] = true;
     if (c.then) stack.push({ steps: c.then, i: 0 });
@@ -161,8 +166,6 @@ const Talk = (() => {
   function key(code) {
     if (!running || asking) return false;
     if (code === 'KeyE' || code === 'Space' || code === 'Enter') { advance(); return true; }
-    const m = /^(Digit|Numpad)([1-9])$/.exec(code);
-    if (m) { pick(Number(m[2]) - 1); return true; }
     return false;
   }
 

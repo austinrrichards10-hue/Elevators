@@ -32,6 +32,10 @@ const Life = (() => {
       react: ["One sweet and one black. Ha!", "I'm going to pretend I like the black one. For you."] },
     catplush: { name: 'Cat plush', price: 20, love: 2, blurb: 'Large, grumpy-faced, extremely soft.',
       react: ["He looks so grumpy. I love him.", "I'm naming him Admiral."] },
+    flowers: { name: 'Bouquet of tulips', price: 16, love: 2, blurb: 'Pink and white, wrapped in brown paper at Hanaya.', shopOnly: true,
+      react: ["Tulips! From Hanaya? I walk past there every day.", "Nobody's ever bought me flowers. …Okay, I need a vase. Do you have a vase?"] },
+    citypop2: { name: 'Vinyl: Rooftop Summer', price: 28, love: 2, blurb: 'Kairo Records staff pick. Hand-written card says “trust me.”', shopOnly: true,
+      react: ["“Trust me,” it says. I trust them. I trust YOU.", "We're listening to this tonight. Both sides. No skipping."] },
   };
   const ALL = { ...DECOR, ...GIFTS };
 
@@ -195,7 +199,10 @@ const Life = (() => {
     document.querySelectorAll('#phone .tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     const body = $('phone-body');
     if (tab === 'msgs') renderThread();
-    else if (tab === 'photos') {
+    else if (tab === 'bag') {
+      body.innerHTML = '<div class="status">' + Town.bagHtml() + '</div>';
+      body.querySelectorAll('[data-eat]').forEach((b) => b.addEventListener('click', () => { Town.eat(b.dataset.eat); phoneTab('bag'); }));
+    } else if (tab === 'photos') {
       const photos = loadPhotos();
       body.innerHTML = photos.length ? '<div class="album">' + photos.map((p) => `<figure><img src="${p.src}" alt=""><figcaption>${p.cap}</figcaption></figure>`).join('') + '</div>'
         : '<p class="empty">No photos yet. Memories will show up here.</p>';
@@ -321,7 +328,7 @@ const Life = (() => {
       </div>`;
       body.innerHTML = '<h3>Lumen Mart</h3><p class="sub">Order tonight, delivered tomorrow.</p>'
         + '<h4 class="sect">For your place</h4><div class="grid">' + Object.entries(DECOR).map(([k, v]) => card(k, v, 'decor')).join('') + '</div>'
-        + '<h4 class="sect">Gifts for her</h4><div class="grid">' + Object.entries(GIFTS).map(([k, v]) => card(k, v, 'gift')).join('') + '</div>';
+        + '<h4 class="sect">Gifts for her</h4><div class="grid">' + Object.entries(GIFTS).filter(([, v]) => !v.shopOnly).map(([k, v]) => card(k, v, 'gift')).join('') + '</div>';
       body.querySelectorAll('button[data-buy]').forEach((b) => b.addEventListener('click', () => buy(b.dataset.buy, b.dataset.to)));
     } else if (tab === 'work') {
       body.innerHTML = S.workedToday

@@ -11,6 +11,7 @@
 </head>
 <body>
 <canvas id="view"></canvas>
+<div id="cursor" class="gone"><div class="ring"></div><div class="dot"></div></div>
 <div id="dawn"></div>
 <div id="fade"></div>
 
@@ -73,14 +74,27 @@
   <div class="talk-more">▼</div>
 </div>
 <div id="hud" class="hidden">
-  <span id="hud-day"></span><span id="hud-money"></span><span id="hud-hearts"></span>
+  <span id="hud-day"></span><span id="hud-time"></span><span id="hud-money"></span><span id="hud-hearts"></span>
   <span id="hud-phone"><kbd>Q</kbd>Phone</span>
 </div>
+<div id="hud-goal" class="hidden"></div>
+<section id="store" class="hidden">
+  <div class="store-card">
+    <div class="store-top"><div><h3 id="store-title"></h3><p id="store-sub"></p></div><span id="store-wallet"></span><button id="store-close" aria-label="Close">×</button></div>
+    <div id="store-body"></div>
+  </div>
+</section>
+<section id="cook" class="hidden">
+  <div class="cook-card">
+    <div class="store-top"><h3 id="cook-title"></h3><button id="cook-close" aria-label="Close">×</button></div>
+    <div id="cook-body"></div>
+  </div>
+</section>
 <div id="toasts"></div>
 <section id="phone" class="hidden">
   <div class="phone-top"><span>Miku ♡</span><button id="phone-close" aria-label="Close">×</button></div>
   <div id="phone-body"></div>
-  <nav class="tabs"><button data-tab="msgs">💬 Messages</button><button data-tab="photos">📷 Photos</button><button data-tab="status">♡ Status</button></nav>
+  <nav class="tabs"><button data-tab="msgs">💬 Chat</button><button data-tab="bag">🎒 Bag</button><button data-tab="photos">📷 Photos</button><button data-tab="status">♡ Status</button></nav>
 </section>
 <section id="pc" class="hidden">
   <div class="pc-window">
@@ -134,7 +148,7 @@ const load = (src) => new Promise((resolve, reject) => {
   s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
   document.body.appendChild(s);
 });
-for (const src of ['src/settings.js', 'src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/life.js', 'src/story.js', 'src/main.js']) await load(src);
+for (const src of ['src/settings.js', 'src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/street.js', 'src/miku.js', 'src/talk.js', 'src/life.js', 'src/town.js', 'src/story.js', 'src/main.js']) await load(src);
 </script>
 </body>
 </html>

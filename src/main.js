@@ -51,6 +51,8 @@
   const cab = Elevator.build();
   scene.add(cab.group);
   const places = Places.build(scene);
+  places.city = Street.build(scene);
+  let dayK = 0;
 
   // The cab hangs on two cables from the top of the tower.
   const cableMat = new THREE.MeshStandardMaterial({ color: 0x1c1f26, metalness: 0.8, roughness: 0.4 });
@@ -67,7 +69,7 @@
   const ROOM_Z0 = City.TOWER_HALF - LND.depth - CAB_Z, ROOM_Z1 = City.TOWER_HALF - 0.31 - CAB_Z;
   const STOPS = Building.STOPS;
   const START_Y = STOPS[0], END_Y = STOPS[STOPS.length - 1];
-  const MAX_SPEED = 3.4, ACCEL = 0.6;   // about a minute and a half from floor 70 to the ground
+  const MAX_SPEED = 5.2, ACCEL = 0.9;   // about a minute from floor 70 to the ground
   const STOP_WAIT = 6;
   const WALK = 1.35, ROOM = cab.R - 0.3, EYE_H = 1.66, BODY_R = 0.25;
   const cabLights = cab.group.children.filter((o) => o.isLight).map((l) => ({ l, base: l.intensity }));
@@ -81,6 +83,8 @@
     doors: 1, doorTarget: 1, boarded: true, closeAt: 0,
     ride: { playable: false, stops: true, speed: 1 },
     hold: false,            // the story is holding the car at a stop
+    slow: 1, slowTarget: 1, // the story can slow the car (while she's telling you something)
+    lean: false, leanK: 0,  // leaning on the rail
   };
   // space: 'cab' (walking in the car and the floor-70 landing, in the car's own coordinates) or
   // 'home' (walking round your apartment, in world coordinates).
@@ -166,7 +170,8 @@
     if (Talk.active) { if (Talk.key(e.code)) e.preventDefault(); return; }
     if (state.mode !== 'play') return;
     if (e.code === 'KeyE') {
-      if (canTalk()) { if (hooks.talk) hooks.talk(); }
+      if (state.lean) standUp();
+      else if (canTalk()) { if (hooks.talk) hooks.talk(); }
       else if (usableNow) usableNow.use();
     }
     if ((e.code === 'KeyQ' || e.code === 'Tab') && hooks.phone) { e.preventDefault(); hooks.phone(); }
@@ -201,7 +206,7 @@
   // The thing you're looking at and close enough to use, if any.
   function findUsable() {
     let best = null, bestD = 1e9;
-    for (const u of usables) {
+    for (const u of player.space === 'cab' ? [...usables, leanUsable] : usables) {
       if (u.when && !u.when()) continue;
       const d = Math.hypot(u.x - player.x, u.z - player.z);
       if (d < (u.r || 1.4) && d < bestD && looking(u.x, u.z, u.r || 1.4, 0.75)) { best = u; bestD = d; }
@@ -210,9 +215,16 @@
   }
   const inCar = (x, z) => Math.hypot(x, z) < ROOM - BODY_R;
   const inDoorway = (x, z) => Math.abs(x) < 0.32 && z > ROOM_Z1 - 0.5 && z < -0.9;
-  const inLanding = (x, z) => Math.abs(x) < LND.halfW - BODY_R && z > ROOM_Z0 + BODY_R && z < ROOM_Z1 - BODY_R;
+  const inLanding = (x, z) => Math.abs(x) < LND.halfW - BODY_R && z > ROOM_Z0 + 1.9 && z < ROOM_Z1 - BODY_R;
   const canStandCab = (x, z) => inCar(x, z) || (state.doors > 0.85 && (inDoorway(x, z) || inLanding(x, z)));
-  const canStand = (x, z) => (player.space === 'home' ? places.home.canStand(x, z, BODY_R) : canStandCab(x, z));
+  const canStand = (x, z) => (player.space === 'world' ? places[player.area].canStand(x, z, BODY_R) : canStandCab(x, z));
+
+  // Leaning on the rail beside her: you step up to the glass, rest your arms on the rail and
+  // look out. Walking (or E) stands you up again.
+  const LEAN = { x: -0.42, z: 1.08 };
+  const leanUsable = { x: LEAN.x, z: LEAN.z + 0.2, r: 1.5, label: 'Lean on the rail next to her', when: () => player.space === 'cab' && state.boarded && !state.lean && miku.inCab,
+    use: () => { state.lean = true; if (hooks.lean) hooks.lean(true); } };
+  function standUp() { if (!state.lean) return; state.lean = false; player.x = LEAN.x; player.z = LEAN.z - 0.15; if (hooks.lean) hooks.lean(false); }
 
   // Walking eases in and out (a short acceleration and glide), with a gentle head bob.
   function walk(dt) {
@@ -223,9 +235,10 @@
       if (keys.KeyD || keys.ArrowRight) s += 1;
       if (keys.KeyA || keys.ArrowLeft) s -= 1;
     }
+    if (state.lean) { if (f || s) standUp(); else { player.bob *= 0.9; return; } }
     const len = Math.hypot(f, s) || 1;
     const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-    const speed = WALK * (keys.ShiftLeft || keys.ShiftRight ? 1.6 : 1);
+    const speed = WALK * (player.area === 'city' && player.space === 'world' ? 1.7 : 1) * (keys.ShiftLeft || keys.ShiftRight ? 1.7 : 1);
     const tvx = ((-sy * f) + (cy * s)) / len * speed, tvz = ((-cy * f) + (-sy * s)) / len * speed;
     const k = 1 - Math.exp(-dt * (f || s ? 9 : 7));
     player.vx += (tvx - player.vx) * k;
@@ -300,6 +313,8 @@
     miku.obj.updateMatrixWorld(true);
     if (!miku.anim) return;
 
+    // Leaning on the rail with you, she leans too and looks out.
+    if (miku.inCab) miku.viewYaw = state.lean ? Math.PI : MIKU_SPOT.yaw;
     // Pose from what's being said.
     const cur = Talk.current;
     const speaking = Talk.talking;
@@ -316,6 +331,7 @@
       if (anim.idleT <= 0) { anim.idlePose = pick(['behind', 'behind', 'behind', 'clasp', 'sides']); anim.idleT = 9 + Math.random() * 9; }
       anim.pose = anim.idlePose;
     }
+    if (state.lean && miku.inCab && !facing && (!cur || cur.kind !== 's') && !(speaking && anim.quietT < 0.5)) anim.pose = 'rail';
 
     // Where she looks.
     let lookAt = null, glance = null;
@@ -339,10 +355,14 @@
     if (!state.descending) return;
     const target = state.ride.stops ? STOPS[state.stop] : END_Y;
     const left = state.cabY - target;
-    const top = MAX_SPEED * state.ride.speed;
+    state.slow += (state.slowTarget - state.slow) * Math.min(1, dt * 0.8);
+    const top = MAX_SPEED * state.ride.speed * state.slow;
     const acc = ACCEL * Math.max(1, state.ride.speed);
     const stopSpeed = Math.sqrt(Math.max(0, 2 * acc * left));
-    state.speed = Math.min(top, state.speed + acc * dt, stopSpeed);
+    // Ease toward the speed it should be going (smooth both ways, no sudden jumps).
+    const want = Math.min(top, stopSpeed);
+    state.speed += Math.max(-acc * 1.5 * dt, Math.min(acc * dt, want - state.speed));
+    if (stopSpeed < state.speed) state.speed = stopSpeed;
     state.cabY -= state.speed * dt;
     if (left < 0.01 || (state.cabY <= target + 0.002 && state.speed < 0.02)) {
       state.cabY = target;
@@ -412,10 +432,13 @@
     return { space: 'cab', pos: [Math.sin(a) * r, -0.4 + Math.sin(t * 0.052) * 0.6, Math.cos(a) * r], look: [-0.9 + Math.sin(t * 0.04) * 0.3, 1.25, 0.4], drift: 0.6 };
   };
   const fpPose = () => {
-    if (player.space === 'home') {
+    if (player.space === 'world') {
       return { pos: new THREE.Vector3(player.x, player.y + EYE_H + player.bob, player.z), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')) };
     }
-    tmpA.set(player.x, EYE_H + player.bob, player.z);
+    // Leaning: eased toward the rail, lower, head just over it.
+    const k = state.leanK * state.leanK * (3 - 2 * state.leanK);
+    const lx = player.x + (LEAN.x - player.x) * k, lz = player.z + (LEAN.z + 0.12 - player.z) * k;
+    tmpA.set(lx, EYE_H + player.bob - 0.24 * k, lz);
     cab.group.localToWorld(tmpA);
     const q = cab.group.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')));
     return { pos: tmpA.clone(), quat: q };
@@ -423,13 +446,45 @@
 
   // ---------- Loop ----------
   const clock = new THREE.Clock();
-  let introFrom = null, introDone = null, lastPrompt = null;
+  let introFrom = null, introDone = null, lastPrompt = null, smoothDt = 1 / 60, choosingFromPlay = false;
   function frame() {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.05, clock.getDelta());
+    // Frame time, lightly smoothed so one slow frame doesn't jolt the motion.
+    const raw = Math.min(0.05, clock.getDelta());
+    smoothDt += (raw - smoothDt) * 0.3;
+    const dt = smoothDt;
     const paused = state.mode === 'paused';
     if (!paused) state.time += dt;
     const t = state.time;
+
+    // Move the world first (the car, the doors, the city), then put the camera where it belongs,
+    // so the view never trails a frame behind the moving car.
+    if (!paused) {
+      if (state.ride.playable && state.mode === 'play' && !state.boarded && inCar(player.x, player.z) && player.z > -1.0) {
+        state.boarded = true;
+        state.closeAt = t + 1.4;
+        if (hooks.board) hooks.board();
+      }
+      if (state.closeAt && t >= state.closeAt) { state.closeAt = 0; state.doorTarget = 0; Sound.chime(); }
+      const was = state.doors;
+      state.doors += Math.sign(state.doorTarget - state.doors) * Math.min(Math.abs(state.doorTarget - state.doors), dt * 0.55);
+      if (state.boarded && was > 0 && state.doors === 0 && !state.descending && !state.arrived && state.stop === 1) state.departAt = t + 1.5;
+      cab.setDoors(state.doors);
+      landing.setDoors(state.doors);
+      landing.update(t);
+      if (state.departAt && t >= state.departAt && !Talk.active && !state.hold) {
+        state.departAt = 0;
+        state.descending = true;
+      }
+      descend(dt);
+      city.update(dt, t);
+      places.update(t);
+      places.city.update(t, player.x, player.z, dayK);
+      Talk.update(dt);
+      if (state.mode === 'play' || state.mode === 'ui') Town.tick(state.mode === 'play' ? dt : 0);
+    }
+    updateCab(t);
+    state.leanK += ((state.lean ? 1 : 0) - state.leanK) * Math.min(1, dt * 2.5);
 
     if (state.mode === 'title') {
       const p = shotPose(titleShot(), t);
@@ -468,31 +523,7 @@
       } else { camera.position.copy(p.pos); camera.quaternion.copy(p.quat); }
     }
     if (state.mode !== 'play') { prompt.classList.add('hidden'); lastPrompt = null; }
-
-    if (!paused) {
-      if (state.ride.playable && state.mode === 'play' && !state.boarded && inCar(player.x, player.z) && player.z > -1.0) {
-        state.boarded = true;
-        state.closeAt = t + 1.4;
-        if (hooks.board) hooks.board();
-      }
-      if (state.closeAt && t >= state.closeAt) { state.closeAt = 0; state.doorTarget = 0; Sound.chime(); }
-      const was = state.doors;
-      state.doors += Math.sign(state.doorTarget - state.doors) * Math.min(Math.abs(state.doorTarget - state.doors), dt * 0.55);
-      if (state.boarded && was > 0 && state.doors === 0 && !state.descending && !state.arrived && state.stop === 1) state.departAt = t + 1.5;
-      cab.setDoors(state.doors);
-      landing.setDoors(state.doors);
-      landing.update(t);
-      if (state.departAt && t >= state.departAt && !Talk.active && !state.hold) {
-        state.departAt = 0;
-        state.descending = true;
-      }
-      descend(dt);
-      city.update(dt, t);
-      places.update(t);
-      updateMiku(dt, t);
-      Talk.update(dt);
-    }
-    updateCab(t);
+    if (!paused) updateMiku(dt, t);
     building.update(t);
     const open = building.openness(state.cabY);
     for (const { l, base } of cabLights) l.intensity = base * (0.3 + 0.7 * open);
@@ -564,12 +595,15 @@
     },
     hold(on) { state.hold = on; },
 
-    // Home: walk round your apartment in first person. `at` is a spot { x, z, yaw }.
-    enterHome(at, withMiku) {
-      places.show('home');
-      Sound.ambience = 0.2;
-      player.space = 'home';
-      player.x = at.x; player.z = at.z; player.y = places.home.floorY;
+    // Walking somewhere in first person: 'home' (your apartment) or 'city' (the streets).
+    // `at` is a spot { x, z, yaw }.
+    enterHome(at, withMiku) { this.enterArea('home', at, withMiku); },
+    enterArea(area, at, withMiku) {
+      places.show(area === 'home' ? 'home' : null);
+      Sound.ambience = area === 'home' ? 0.2 : 0.6;
+      player.space = 'world'; player.area = area;
+      state.lean = false; state.leanK = 0;
+      player.x = at.x; player.z = at.z; player.y = places[area].floorY;
       player.yaw = at.yaw; player.pitch = -0.05; player.vx = player.vz = 0;
       if (withMiku) placeMiku(places.home.spots[withMiku]); else if (miku.obj) miku.obj.visible = false;
       miku.face = 'view';
@@ -581,6 +615,22 @@
       if (document.pointerLockElement !== canvas) { state.mode = 'paused'; $('pause').classList.remove('hidden'); }
     },
     setUsables(list) { usables = list; },
+    get area() { return player.space === 'world' ? player.area : 'cab'; },
+    // Choices are clicked, so free the mouse while they're up (and take it back after).
+    choosing(on) {
+      if (on && state.mode === 'play') { choosingFromPlay = true; state.mode = 'ui'; if (document.pointerLockElement) document.exitPointerLock(); for (const k in keys) keys[k] = false; }
+      else if (!on && choosingFromPlay) { choosingFromPlay = false; state.mode = 'play'; lock(); }
+    },
+    slowCar(k) { state.slowTarget = k; },
+    setDaylight(k) { dayK = k; City.setDaylight(k); },
+    // The camera pulls away from the speeding car, out into the night (the end of a ride).
+    panAway() {
+      const p = camera.position.clone();
+      const out = new THREE.Vector3(Math.sin(0.7) * 22, -6, Math.cos(0.7) * 22);
+      setShot({ space: 'world', pos: [CAB_Z * 0 + out.x, state.cabY + 4 + out.y, CAB_Z + out.z], look: [0, state.cabY - 4, CAB_Z], drift: 0.2 });
+      return p;
+    },
+    get leaning() { return state.lean; },
     // An on-screen app (phone, computer) is open: free the mouse, stop walking.
     openUI() { if (state.mode === 'play' || state.mode === 'paused') { state.mode = 'ui'; $('pause').classList.add('hidden'); if (document.pointerLockElement) document.exitPointerLock(); for (const k in keys) keys[k] = false; } },
     closeUI() { if (state.mode === 'ui') { state.mode = 'play'; lock(); } },
