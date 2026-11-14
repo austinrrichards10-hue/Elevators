@@ -44,6 +44,16 @@ Your choices change what she says and remembers, so the egg, the heights, the st
 
 ## What's in it
 
+- **The look**: everything is rendered with bloom (lights, neon, the city and screens glow), a soft vignette and fine film grain. Both can be turned off in Settings.
+- **Title screen**: a slow cinematic drift round the outside of the glass car at floor 70, letterboxed, with an animated logo, drifting specks of light and a loading bar.
+- **Settings** (title screen and pause menu): music and sound volume, mouse sensitivity, text speed, glow, film grain and fullscreen, saved between sessions. **Esc** pauses, with Resume, Settings and Quit to title.
+- **Your apartment**:
+  - **Surfaces**: an oak plank floor, a deep teal back wall with panelling and skirting, warm LED cove lighting and recessed downlights, and floor-to-ceiling glass with sheer curtains.
+  - **Kitchen**: dark teal cabinets with brass handles, subway tiles, a sink, hob, range hood, kettle, fruit bowl, herbs and a coffee machine.
+  - **Living area**: a sofa with pillows and a throw, a walnut coffee table with mugs and a candle, a side lamp, a patterned rug, and a dining nook under a globe pendant.
+  - **Desk**: a glowing screen, lamp, headphones and chair.
+  - **Walls and corners**: a gallery wall, a styled bookshelf with records, an arc floor lamp, plants (including a hanging one), and a yellow scarf on the hooks by the door.
+
 - **The places**: the tower's floor-70 landing; the glass car riding the outside of the tower, with four dark concrete bands it passes through; a ramen stall on the plaza at the tower's foot; a park bench with fireflies; the roof of Miku's old building; your apartment. Her building and your tower are real buildings in the city, visible from the elevator.
 - **Miku**: the Sanrio x Project Sekai Miku, a rigged model, animated live. She breathes and shifts her weight, and glances around (and at you, when you're close). When she turns, her head goes first and her body follows on a spring, easing in and settling. Her arms move through gestures that suit what she's saying: hands behind her back at ease, explaining, asking with open hands, a hand to her mouth when she laughs, a wave, hands to her chest when she's shy, reaching out toward the city when she sings. Each arm is solved as a two-bone chain every frame, and the hands go round her sides when moving between front and back.
 - **The music**, all synthesised: a sad piano-and-strings theme for the elevator; a warm, tender theme for your time together; and her song, "Seventy Floors", played on piano while the lyrics come up. The music goes muffled in the concrete bands.
@@ -52,6 +62,7 @@ Your choices change what she says and remembers, so the egg, the heights, the st
 ## Files
 
 - `src/story.js`: the whole story: every chapter, all the dialogue, the endings, chapter cards and saving.
+- `src/settings.js`: the settings and their screen.
 - `src/life.js`: life at home: money and days, the shop and deliveries, gifts, the phone (messages, photos, status) and the computer (shop, work, orders).
 - `src/talk.js`: the dialogue box, and the little script runner the story is written in (lines, narration, sung lines, choices, affection, flags).
 - `src/main.js`: the world and the camera: the ride, first-person walking, cinematic shots, and the `Game` API the story uses.

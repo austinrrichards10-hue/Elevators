@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Elevators</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&family=Outfit:wght@200;300;400;600;800&display=swap">
 <link rel="stylesheet" href="src/style.css">
 </head>
 <body>
@@ -12,32 +15,51 @@
 <div id="fade"></div>
 
 <section id="title" class="screen">
+  <div class="title-shade"></div>
+  <div id="particles" aria-hidden="true"></div>
   <div class="title-card">
-    <p class="kicker">A love story · Floor 70 · going down</p>
-    <h1>ELEVATORS</h1>
-    <p class="tag">A glass elevator on the outside of the tallest tower in the city. Midnight. Somebody is already in it, watching the lights.</p>
+    <p class="kicker"><span class="jp">七十階</span><span class="dot">·</span>A love story</p>
+    <h1 class="logo" aria-label="Elevators"><span>E</span><span>L</span><span>E</span><span>V</span><span>A</span><span>T</span><span>O</span><span>R</span><span>S</span></h1>
+    <div class="logo-line"><i></i></div>
+    <p class="tag">Midnight. A glass elevator on the outside of the tallest tower in the city. Somebody is already in it, watching the lights.</p>
     <nav class="menu">
-      <button id="start" class="primary">Begin</button>
-      <button id="continue" class="hidden">Continue</button>
-      <button class="mute-toggle">Sound: on</button>
+      <button id="start" class="menu-item primary"><span>Begin</span></button>
+      <button id="continue" class="menu-item hidden"><span>Continue</span></button>
+      <button id="open-settings" class="menu-item"><span>Settings</span></button>
+      <button class="mute-toggle menu-item"><span>Sound: on</span></button>
     </nav>
+    <div id="loading"><div class="bar"><i></i></div><span>Loading Miku…</span></div>
     <div id="chapters" class="hidden"></div>
-    <ul class="keys">
-      <li><b>Mouse</b> look</li>
-      <li><b>WASD</b> walk</li>
-      <li><b>E / Space / click</b> talk, next</li>
-      <li><b>1–7</b> choose</li>
-      <li><b>M</b> mute</li>
-    </ul>
   </div>
-  <p class="credit">"Miku (Sanrio X Project Sekai)" by 雨宮レン (CC BY 4.0)</p>
+  <footer class="title-foot">
+    <span class="keys"><kbd>WASD</kbd>walk <kbd>Mouse</kbd>look <kbd>E</kbd>interact <kbd>Q</kbd>phone <kbd>Ctrl</kbd>skip</span>
+    <span class="credit">Miku model: “Miku (Sanrio X Project Sekai)” by 雨宮レン (CC BY 4.0)</span>
+  </footer>
 </section>
 
 <section id="pause" class="screen hidden">
   <div class="pause-card">
-    <h2>Paused</h2>
-    <p>Click to continue</p>
-    <button class="mute-toggle secondary">Sound: on</button>
+    <p class="kicker">Paused</p>
+    <h2>Take a breath</h2>
+    <nav class="menu vertical">
+      <button id="pause-resume" class="menu-item primary"><span>Resume</span></button>
+      <button id="pause-settings" class="menu-item"><span>Settings</span></button>
+      <button id="pause-quit" class="menu-item"><span>Quit to title</span></button>
+    </nav>
+  </div>
+</section>
+
+<section id="settings" class="hidden">
+  <div class="settings-card">
+    <p class="kicker">Options</p>
+    <h2>Settings</h2>
+    <label class="slider">Music <input type="range" id="set-music" min="0" max="1" step="0.05"><output></output></label>
+    <label class="slider">Sound <input type="range" id="set-sound" min="0" max="1" step="0.05"><output></output></label>
+    <label class="slider">Mouse sensitivity <input type="range" id="set-sens" min="0.3" max="2.5" step="0.05"><output></output></label>
+    <label class="slider">Text speed <input type="range" id="set-text" min="0.5" max="3" step="0.1"><output></output></label>
+    <label class="check"><input type="checkbox" id="set-glow"><span></span>Glow and bloom</label>
+    <label class="check"><input type="checkbox" id="set-grain"><span></span>Film grain</label>
+    <div class="row"><button id="set-full" class="menu-item"><span>Fullscreen</span></button><button id="set-close" class="menu-item primary"><span>Done</span></button></div>
   </div>
 </section>
 
@@ -48,7 +70,7 @@
   <div class="talk-name"></div>
   <div class="talk-text"></div>
   <ol class="talk-choices"></ol>
-  <div class="talk-more">E ▸</div>
+  <div class="talk-more">▼</div>
 </div>
 <div id="hud" class="hidden">
   <span id="hud-day"></span><span id="hud-money"></span><span id="hud-hearts"></span>
@@ -75,6 +97,7 @@
 <div id="card">
   <p id="card-kicker"></p>
   <h2 id="card-title"></h2>
+  <div class="card-line"></div>
   <p id="card-sub"></p>
 </div>
 <section id="credits" class="hidden">
@@ -82,12 +105,13 @@
   <p class="credits-line">Thank you for riding.</p>
   <p id="credits-endings"></p>
   <p class="credits-small">Miku model: “Miku (Sanrio X Project Sekai)” by 雨宮レン, CC BY 4.0.<br>Music, sound, city and story made for this game.</p>
-  <button id="credits-back" class="primary">Back to the title</button>
+  <button id="credits-back" class="menu-item primary"><span>Back to the title</span></button>
 </section>
 
-<!-- Three.js and its GLTF loader come in as modules; the game's own scripts are plain scripts
-     that use the global THREE, so they're loaded in order once it's set. src/miku.js loads
-     models/miku.js (the model, embedded as a script so the game runs straight from the folder). -->
+<!-- Three.js, its GLTF loader and the post-processing passes come in as modules; the game's own
+     scripts are plain scripts that use the globals, so they're loaded in order once those are set.
+     src/miku.js loads models/miku.js (the model, embedded as a script so the game runs straight
+     from the folder). -->
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
@@ -97,14 +121,20 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 window.THREE = THREE;
 window.GLTFLoader = GLTFLoader;
+window.PP = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass };
 const load = (src) => new Promise((resolve, reject) => {
   const s = document.createElement('script');
   s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
   document.body.appendChild(s);
 });
-for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/life.js', 'src/story.js', 'src/main.js']) await load(src);
+for (const src of ['src/settings.js', 'src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/life.js', 'src/story.js', 'src/main.js']) await load(src);
 </script>
 </body>
 </html>

@@ -190,8 +190,8 @@ const Story = (() => {
     Sound.music('sad');
     Game.titleMode();
     Game.newRide({ playable: true, stops: true, speed: 1 });
+    Game.firstPerson(() => Game.hint('Mouse to look · WASD to walk · Step into the elevator', 10), true);
     await fadeIn();
-    Game.firstPerson(() => Game.hint('Mouse to look · WASD to walk · Step into the elevator', 10));
     await chapterRide();
     await wait(1.5);
     return 1;
@@ -983,27 +983,58 @@ const Story = (() => {
 
   // ---------- Title screen ----------
   function updateMuteLabels() {
-    document.querySelectorAll('.mute-toggle').forEach((b) => { b.textContent = Sound.muted ? 'Sound: off' : 'Sound: on'; });
+    document.querySelectorAll('.mute-toggle').forEach((b) => { b.innerHTML = '<span>' + (Sound.muted ? 'Sound: off' : 'Sound: on') + '</span>'; });
+  }
+
+  // Drifting specks of light on the title screen, like bokeh from the city.
+  function particles() {
+    const box = $('particles');
+    for (let i = 0; i < 38; i++) {
+      const p = document.createElement('i');
+      const s = 2 + Math.random() * 7;
+      p.style.cssText = `left:${Math.random() * 100}%;width:${s}px;height:${s}px;animation-duration:${14 + Math.random() * 22}s;animation-delay:${-Math.random() * 30}s;opacity:${0.15 + Math.random() * 0.5};--drift:${(Math.random() - 0.5) * 120}px;filter:blur(${Math.random() < 0.4 ? 2 : 0}px);background:${Math.random() < 0.7 ? '#7ff0e6' : '#ffd9a0'}`;
+      box.appendChild(p);
+    }
+  }
+  // A loading bar while her model loads: it eases toward full, and fills when she's ready.
+  function loadingBar() {
+    const bar = $('loading').querySelector('i');
+    let k = 0;
+    const tick = () => {
+      if (Game.ready) { bar.style.width = '100%'; setTimeout(() => $('loading').classList.add('done'), 400); return; }
+      k += (0.92 - k) * 0.02;
+      bar.style.width = (k * 100).toFixed(1) + '%';
+      requestAnimationFrame(tick);
+    };
+    tick();
   }
 
   function boot() {
     Talk.init(state);
     Life.init(state);
+    Settings.bind();
+    Settings.apply();
+    particles();
+    loadingBar();
+    $('open-settings').addEventListener('click', () => Settings.open());
+    $('pause-settings').addEventListener('click', () => Settings.open());
+    $('pause-quit').addEventListener('click', () => location.reload());
     const startBtn = $('start'), contBtn = $('continue');
     startBtn.disabled = true; startBtn.textContent = 'Loading…';
     const hasSave = save.current > 0 && save.snaps[save.current];
     if (hasSave) {
       contBtn.classList.remove('hidden');
-      contBtn.textContent = save.home ? `Continue · Day ${save.snaps[save.current].day || ''} at home` : `Continue · ${CHAPTERS[save.current].title}`;
+      contBtn.innerHTML = '<span>' + (save.home ? `Continue · Day ${save.snaps[save.current].day || ''} at home` : `Continue · ${CHAPTERS[save.current].title}`) + '</span>';
     }
     // Chapter select, once you've reached an ending.
     if (save.endings.length) {
       const list = $('chapters');
       list.classList.remove('hidden');
-      list.innerHTML = '<p>Chapters</p>' + CHAPTERS.map((c, i) => (save.snaps[i] ? `<button data-ch="${i}">${i + 1}. ${c.title}</button>` : '')).join('');
+      list.innerHTML = '<p>Chapters</p>' + CHAPTERS.map((c, i) => (save.snaps[i] ? `<button data-ch="${i}"><b>${String(i + 1).padStart(2, '0')}</b>${c.title}</button>` : '')).join('');
       list.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) begin(Number(b.dataset.ch)); });
     }
-    Game.onReady(() => { startBtn.disabled = false; startBtn.textContent = hasSave ? 'New story' : 'Begin'; });
+    startBtn.innerHTML = '<span>Loading…</span>';
+    Game.onReady(() => { startBtn.disabled = false; startBtn.innerHTML = '<span>' + (hasSave ? 'New story' : 'Begin') + '</span>'; });
     startBtn.addEventListener('click', () => { if (!startBtn.disabled) begin(0, true); });
     contBtn.addEventListener('click', () => begin(save.current));
     document.querySelectorAll('.mute-toggle').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); Sound.toggleMute(); updateMuteLabels(); }));

@@ -18,6 +18,35 @@
   camera.rotation.order = 'YXZ';
   scene.add(camera);
 
+  // ---------- The picture: glow on everything bright, then a soft vignette and film grain ----------
+  const settings = typeof Settings !== 'undefined' ? Settings.values : { glow: true, grain: true, sens: 1 };
+  const composer = new PP.EffectComposer(renderer);
+  composer.addPass(new PP.RenderPass(scene, camera));
+  const bloom = new PP.UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 0.78);
+  composer.addPass(bloom);
+  composer.addPass(new PP.OutputPass());
+  const finish = new PP.ShaderPass({
+    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, grain: { value: 1 } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float time; uniform float grain; varying vec2 vUv;
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv);
+        vec2 d = vUv - 0.5;
+        float v = smoothstep(0.82, 0.22, length(d * vec2(1.0, 0.85)));
+        c.rgb *= mix(0.58, 1.0, v);
+        float n = fract(sin(dot(vUv * vec2(1733.0, 977.0) + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453);
+        c.rgb += (n - 0.5) * 0.028 * grain;
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(finish);
+  function applySettings() {
+    bloom.enabled = settings.glow !== false;
+    finish.uniforms.grain.value = settings.grain === false ? 0 : 1;
+  }
+  applySettings();
+
   const city = City.build(scene);
   const cab = Elevator.build();
   scene.add(cab.group);
@@ -105,7 +134,8 @@
     const p = canvas.requestPointerLock();
     if (p && p.catch) p.catch(() => {});
   };
-  $('pause').addEventListener('click', () => { lock(); resume(); });
+  // Pause menu: resume (button, or click outside the card), settings, quit to the title.
+  $('pause').addEventListener('click', (e) => { if (e.target === $('pause') || e.target.closest('#pause-resume')) { lock(); resume(); } });
   function pause() {
     if (state.mode !== 'play') return;
     state.mode = 'paused';
@@ -124,8 +154,9 @@
 
   document.addEventListener('mousemove', (e) => {
     if (state.mode !== 'play' || document.pointerLockElement !== canvas) return;
-    player.yaw -= e.movementX * 0.0022;
-    player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * 0.0022));
+    const sens = 0.0022 * (settings.sens || 1);
+    player.yaw -= e.movementX * sens;
+    player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * sens));
   });
   document.addEventListener('keydown', (e) => {
     if (Talk.asking) return;
@@ -146,6 +177,8 @@
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
@@ -370,7 +403,14 @@
     shot = s;
     if (state.mode !== 'scene') { state.mode = 'scene'; if (document.pointerLockElement) document.exitPointerLock(); }
   }
-  const titleShot = () => ({ space: 'cab', pos: [Math.sin(state.time * 0.11) * 0.35, 1.6, ROOM_Z0 + 3.4 + Math.sin(state.time * 0.07) * 0.4], look: [MIKU_SPOT.x * 0.6, 1.3, MIKU_SPOT.z], drift: 0.5 });
+  // The title screen: a slow cinematic drift round the outside of the glass car at floor 70,
+  // with Miku at the glass and the skyline falling away behind.
+  const titleShot = () => {
+    const t = state.time;
+    const a = 0.75 + Math.sin(t * 0.045) * 0.42;
+    const r = 6.2 + Math.sin(t * 0.031) * 0.9;
+    return { space: 'cab', pos: [Math.sin(a) * r, -0.4 + Math.sin(t * 0.052) * 0.6, Math.cos(a) * r], look: [-0.9 + Math.sin(t * 0.04) * 0.3, 1.25, 0.4], drift: 0.6 };
+  };
   const fpPose = () => {
     if (player.space === 'home') {
       return { pos: new THREE.Vector3(player.x, player.y + EYE_H + player.bob, player.z), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')) };
@@ -462,7 +502,8 @@
     if (hintTimer > 0 && (hintTimer -= dt) <= 0) hint.classList.remove('show');
     if (captionTimer > 0 && (captionTimer -= dt) <= 0) caption.classList.remove('show');
 
-    renderer.render(scene, camera);
+    finish.uniforms.time.value = t % 100;
+    composer.render(dt);
   }
 
   // ---------- The Game API the story uses ----------
@@ -496,8 +537,17 @@
       updateCab(state.time);
     },
     // Hand the camera to the player (first person in the car), easing in from where it is.
-    firstPerson(done) {
+    firstPerson(done, instant) {
       shot = null;
+      if (instant) {
+        const p = fpPose();
+        camera.position.copy(p.pos); camera.quaternion.copy(p.quat);
+        state.mode = 'play';
+        lock();
+        if (document.pointerLockElement !== canvas) { state.mode = 'paused'; $('pause').classList.remove('hidden'); }
+        if (done) done();
+        return;
+      }
       state.mode = 'intro'; state.introT = 0; introFrom = null; introDone = done || null;
       lock();
     },
@@ -535,8 +585,9 @@
     openUI() { if (state.mode === 'play' || state.mode === 'paused') { state.mode = 'ui'; $('pause').classList.add('hidden'); if (document.pointerLockElement) document.exitPointerLock(); for (const k in keys) keys[k] = false; } },
     closeUI() { if (state.mode === 'ui') { state.mode = 'play'; lock(); } },
     // A photo of what's on screen now, for the album.
+    applySettings,
     snapshot() {
-      renderer.render(scene, camera);
+      composer.render(0);
       const c = document.createElement('canvas'); c.width = 480; c.height = 270;
       const g = c.getContext('2d');
       const w = canvas.width, h = canvas.height, ar = 16 / 9;

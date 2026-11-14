@@ -328,6 +328,7 @@ const Sound = (() => {
     city = loopNoise(false, 'lowpass', 600, 0.5, 0.0);
     setupMusic();
     setupVoice();
+    if (typeof Settings !== 'undefined') setVolumes(Settings.values.music, Settings.values.sound);
     music(pending);
   }
 
@@ -361,14 +362,23 @@ const Sound = (() => {
     });
   }
 
+  // Volumes from the settings: `sound` is everything, `music` the music within it.
+  let soundVol = 0.9, musicVol = 0.8;
+  function setVolumes(music, sound) {
+    musicVol = music; soundVol = sound;
+    if (!ctx) return;
+    master.gain.setTargetAtTime(muted ? 0 : soundVol, ctx.currentTime, 0.05);
+    if (musicIn) musicIn.gain.setTargetAtTime(musicVol / 0.8, ctx.currentTime, 0.05);
+  }
+
   function toggleMute() {
     muted = !muted;
-    if (master) master.gain.setTargetAtTime(muted ? 0 : 0.9, ctx.currentTime, 0.05);
+    if (master) master.gain.setTargetAtTime(muted ? 0 : soundVol, ctx.currentTime, 0.05);
     return muted;
   }
 
   return {
-    start, update, chime, toggleMute, music, laugh, blip,
+    start, update, chime, toggleMute, music, laugh, blip, setVolumes,
     set ambience(v) { ambience = v; },
     get muted() { return muted; },
   };

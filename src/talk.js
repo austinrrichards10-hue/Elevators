@@ -146,7 +146,7 @@ const Talk = (() => {
     if (waitT > 0) { waitT -= dt; if (waitT <= 0) { waitT = 0; step(); } return; }
     if (ctrl && running && !asking && !choices && line) { ffT += dt; if (ffT > 0.09) { ffT = 0; advance(); } return; }
     if (!line || !typing) return;
-    shown = Math.min(line.length, shown + dt * 68);
+    shown = Math.min(line.length, shown + dt * 68 * (typeof Settings !== 'undefined' ? Settings.values.textSpeed : 1));
     textEl.textContent = line.slice(0, Math.floor(shown));
     if (shown >= line.length) {
       typing = false;
