@@ -277,7 +277,9 @@ const Sound = (() => {
   }
 
   function hush() {
-    if (!utter) return;
+    if (speechOn && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+    talking = false;
+    if (!utter || !ctx) return;
     const u = utter; utter = null;
     const now = ctx.currentTime;
     u.amp.gain.cancelScheduledValues(now);
@@ -288,8 +290,53 @@ const Sound = (() => {
     speakingUntil = now;
   }
 
-  // Sings a line. kind 'm' = speaking, 's' = singing her song. Returns how long it lasts.
+  // ---------- Her speaking voice ----------
+  // Spoken lines use the browser's own text-to-speech, so she says the actual words, pitched up
+  // high and bright to sound like her. Which voices exist depends on the computer, so the most
+  // Miku-like one available is picked (a young or bright female English voice), and the player
+  // can choose another on the title screen.
+  const VOICE_KEY = 'elevators-voice';
+  const PREFER = [/Ana.*Natural/i, /Aria.*Natural/i, /Jenny.*Natural/i, /Ava.*Natural/i, /Google US English/i, /Zira/i, /Samantha/i, /Google UK English Female/i, /female/i];
+  let voices = [], voiceName = null, speechOn = !!window.speechSynthesis, talking = false, talkTimer = 0;
+  try { voiceName = localStorage.getItem(VOICE_KEY); } catch (e) { /* no storage */ }
+  function loadVoices() {
+    if (!speechOn) return;
+    voices = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
+    document.dispatchEvent(new Event('voiceschanged-game'));
+  }
+  if (speechOn) { loadVoices(); speechSynthesis.addEventListener('voiceschanged', loadVoices); }
+  function pickVoice() {
+    if (voiceName) { const v = voices.find((x) => x.name === voiceName); if (v) return v; }
+    for (const re of PREFER) { const v = voices.find((x) => re.test(x.name)); if (v) return v; }
+    return voices[0] || null;
+  }
+  // Natural (neural) voices already sound young; the older robotic ones need more lift.
+  const pitchFor = (v) => (v && /Natural|Online/i.test(v.name) ? 1.35 : 1.75);
+
+  function speak(text) {
+    if (!speechOn) return 0;
+    speechSynthesis.cancel();
+    if (muted) return 0;
+    const clean = text.replace(/[“”"]/g, '').replace(/…/g, '... ').replace(/—/g, ', ').replace(/\s+/g, ' ').trim();
+    if (!/[a-z0-9]/i.test(clean)) return 0;
+    const u = new SpeechSynthesisUtterance(clean);
+    const v = pickVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.pitch = pitchFor(v);
+    u.rate = 1.04;
+    u.volume = 1;
+    talking = true;
+    clearTimeout(talkTimer);
+    // Rough length, in case the end event never comes.
+    talkTimer = setTimeout(() => { talking = false; }, 600 + clean.length * 75);
+    u.onend = u.onerror = () => { talking = false; clearTimeout(talkTimer); };
+    speechSynthesis.speak(u);
+    return clean.length * 0.07;
+  }
+
+  // Says (or, for her song, sings) a line. kind 'm' = speaking, 's' = singing.
   function say(text, kind) {
+    if (kind !== 's') { hush(); return speak(text); }
     if (!ctx) return 0;
     hush();
     const syl = syllables(text);
@@ -452,6 +499,7 @@ const Sound = (() => {
 
   function toggleMute() {
     muted = !muted;
+    if (muted && speechOn) speechSynthesis.cancel();
     if (master) master.gain.setTargetAtTime(muted ? 0 : 0.9, ctx.currentTime, 0.05);
     return muted;
   }
@@ -459,7 +507,11 @@ const Sound = (() => {
   return {
     start, update, chime, toggleMute, music, say, hush,
     // 0..1: how much she's voicing right now, for her mouth-and-body movement.
-    get speaking() { return ctx ? (ctx.currentTime < speakingUntil ? 1 : 0) : 0; },
+    get speaking() { return talking || (ctx && ctx.currentTime < speakingUntil) ? 1 : 0; },
+    // The voices she can speak with, and choosing one.
+    get voices() { return voices.map((v) => v.name); },
+    get voice() { const v = pickVoice(); return v ? v.name : null; },
+    setVoice(name) { voiceName = name; try { localStorage.setItem(VOICE_KEY, name); } catch (e) { /* no storage */ } speak("Hi. It's me, Miku."); },
     set ambience(v) { ambience = v; },
     get muted() { return muted; },
   };

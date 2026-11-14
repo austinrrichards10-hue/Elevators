@@ -832,6 +832,18 @@ const Story = (() => {
     contBtn.addEventListener('click', () => begin(save.current));
     document.querySelectorAll('.mute-toggle').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); Sound.toggleMute(); updateMuteLabels(); }));
     document.addEventListener('mutechange', updateMuteLabels);
+    // Her speaking voice: whichever text-to-speech voices this computer has.
+    const sel = $('voice-select');
+    const fillVoices = () => {
+      const names = Sound.voices;
+      if (!names.length) return;
+      $('voice-row').classList.remove('hidden');
+      const cur = Sound.voice;
+      sel.innerHTML = names.map((n) => `<option${n === cur ? ' selected' : ''}>${n.replace(/</g, '')}</option>`).join('');
+    };
+    fillVoices();
+    document.addEventListener('voiceschanged-game', fillVoices);
+    sel.addEventListener('change', () => Sound.setVoice(sel.value));
     updateMuteLabels();
     $('credits-back').addEventListener('click', () => location.reload());
     // In cinematic scenes, clicking anywhere moves the text on.
