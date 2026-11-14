@@ -21,9 +21,6 @@
       <button id="continue" class="hidden">Continue</button>
       <button class="mute-toggle">Sound: on</button>
     </nav>
-    <label id="voice-row" class="hidden">Her voice
-      <select id="voice-select"></select>
-    </label>
     <div id="chapters" class="hidden"></div>
     <ul class="keys">
       <li><b>Mouse</b> look</li>
@@ -39,7 +36,7 @@
 <section id="pause" class="screen hidden">
   <div class="pause-card">
     <h2>Paused</h2>
-    <p>Click to keep riding</p>
+    <p>Click to continue</p>
     <button class="mute-toggle secondary">Sound: on</button>
   </div>
 </section>
@@ -53,6 +50,23 @@
   <ol class="talk-choices"></ol>
   <div class="talk-more">E ▸</div>
 </div>
+<div id="hud" class="hidden">
+  <span id="hud-day"></span><span id="hud-money"></span><span id="hud-hearts"></span>
+  <span id="hud-phone"><kbd>Q</kbd>Phone</span>
+</div>
+<div id="toasts"></div>
+<section id="phone" class="hidden">
+  <div class="phone-top"><span>Miku ♡</span><button id="phone-close" aria-label="Close">×</button></div>
+  <div id="phone-body"></div>
+  <nav class="tabs"><button data-tab="msgs">💬 Messages</button><button data-tab="photos">📷 Photos</button><button data-tab="status">♡ Status</button></nav>
+</section>
+<section id="pc" class="hidden">
+  <div class="pc-window">
+    <div class="pc-top"><span>LUMEN OS</span><span id="pc-wallet"></span><button id="pc-close" aria-label="Close">×</button></div>
+    <nav class="tabs"><button data-tab="shop">🛒 Shop</button><button data-tab="work">💼 Work</button><button data-tab="orders">📦 Orders</button></nav>
+    <div id="pc-body"></div>
+  </div>
+</section>
 <form id="namebox" class="hidden" autocomplete="off">
   <label for="name-input">What's your name?</label>
   <input id="name-input" maxlength="16" spellcheck="false">
@@ -90,7 +104,7 @@ const load = (src) => new Promise((resolve, reject) => {
   s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
   document.body.appendChild(s);
 });
-for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/story.js', 'src/main.js']) await load(src);
+for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/life.js', 'src/story.js', 'src/main.js']) await load(src);
 </script>
 </body>
 </html>

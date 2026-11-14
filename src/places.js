@@ -222,14 +222,125 @@ const Places = (() => {
     // A floor lamp in the corner and the pendant over the kitchen: warm, low light.
     cyl(0.03, 0.03, 1.6, mat(0x222222), X0 + 0.5, Y + 0.8, Z1 - 0.5, 6);
     cyl(0.14, 0.24, 0.3, glow(0xffd9a6), X0 + 0.5, Y + 1.7, Z1 - 0.5, 10);
-    light(0xffc890, 7, 10, X0 + 0.8, Y + 1.8, Z1 - 0.8);
-    light(0xffd2a0, 4, 6, KC - 0.9, Y + 2.0, CZ + 1.2);
+    light(0xffc890, 10, 11, X0 + 0.8, Y + 1.8, Z1 - 0.8);
+    light(0xffd2a0, 6, 7, KC - 0.9, Y + 2.0, CZ + 1.2);
+    light(0xffe2c0, 5, 12, CX + 0.5, Y + 2.7, CZ + 0.5);     // soft overall light from the ceiling
     light(0x9fb4ff, 3, 8, CX, Y + 1.6, Z0 + 0.6);
+
+    // A desk with your computer, against the back wall. The screen glows.
+    const DX = CX - 1.2, DZ = Z1 - 0.38;
+    box(1.3, 0.05, 0.6, mat(0x3a2a20), DX, Y + 0.74, DZ);
+    for (const [ox, oz] of [[-0.6, -0.25], [0.6, -0.25], [-0.6, 0.25], [0.6, 0.25]]) box(0.04, 0.74, 0.04, mat(0x222222), DX + ox, Y + 0.37, DZ + oz);
+    box(0.62, 0.38, 0.03, mat(0x111214), DX, Y + 1.08, DZ + 0.15);
+    const screenTex = canvasTex(256, 160, (c, w, h) => {
+      const gr = c.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#0e2a3a'); gr.addColorStop(1, '#1d4f57');
+      c.fillStyle = gr; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#7ff0e6'; c.font = 'bold 22px Consolas, monospace'; c.fillText('LUMEN OS', 14, 34);
+      c.fillStyle = 'rgba(255,255,255,0.75)'; c.font = '14px sans-serif';
+      ['🛒  Shop', '💼  Work', '📦  Orders'].forEach((t, i) => c.fillText(t, 18, 70 + i * 26));
+    });
+    plane(0.58, 0.34, new THREE.MeshBasicMaterial({ map: screenTex }), DX, Y + 1.08, DZ + 0.13, 0, Math.PI);
+    box(0.08, 0.16, 0.08, mat(0x111214), DX, Y + 0.84, DZ + 0.17);
+    box(0.42, 0.02, 0.14, mat(0x1b1c20), DX, Y + 0.775, DZ - 0.1);
+    cyl(0.2, 0.22, 0.45, mat(0x2c3036), DX, Y + 0.23, DZ - 0.55, 10);
+    light(0x7fd8ff, 1.5, 3, DX, Y + 1.1, DZ - 0.3);
+    // The front door, on the left wall near the window.
+    const FZ = Z0 + 2.0;
+    box(0.06, 2.1, 0.95, mat(0x24201d), X0 + 0.03, Y + 1.05, FZ);
+    ball(0.035, mat(0xc9b27a, { metalness: 0.8 }), X0 + 0.09, Y + 1.0, FZ - 0.35);
+    plane(0.75, 0.5, mat(0x3a2f2a), X0 + 0.5, Y + 0.005, FZ, -Math.PI / 2);   // doormat
+
+    // ---------- Things you can buy, hidden until they're delivered ----------
+    const decor = {};
+    const item = (id, build) => { const d = new THREE.Group(); d.visible = false; g.add(d); decor[id] = d; build(maker(d), d); };
+    item('neon', (m) => {
+      const tex = canvasTex(256, 128, (c, w, h) => {
+        c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+        c.shadowColor = '#39c5bb'; c.shadowBlur = 18; c.fillStyle = '#9ffff5'; c.font = 'bold 72px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('ネギ ♡', w / 2, h / 2 + 4);
+      });
+      m.plane(1.0, 0.5, new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending }), X1 - 0.02, Y + 1.9, Z0 + 1.7, 0, -Math.PI / 2);
+      m.light(0x39c5bb, 2.5, 4, X1 - 0.5, Y + 1.9, Z0 + 1.7);
+    });
+    item('fairy', (m) => m.bulbs([X0 + 0.2, Y + H - 0.12, Z0 + 0.12], [X1 - 0.2, Y + H - 0.12, Z0 + 0.12], 40, 0.18, glow(0xffe0a0)));
+    item('plush', (m) => {
+      m.cyl(0.07, 0.08, 0.36, mat(0xf2f0e6), CX + 0.0, Y + 0.6, CZ + 1.55, 10).rotation.z = 1.1;
+      for (const a of [-0.3, 0, 0.3]) { const l = m.cyl(0.02, 0.05, 0.3, mat(0x4caf50), CX - 0.22, Y + 0.72, CZ + 1.55 + a * 0.2, 6); l.rotation.z = 1.1 + a; }
+      m.ball(0.015, mat(0x111111), CX + 0.12, Y + 0.68, CZ + 1.48);
+      m.ball(0.015, mat(0x111111), CX + 0.16, Y + 0.66, CZ + 1.5);
+    });
+    item('stars', (m) => {
+      m.cyl(0.1, 0.12, 0.12, mat(0x1d2a4a), CX + 0.3, Y + 0.47, CZ + 0.2, 10);
+      m.ball(0.08, glow(0xbfd6ff), CX + 0.3, Y + 0.55, CZ + 0.2);
+      const pts = [];
+      for (let i = 0; i < 260; i++) pts.push(X0 + 0.3 + Math.random() * (W - 0.6), Y + H - 0.015, Z0 + 0.3 + Math.random() * (D - 0.6));
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      m.light(0x8fb0ff, 1.2, 6, CX, Y + 2.5, CZ);
+      const p = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xcfe0ff, size: 0.035 }));
+      decor.stars.add(p);
+    });
+    item('tank', (m) => {
+      m.box(0.5, 0.6, 0.4, mat(0x1a1a1a), X0 + 0.32, Y + 0.3, CZ + 2.25);
+      m.box(0.46, 0.4, 0.36, new THREE.MeshBasicMaterial({ color: 0x2f8fb0, transparent: true, opacity: 0.6 }), X0 + 0.32, Y + 0.82, CZ + 2.25);
+      const fishes = [];
+      for (let i = 0; i < 3; i++) fishes.push(m.ball(0.025, glow([0xff8a3a, 0xffd23a, 0xff5a8a][i]), X0 + 0.32, Y + 0.8, CZ + 2.25));
+      decor.tank.userData.fish = fishes;
+      m.light(0x4fc8ff, 1.2, 3, X0 + 0.5, Y + 0.9, CZ + 2.25);
+    });
+    item('cushion', (m) => { m.cyl(0.4, 0.42, 0.14, mat(0xd97aa0), CX - 1.0, Y + 0.07, CZ - 0.3, 14); m.cyl(0.3, 0.3, 0.15, mat(0xe9a1bd), CX - 1.0, Y + 0.08, CZ - 0.3, 14); });
+    item('poster', (m) => {
+      const tex = canvasTex(200, 280, (c, w, h) => {
+        c.fillStyle = '#1b1430'; c.fillRect(0, 0, w, h);
+        c.fillStyle = '#ffcf6a'; c.font = 'bold 30px Georgia, serif'; c.textAlign = 'center';
+        c.fillText('GERALD', w / 2, 70); c.font = '18px Georgia, serif'; c.fillText('& his saw', w / 2, 98);
+        c.strokeStyle = '#ffcf6a'; c.lineWidth = 4; c.beginPath(); c.arc(w / 2, 175, 45, Math.PI * 0.1, Math.PI * 0.9); c.stroke();
+        c.font = '14px sans-serif'; c.fillText('LIVE AT THE BLUE ROOM', w / 2, 255);
+      });
+      m.plane(0.5, 0.7, new THREE.MeshBasicMaterial({ map: tex }), CX + 1.2, Y + 1.65, Z1 - 0.02, 0, Math.PI);
+    });
+
+    // ---------- Walking about ----------
+    // The room's walls, and the furniture you can't walk through (x0, x1, z0, z1).
+    const solid = [
+      [X0, X1, Z0, Z0 + 0.5],                       // window ledge
+      [CX - 0.8, CX + 2.0, CZ + 1.1, CZ + 2.1],     // sofa
+      [CX + 0.0, CX + 1.2, CZ - 0.15, CZ + 0.55],   // low table
+      [KX - 0.25, KX + 0.25, KZ - 0.7, KZ + 0.7],   // keyboard
+      [KC - 0.4, X1, CZ + 0.05, Z1],                // kitchen counter and fridge
+      [KC - 1.12, KC - 0.68, CZ + 0.5, CZ + 1.9],   // stools
+      [CX - 3.75, CX - 2.25, Z1 - 0.35, Z1],        // bookshelf
+      [DX - 0.7, DX + 0.7, DZ - 0.75, Z1],          // desk and chair
+      [X0, X0 + 0.75, Z1 - 0.8, Z1],                // floor lamp
+    ];
+    const tankBox = [X0, X0 + 0.6, CZ + 2.0, CZ + 2.5];
+    function canStand(x, z, r) {
+      if (x < X0 + r || x > X1 - r || z < Z0 + r || z > Z1 - r) return false;
+      for (const b of decor.tank.visible ? [...solid, tankBox] : solid) if (x > b[0] - r && x < b[1] + r && z > b[2] - r && z < b[3] + r) return false;
+      return true;
+    }
     return {
       group: g,
       photo,
+      decor,
+      canStand,
+      floorY: Y,
+      // Where things are, for walking up to them.
+      at: {
+        computer: { x: DX, z: DZ - 0.75 },
+        bed: { x: CX + 2.6, z: Z1 - 0.3 },
+        door: { x: X0 + 0.3, z: FZ },
+        window: { x: CX - 1.2, z: Z0 + 0.6 },
+        keys: { x: KX, z: KZ },
+        start: { x: X0 + 1.0, z: FZ, yaw: -Math.PI / 2 },
+        bedside: { x: CX + 2.6, z: Z1 - 1.3, yaw: Math.PI },
+      },
+      update(t) {
+        if (decor.tank.visible) decor.tank.userData.fish.forEach((f, i) => { f.position.set(X0 + 0.32 + Math.sin(t * 0.7 + i * 2) * 0.17, Y + 0.72 + i * 0.08 + Math.sin(t * 1.3 + i) * 0.03, CZ + 2.25 + Math.cos(t * 0.5 + i * 2.3) * 0.13); });
+      },
       spots: {
         window: { x: CX - 1.2, y: Y, z: Z0 + 0.85, yaw: 0 },
+        couch: { x: CX + 1.9, y: Y, z: CZ + 0.75, yaw: Math.PI * 0.85 },
+        desk: { x: DX + 0.9, y: Y, z: DZ - 0.7, yaw: Math.PI * 0.75 },
         keys: { x: KX + 0.55, y: Y, z: KZ, yaw: Math.PI / 2 },
         kitchen: { x: KC - 0.95, y: Y, z: CZ + 2.6, yaw: -Math.PI / 2 },
         sofa: { x: CX + 1.6, y: Y, z: CZ + 0.6, yaw: Math.PI },

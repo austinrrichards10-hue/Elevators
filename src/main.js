@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const canvas = $('view');
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -38,8 +38,8 @@
   const ROOM_Z0 = City.TOWER_HALF - LND.depth - CAB_Z, ROOM_Z1 = City.TOWER_HALF - 0.31 - CAB_Z;
   const STOPS = Building.STOPS;
   const START_Y = STOPS[0], END_Y = STOPS[STOPS.length - 1];
-  const MAX_SPEED = 1.6, ACCEL = 0.25;
-  const STOP_WAIT = 14;
+  const MAX_SPEED = 3.4, ACCEL = 0.6;   // about a minute and a half from floor 70 to the ground
+  const STOP_WAIT = 6;
   const WALK = 1.35, ROOM = cab.R - 0.3, EYE_H = 1.66, BODY_R = 0.25;
   const cabLights = cab.group.children.filter((o) => o.isLight).map((l) => ({ l, base: l.intensity }));
   const ringMat = cab.group.children.map((o) => o.material).find((m) => m && m.isMeshBasicMaterial && m.color.getHex() === 0xfff1d6);
@@ -53,9 +53,14 @@
     ride: { playable: false, stops: true, speed: 1 },
     hold: false,            // the story is holding the car at a stop
   };
-  const player = { x: 0.15, z: ROOM_Z0 + 2.6, yaw: Math.PI, pitch: -0.03, bob: 0, step: 0 };
+  // space: 'cab' (walking in the car and the floor-70 landing, in the car's own coordinates) or
+  // 'home' (walking round your apartment, in world coordinates).
+  const player = { space: 'cab', x: 0.15, z: ROOM_Z0 + 2.6, yaw: Math.PI, pitch: -0.03, bob: 0, step: 0, vx: 0, vz: 0, y: 0 };
   const keys = {};
-  const hooks = { stop: null, arrive: null, board: null, talk: null, canTalk: null };
+  const hooks = { stop: null, arrive: null, board: null, talk: null, canTalk: null, phone: null };
+  // Things you can use where you're walking: { x, z, r, label, use() } (world coordinates at home).
+  let usables = [];
+  let usableNow = null;
 
   // ---------- Miku ----------
   const MIKU_SPOT = { x: 0.3, z: 1.12, yaw: Math.PI + 0.3, r: 0.3 };
@@ -113,7 +118,7 @@
   }
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement === canvas) resume();
-    else pause();
+    else if (state.mode === 'play') pause();
   });
   canvas.addEventListener('click', () => { if (state.mode === 'play' && document.pointerLockElement !== canvas) lock(); });
 
@@ -126,8 +131,14 @@
     if (Talk.asking) return;
     keys[e.code] = true;
     if (e.code === 'KeyM') { Sound.toggleMute(); document.dispatchEvent(new Event('mutechange')); return; }
+    if (state.mode === 'ui') return;
     if (Talk.active) { if (Talk.key(e.code)) e.preventDefault(); return; }
-    if (state.mode === 'play' && e.code === 'KeyE' && canTalk()) hooks.talk && hooks.talk();
+    if (state.mode !== 'play') return;
+    if (e.code === 'KeyE') {
+      if (canTalk()) { if (hooks.talk) hooks.talk(); }
+      else if (usableNow) usableNow.use();
+    }
+    if ((e.code === 'KeyQ' || e.code === 'Tab') && hooks.phone) { e.preventDefault(); hooks.phone(); }
   });
   document.addEventListener('keyup', (e) => { keys[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -142,18 +153,35 @@
   resize();
 
   // ---------- Walking ----------
+  // Is Miku where you are, and where?
+  const mikuHere = () => miku.obj && miku.obj.visible && (player.space === 'cab' ? miku.inCab : !miku.inCab);
+  const looking = (x, z, range, cone) => {
+    const dx = x - player.x, dz = z - player.z;
+    if (Math.hypot(dx, dz) > range) return false;
+    return Math.abs(angleDiff(Math.atan2(-dx, -dz), player.yaw)) < cone;
+  };
   function canTalk() {
-    if (!miku.obj || !miku.inCab || Talk.active) return false;
+    if (!mikuHere() || Talk.active || !hooks.talk) return false;
     if (hooks.canTalk && !hooks.canTalk()) return false;
-    const dx = MIKU_SPOT.x - player.x, dz = MIKU_SPOT.z - player.z;
-    if (Math.hypot(dx, dz) > 1.5) return false;
-    return Math.abs(angleDiff(Math.atan2(-dx, -dz), player.yaw)) < 0.7;
+    return looking(miku.x, miku.z, 1.6, 0.7);
+  }
+  // The thing you're looking at and close enough to use, if any.
+  function findUsable() {
+    let best = null, bestD = 1e9;
+    for (const u of usables) {
+      if (u.when && !u.when()) continue;
+      const d = Math.hypot(u.x - player.x, u.z - player.z);
+      if (d < (u.r || 1.4) && d < bestD && looking(u.x, u.z, u.r || 1.4, 0.75)) { best = u; bestD = d; }
+    }
+    return best;
   }
   const inCar = (x, z) => Math.hypot(x, z) < ROOM - BODY_R;
   const inDoorway = (x, z) => Math.abs(x) < 0.32 && z > ROOM_Z1 - 0.5 && z < -0.9;
   const inLanding = (x, z) => Math.abs(x) < LND.halfW - BODY_R && z > ROOM_Z0 + BODY_R && z < ROOM_Z1 - BODY_R;
-  const canStand = (x, z) => inCar(x, z) || (state.doors > 0.85 && (inDoorway(x, z) || inLanding(x, z)));
+  const canStandCab = (x, z) => inCar(x, z) || (state.doors > 0.85 && (inDoorway(x, z) || inLanding(x, z)));
+  const canStand = (x, z) => (player.space === 'home' ? places.home.canStand(x, z, BODY_R) : canStandCab(x, z));
 
+  // Walking eases in and out (a short acceleration and glide), with a gentle head bob.
   function walk(dt) {
     let f = 0, s = 0;
     if (!Talk.active) {
@@ -162,27 +190,35 @@
       if (keys.KeyD || keys.ArrowRight) s += 1;
       if (keys.KeyA || keys.ArrowLeft) s -= 1;
     }
-    const moving = f !== 0 || s !== 0;
+    const len = Math.hypot(f, s) || 1;
+    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+    const speed = WALK * (keys.ShiftLeft || keys.ShiftRight ? 1.6 : 1);
+    const tvx = ((-sy * f) + (cy * s)) / len * speed, tvz = ((-cy * f) + (-sy * s)) / len * speed;
+    const k = 1 - Math.exp(-dt * (f || s ? 9 : 7));
+    player.vx += (tvx - player.vx) * k;
+    player.vz += (tvz - player.vz) * k;
+    const dx = player.vx * dt, dz = player.vz * dt;
+    const moving = Math.hypot(player.vx, player.vz) > 0.05;
     if (moving) {
-      const len = Math.hypot(f, s);
-      const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-      const dx = ((-sy * f) + (cy * s)) / len * WALK * dt;
-      const dz = ((-cy * f) + (-sy * s)) / len * WALK * dt;
       if (canStand(player.x + dx, player.z + dz)) { player.x += dx; player.z += dz; }
-      else if (canStand(player.x + dx, player.z)) player.x += dx;
-      else if (canStand(player.x, player.z + dz)) player.z += dz;
-      if (inDoorway(player.x, player.z)) player.x *= 1 - Math.min(1, dt * 6);
-      else if (!state.boarded && player.z > ROOM_Z1 - 1.1 && player.z < ROOM_Z1 && Math.abs(player.x) < 1.3 && dz > 0) player.x *= 1 - Math.min(1, dt * 3);
-      const d = Math.hypot(player.x, player.z), room = ROOM - BODY_R;
-      if (state.boarded && d > room) { player.x *= room / d; player.z *= room / d; }
-      if (miku.obj && miku.inCab) {
-        const mx = player.x - MIKU_SPOT.x, mz = player.z - MIKU_SPOT.z;
-        const md = Math.hypot(mx, mz), min = MIKU_SPOT.r + BODY_R;
-        if (md < min && md > 1e-4) { player.x = MIKU_SPOT.x + mx / md * min; player.z = MIKU_SPOT.z + mz / md * min; }
+      else if (canStand(player.x + dx, player.z)) { player.x += dx; player.vz *= 0.5; }
+      else if (canStand(player.x, player.z + dz)) { player.z += dz; player.vx *= 0.5; }
+      else { player.vx = 0; player.vz = 0; }
+      if (player.space === 'cab') {
+        if (inDoorway(player.x, player.z)) player.x *= 1 - Math.min(1, dt * 6);
+        else if (!state.boarded && player.z > ROOM_Z1 - 1.1 && player.z < ROOM_Z1 && Math.abs(player.x) < 1.3 && dz > 0) player.x *= 1 - Math.min(1, dt * 3);
+        const d = Math.hypot(player.x, player.z), room = ROOM - BODY_R;
+        if (state.boarded && d > room) { player.x *= room / d; player.z *= room / d; }
       }
-      player.step += dt * 7.5;
+      if (mikuHere()) {
+        const r = player.space === 'cab' ? MIKU_SPOT.r : 0.3;
+        const mx = player.x - miku.x, mz = player.z - miku.z;
+        const md = Math.hypot(mx, mz), min = r + BODY_R;
+        if (md < min && md > 1e-4) { player.x = miku.x + mx / md * min; player.z = miku.z + mz / md * min; }
+      }
+      player.step += dt * 7.5 * Math.min(1.6, Math.hypot(player.vx, player.vz) / WALK);
     }
-    const target = moving ? Math.sin(player.step) * 0.02 : 0;
+    const target = moving ? Math.sin(player.step) * 0.02 * Math.min(1, Math.hypot(player.vx, player.vz) / WALK) : 0;
     player.bob += (target - player.bob) * Math.min(1, dt * 10);
   }
 
@@ -233,7 +269,7 @@
 
     // Pose from what's being said.
     const cur = Talk.current;
-    const speaking = Sound.speaking > 0;
+    const speaking = Talk.talking;
     if (cur && cur.id !== anim.lineId) {
       anim.lineId = cur.id;
       const p = poseFor(cur);
@@ -336,6 +372,9 @@
   }
   const titleShot = () => ({ space: 'cab', pos: [Math.sin(state.time * 0.11) * 0.35, 1.6, ROOM_Z0 + 3.4 + Math.sin(state.time * 0.07) * 0.4], look: [MIKU_SPOT.x * 0.6, 1.3, MIKU_SPOT.z], drift: 0.5 });
   const fpPose = () => {
+    if (player.space === 'home') {
+      return { pos: new THREE.Vector3(player.x, player.y + EYE_H + player.bob, player.z), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')) };
+    }
     tmpA.set(player.x, EYE_H + player.bob, player.z);
     cab.group.localToWorld(tmpA);
     const q = cab.group.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')));
@@ -344,7 +383,7 @@
 
   // ---------- Loop ----------
   const clock = new THREE.Clock();
-  let introFrom = null, introDone = null;
+  let introFrom = null, introDone = null, lastPrompt = null;
   function frame() {
     requestAnimationFrame(frame);
     const dt = Math.min(0.05, clock.getDelta());
@@ -372,7 +411,12 @@
       walk(dt);
       const p = fpPose();
       camera.position.copy(p.pos); camera.quaternion.copy(p.quat);
-      prompt.classList.toggle('hidden', !canTalk());
+      // What E would do here: talk to her, or use the thing you're looking at.
+      const talkOk = canTalk();
+      usableNow = talkOk ? null : findUsable();
+      const label = talkOk ? (hooks.talkLabel || 'Talk to Miku') : usableNow ? usableNow.label : null;
+      if (label !== lastPrompt) { lastPrompt = label; if (label) prompt.innerHTML = '<kbd>E</kbd>' + label; }
+      prompt.classList.toggle('hidden', !label);
     } else if (state.mode === 'scene' && shot) {
       const p = shotPose(shot, t);
       if (shotFrom) {
@@ -383,7 +427,7 @@
         if (shotK >= 1) shotFrom = null;
       } else { camera.position.copy(p.pos); camera.quaternion.copy(p.quat); }
     }
-    if (state.mode !== 'play') prompt.classList.add('hidden');
+    if (state.mode !== 'play') { prompt.classList.add('hidden'); lastPrompt = null; }
 
     if (!paused) {
       if (state.ride.playable && state.mode === 'play' && !state.boarded && inCar(player.x, player.z) && player.z > -1.0) {
@@ -438,6 +482,7 @@
       state.cabY = START_Y; state.speed = 0; state.descending = false; state.arrived = false;
       state.stop = 1; state.departAt = 0; state.closeAt = 0; state.hold = false;
       lastFloor = null;
+      player.space = 'cab'; player.vx = player.vz = 0; usables = [];
       placeMiku('cab');
       miku.face = 'view';
       if (playable) {
@@ -468,6 +513,37 @@
       placeMiku(spot ? p.spots[spot] : p.miku);
     },
     hold(on) { state.hold = on; },
+
+    // Home: walk round your apartment in first person. `at` is a spot { x, z, yaw }.
+    enterHome(at, withMiku) {
+      places.show('home');
+      Sound.ambience = 0.2;
+      player.space = 'home';
+      player.x = at.x; player.z = at.z; player.y = places.home.floorY;
+      player.yaw = at.yaw; player.pitch = -0.05; player.vx = player.vz = 0;
+      if (withMiku) placeMiku(places.home.spots[withMiku]); else if (miku.obj) miku.obj.visible = false;
+      miku.face = 'view';
+      shot = null;
+      const p = fpPose();
+      camera.position.copy(p.pos); camera.quaternion.copy(p.quat);
+      state.mode = 'play';
+      lock();
+      if (document.pointerLockElement !== canvas) { state.mode = 'paused'; $('pause').classList.remove('hidden'); }
+    },
+    setUsables(list) { usables = list; },
+    // An on-screen app (phone, computer) is open: free the mouse, stop walking.
+    openUI() { if (state.mode === 'play' || state.mode === 'paused') { state.mode = 'ui'; $('pause').classList.add('hidden'); if (document.pointerLockElement) document.exitPointerLock(); for (const k in keys) keys[k] = false; } },
+    closeUI() { if (state.mode === 'ui') { state.mode = 'play'; lock(); } },
+    // A photo of what's on screen now, for the album.
+    snapshot() {
+      renderer.render(scene, camera);
+      const c = document.createElement('canvas'); c.width = 480; c.height = 270;
+      const g = c.getContext('2d');
+      const w = canvas.width, h = canvas.height, ar = 16 / 9;
+      const sw = Math.min(w, h * ar), sh = sw / ar;
+      g.drawImage(canvas, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, 480, 270);
+      return c.toDataURL('image/jpeg', 0.72);
+    },
     hurry() { state.ride.speed = 3; state.ride.stops = false; },
     caption: showCaption,
     hint: showHint,

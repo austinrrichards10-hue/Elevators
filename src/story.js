@@ -21,23 +21,28 @@ const Story = (() => {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.snaps) save = s; } catch (e) { /* no storage */ }
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) { /* no storage */ } };
   const snapshot = () => JSON.parse(JSON.stringify(state));
-  const restore = (s) => { state.aff = s.aff; state.flags = { ...s.flags }; state.name = s.name; state.evenings = [...(s.evenings || [])]; };
+  const restore = (s) => {
+    for (const k of Object.keys(state)) delete state[k];
+    Object.assign(state, JSON.parse(JSON.stringify(s)));
+    state.flags = state.flags || {};
+    state.evenings = state.evenings || [];
+  };
 
   // ---------- Helpers ----------
   const $ = (id) => document.getElementById(id);
   const say = (script) => new Promise((r) => Talk.run(script, r));
   const wait = (s) => new Promise((r) => setTimeout(r, s * 1000));
   const until = (fn) => new Promise((r) => { const c = () => (fn() ? r() : setTimeout(c, 100)); c(); });
-  async function fadeOut() { $('fade').classList.remove('clear'); await wait(1.7); }
-  async function fadeIn() { $('fade').classList.add('clear'); await wait(0.6); }
-  async function card(kicker, title, sub, secs = 3.4) {
+  async function fadeOut() { $('fade').classList.remove('clear'); await wait(1.0); }
+  async function fadeIn() { $('fade').classList.add('clear'); await wait(0.4); }
+  async function card(kicker, title, sub, secs = 2.6) {
     $('card-kicker').textContent = kicker;
     $('card-title').textContent = title;
     $('card-sub').textContent = sub || '';
     $('card').classList.add('show');
     await wait(secs);
     $('card').classList.remove('show');
-    await wait(1.1);
+    await wait(0.75);
   }
   const W = (s) => ({ space: 'world', pos: s.pos, look: s.look });
   const place = (name, shotName) => W(Game.places[name].shots[shotName]);
@@ -318,6 +323,7 @@ const Story = (() => {
       "n: She walks you to the corner. At the corner, she stops.",
       "m: Can I have your number? So I can— I don't know. Send you pictures of the moon. Normal stuff.",
       "n: You swap phones. She puts herself in as “Miku (elevator).”",
+      { do: (S) => { S.flags.number = true; } },
       "m: Text me when you get home safe. That's a thing people do, right? I've seen it in movies.",
       { c: [
         { t: "I'll text you.", a: 1 },
@@ -327,6 +333,7 @@ const Story = (() => {
       "n: She sends back eleven moon emojis. Then:",
       "m: wait",
       "m: you have a WINDOW??",
+      { do: (S) => { S.thread = S.thread || []; S.thread.push({ from: 'y', text: '📷 [a blurry moon]' }, { from: 'm', text: '🌙🌙🌙🌙🌙🌙🌙🌙🌙🌙🌙' }, { from: 'm', text: 'wait' }, { from: 'm', text: 'you have a WINDOW??' }); } },
     ]);
     return 3;
   }
@@ -612,6 +619,122 @@ const Story = (() => {
     ] },
   };
   const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday'];
+  const HOME_CHAT = [
+    "m: Did you know your fridge hums in B flat? I've been harmonizing with it.",
+    "m: I named the fish. Don't ask me what I named them. …Gerald, Gerald Two, and Egg.",
+    "m: I keep waking up and forgetting I live here. Then I see the window and remember. Every time, it's like a present.",
+    "m: The old man at the stall asked about you. I told him you're the egg thief. He laughed so hard. Ha!",
+    "m: Your shirts smell like your shirts. That's not a sentence. You know what I mean.",
+    "m: I wrote a verse about the sound your keys make in the door. It's not good. I'm keeping it.",
+  ];
+  let chatI = 0;
+  const pickLine = (list) => list[chatI++ % list.length];
+  const clearHooks = () => { for (const k in Game.hooks) Game.hooks[k] = null; Game.setUsables([]); };
+
+  // ---------- At home ----------
+  // The things you can use in your apartment. `canSleep` is true, or a reason you can't yet;
+  // `onSleep` ends the day. `withMiku`: she's home too (no going out alone).
+  function homeUsables(canSleep, onSleep, withMiku) {
+    const at = Game.places.home.at;
+    Game.hooks.phone = () => Life.openPhone();
+    Game.setUsables([
+      { ...at.computer, r: 1.3, label: 'Use the computer', use: () => Life.openPC() },
+      { ...at.bed, r: 1.5, label: 'Go to bed', use: async () => {
+        const ok = canSleep();
+        if (ok !== true) { Game.hint(ok, 3); return; }
+        let yes = false;
+        await say([{ c: [{ t: 'Go to sleep', then: [{ do: () => { yes = true; } }] }, { t: 'Not yet' }] }]);
+        if (yes) { clearHooks(); onSleep(); }
+      } },
+      { ...at.door, r: 1.4, label: withMiku ? 'Front door' : 'Go out', use: () => (withMiku ? Game.hint("You're staying in with Miku tonight.", 3) : goOut()) },
+      { ...at.window, r: 1.6, label: 'Look out of the window', use: () => say([pickLine(VIEW_LINES)]) },
+      { ...at.keys, r: 1.3, label: 'Play the keyboard', use: () => { Sound.chime(); say([state.flags.number ? "n: You plunk out the first few notes of her song with one finger. It sounds better when she plays it." : "n: You play the three notes you know. The keyboard is mostly a very expensive shelf."]); } },
+    ]);
+  }
+  const VIEW_LINES = [
+    "n: Across the road the tower goes up into the dark. Down its side, small and slow, slides the glass car.",
+    "n: Somewhere down there, a bus sighs at a stop. Up here it's just the hum of the fridge and the lights.",
+    "n: You count windows for a while. You lose count somewhere around four hundred.",
+    "n: The red lights on the rooftops blink at nobody. You wave back, just in case.",
+  ];
+
+  // A day at home between the story's nights. Ends when you go to bed.
+  const CONVO_BEFORE = { 3: 'c3', 4: 'c4', 5: 'c5' };
+  async function homeDay(next) {
+    Sound.music(next >= 5 ? 'sad' : 'warm');
+    if (next === 1) {
+      await say([
+        "n: You get home a little after one in the morning. Your apartment is on the fortieth floor of the tower across the road.",
+        "n: You can't stop thinking about the girl in the glass elevator.",
+      ]);
+    }
+    Life.startDay(next === 7 ? 'c6a' : CONVO_BEFORE[next]);
+    Game.enterHome(Game.places.home.at.start, null);
+    Life.hud(true);
+    await fadeIn();
+    if (next === 1) Game.hint('This is home. Walk with WASD, look with the mouse, press E to use things, Q for your phone.', 9);
+    else Game.hint('Q for your phone · the computer is on the desk · bed is through the back door', 6);
+    await new Promise((resolve) => homeUsables(() => true, resolve, false));
+    Life.endDay();
+  }
+
+  // Going out: the ramen stall or the park, on your own (and maybe she's there).
+  async function goOut() {
+    let where = null;
+    await say([
+      "n: Where to?",
+      { c: [
+        { t: 'The ramen stall ($8)', then: [{ do: () => { where = 'stall'; } }] },
+        { t: 'A walk in the park', then: [{ do: () => { where = 'park'; } }] },
+        { t: 'Stay in' },
+      ] },
+    ]);
+    if (!where) return;
+    if (where === 'stall' && state.money < 8) { Game.hint('You check your wallet. Maybe not tonight.', 3); return; }
+    const usables = Game.hooks.phone;
+    Life.hud(false);
+    await fadeOut();
+    const meet = where === 'stall' && state.flags.number && !state.flags.metAtStall;
+    Game.goTo(where);
+    if (!meet) Game.miku.obj.visible = false;
+    Game.shot(place(where, where === 'stall' ? 'close' : 'wide'), true);
+    Game.mikuFace('cam');
+    await fadeIn();
+    if (where === 'stall') {
+      state.money -= 8;
+      Sound.blip('coin');
+      if (meet) {
+        state.flags.metAtStall = true;
+        await say([
+          "n: There's someone already at the counter, hunched over a bowl, with a pencil in her hair.",
+          "m: …{name}? Are you following me?",
+          { c: [
+            { t: 'I could ask you the same thing.', a: 1, then: ["m: I was here first! The old man is my witness.", "n: The old man does not look up. He puts extra green onions in your bowl."] },
+            { t: 'Maybe a little.', a: 2, then: ["m: Oh. Okay. Ha! That's… okay. That's fine. Sit down."] },
+          ] },
+          "n: You eat side by side without saying much. It's the nicest quiet you've had in a while.",
+          "m: Same time tomorrow. Remember. You promised the elevator.",
+        ]);
+      } else {
+        await say([
+          "n: The old man nods at you like you're a regular. Maybe you are now.",
+          "n: The ramen is hot and salty and exactly right. You eat it watching the glass car go up and down the tower.",
+          ...(state.flags.number ? ["n: You take a picture of the bowl and send it to Miku. She replies in seconds: “EXTRA GREEN ONIONS?? 😤”"] : []),
+        ]);
+      }
+    } else {
+      await say([
+        "n: The park is quiet. A few fireflies drift between the trees, much too late in the year.",
+        "n: Above the tower, one star is bright enough to beat the city.",
+        ...(state.flags.number ? ["n: You send Miku a picture of it. She sends back: “that one's mine. i named it.”"] : []),
+      ]);
+    }
+    await fadeOut();
+    Game.enterHome(Game.places.home.at.start, null);
+    Game.hooks.phone = usables;
+    Life.hud(true);
+    await fadeIn();
+  }
 
   async function ch7() {
     Sound.music('warm');
@@ -626,32 +749,64 @@ const Story = (() => {
       pan('home', 'room'),
       "n: The elevator closes on Thursday night. Until then, you have a week.",
     ]);
+    // Each day of the week: you're at home with her, free to wander. Talk to her to choose the
+    // evening (or give her a gift, or just chat), then go to bed.
+    const SPOTS = ['window', 'kitchen', 'couch', 'keys', 'desk'];
     for (let d = state.evenings.length; d < DAYS.length; d++) {
       await fadeOut();
-      await card('Home', DAYS[d], `${DAYS.length - d} ${DAYS.length - d === 1 ? 'night' : 'nights'} until the last ride`, 2.6);
-      Game.goTo('home', 'window');
-      Game.shot(place('home', 'room'), true);
-      Game.mikuFace('cam');
+      await card('Home', DAYS[d], `${DAYS.length - d} ${DAYS.length - d === 1 ? 'night' : 'nights'} until the last ride`, 2.4);
+      Life.startDay(null);
+      const spot = SPOTS[d % SPOTS.length];
+      let spent = false;
+      const enter = () => { Game.enterHome(Game.places.home.at.bedside, spot); Game.mikuFace('view'); Life.hud(true); };
+      enter();
       await fadeIn();
-      let pick = null;
-      const left = Object.keys(EVENINGS).filter((k) => !state.evenings.includes(k));
-      await say([
-        d === 0 ? "m: Okay. First night as roommates. What should we do?" : d === DAYS.length - 1 ? "m: Last free night before the last ride. What do you want to do?" : "m: What should we do tonight?",
-        { c: left.map((k) => ({ t: EVENINGS[k].t, then: [{ do: () => { pick = k; } }] })) },
-      ]);
-      state.evenings.push(pick);
-      const ev = EVENINGS[pick];
-      const [where, spot, shotName] = ev.go;
-      if (where !== 'home' || spot !== 'window') {
-        await fadeOut();
-        Game.goTo(where, spot);
-        Game.shot(place(where, shotName), true);
-        Game.mikuFace('cam');
-        await fadeIn();
-      } else Game.shot(place(where, shotName));
-      await say(ev.script);
-      save.snaps[6] = snapshot(); persist();
+      Game.hint(d === 0 ? 'Miku lives here now. Walk over and press E to talk to her.' : 'Talk to Miku to decide what to do tonight.', 6);
+      await new Promise((resolve) => {
+        homeUsables(() => (spent ? true : 'Spend the evening with Miku first.'), resolve, true);
+        Game.hooks.talk = async () => {
+          Game.mikuFace('player');
+          let pick = null, gift = null;
+          const left = Object.keys(EVENINGS).filter((k) => !state.evenings.includes(k));
+          const bag = Life.giftsInBag();
+          await say([
+            spent ? pickLine(HOME_CHAT) : d === 0 ? "m: First night as roommates! What should we do?" : d === DAYS.length - 1 ? "m: Last free night before the last ride. What do you want to do?" : "m: What should we do tonight?",
+            { c: [
+              ...(spent ? [] : [{ t: 'Plan tonight…', then: [{ c: [...left.map((k) => ({ t: EVENINGS[k].t, then: [{ do: () => { pick = k; } }] })), { t: 'Back' }] }] }]),
+              ...(bag.length ? [{ t: 'Give her something…', then: [{ c: [...bag.map((k) => ({ t: Life.GIFTS[k].name, then: [{ do: () => { gift = k; } }] })), { t: 'Back' }] }] }] : []),
+              { t: 'Just chat', then: [pickLine(HOME_CHAT)] },
+              { t: 'Never mind', then: [] },
+            ] },
+          ]);
+          if (gift) {
+            Life.takeGift(gift);
+            await say(Life.giftToMiku(gift, false).map((l) => 'm: ' + l));
+          }
+          Game.mikuFace('view');
+          if (!pick) return;
+          state.evenings.push(pick);
+          const ev = EVENINGS[pick];
+          const [where, sp, shotName] = ev.go;
+          Life.hud(false);
+          await fadeOut();
+          Game.goTo(where, sp);
+          Game.shot(place(where, shotName), true);
+          Game.mikuFace('cam');
+          await fadeIn();
+          await say(ev.script);
+          try { Life.addPhoto(Game.snapshot(), DAYS[d] + ': ' + ev.t); } catch (e) { /* no photo */ }
+          await fadeOut();
+          spent = true;
+          enter();
+          await fadeIn();
+          Game.hint("It's getting late. Go to bed when you're ready.", 5);
+          save.snaps[6] = snapshot(); persist();
+        };
+      });
+      Life.endDay();
     }
+    clearHooks();
+    Life.hud(false);
     Game.places.home.photo.visible = true;
     await fadeOut();
     Game.goTo('home', 'window');
@@ -780,16 +935,36 @@ const Story = (() => {
   };
 
   // ---------- Running chapters ----------
-  async function play(n) {
+  // Chapters, with a day at home between them (before chapters 2 to 6, and before the last
+  // ride if she's not moving in). Progress saves at the start of each chapter and each home day.
+  const homeBefore = (i) => (i >= 1 && i <= 5) || (i === 7 && !state.flags.together);
+  async function play(n, atHome) {
     let i = n;
     while (typeof i === 'number') {
-      save.current = i;
-      save.snaps[i] = snapshot();
-      persist();
-      Game.dawn(0);
-      await card('Chapter ' + NUMS[i], CHAPTERS[i].title, CHAPTERS[i].sub);
-      i = await CHAPTERS[i].run();
-      await fadeOut();
+      if (!atHome) {
+        save.current = i; save.home = false;
+        save.snaps[i] = snapshot();
+        persist();
+        Game.dawn(0);
+        Life.showDecor();
+        await card('Chapter ' + NUMS[i], CHAPTERS[i].title, CHAPTERS[i].sub);
+        const next = await CHAPTERS[i].run();
+        try { Life.addPhoto(Game.snapshot(), CHAPTERS[i].title); } catch (e) { /* no photo */ }
+        await fadeOut();
+        Life.hud(false);
+        clearHooks();
+        i = next;
+        if (typeof i !== 'number') break;
+      }
+      atHome = false;
+      if (homeBefore(i)) {
+        save.current = i; save.home = true;
+        save.snaps[i] = snapshot();
+        persist();
+        await homeDay(i);
+        await fadeOut();
+        Life.hud(false);
+      }
     }
     await ending(i);
   }
@@ -813,12 +988,13 @@ const Story = (() => {
 
   function boot() {
     Talk.init(state);
+    Life.init(state);
     const startBtn = $('start'), contBtn = $('continue');
     startBtn.disabled = true; startBtn.textContent = 'Loading…';
     const hasSave = save.current > 0 && save.snaps[save.current];
     if (hasSave) {
       contBtn.classList.remove('hidden');
-      contBtn.textContent = `Continue · ${CHAPTERS[save.current].title}`;
+      contBtn.textContent = save.home ? `Continue · Day ${save.snaps[save.current].day || ''} at home` : `Continue · ${CHAPTERS[save.current].title}`;
     }
     // Chapter select, once you've reached an ending.
     if (save.endings.length) {
@@ -833,18 +1009,6 @@ const Story = (() => {
     document.querySelectorAll('.mute-toggle').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); Sound.toggleMute(); updateMuteLabels(); }));
     document.addEventListener('mutechange', updateMuteLabels);
     // Her speaking voice: whichever text-to-speech voices this computer has.
-    // Her voice: whichever text-to-speech voices this computer has.
-    const sel = $('voice-select');
-    const fillVoices = () => {
-      const list = Sound.voices;
-      if (!list.length) return;
-      $('voice-row').classList.remove('hidden');
-      const cur = Sound.voice;
-      sel.innerHTML = list.map(([v, label]) => `<option value="${v.replace(/"/g, '')}"${v === cur ? ' selected' : ''}>${label.replace(/</g, '')}</option>`).join('');
-    };
-    fillVoices();
-    document.addEventListener('voiceschanged-game', fillVoices);
-    sel.addEventListener('change', () => Sound.setVoice(sel.value));
     updateMuteLabels();
     $('credits-back').addEventListener('click', () => location.reload());
     // In cinematic scenes, clicking anywhere moves the text on.
@@ -858,11 +1022,11 @@ const Story = (() => {
     Sound.start();
     if (fresh || !save.snaps[n]) restore({ aff: 0, flags: {}, name: '', evenings: [] });
     else restore(save.snaps[n]);
-    if (fresh) save.snaps = {};
+    if (fresh) { save.snaps = {}; save.home = false; }
     $('title').classList.add('leaving');
     setTimeout(() => $('title').classList.add('hidden'), 1300);
     await fadeOut();
-    play(n);
+    play(n, !fresh && n === save.current && save.home);
   }
 
   return { state, boot, get save() { return save; }, _play: play, _restore: restore };

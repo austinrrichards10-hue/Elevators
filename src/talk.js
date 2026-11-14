@@ -67,9 +67,10 @@ const Talk = (() => {
     el.className = 'talk-' + kind;
     nameEl.textContent = kind === 'm' || kind === 's' ? 'Miku' : kind === 'y' ? (S.name || 'You') : '';
     line = kind === 's' ? '♪ ' + text + ' ♪' : kind === 'y' ? '“' + text + '”' : text;
-    // She voices her own lines (and sings the sung ones), Vocaloid style.
-    if (kind === 'm' || kind === 's') Sound.say(text, kind); else Sound.hush();
+    // She doesn't speak aloud; she only laughs, when the line has her laughing.
+    if ((kind === 'm' && /\b(ha|haha|hah|hehe|heh)\b|\(laugh/i.test(text)) || (kind === 'n' && /\b(she laughs|laughs|laughing|giggles?)\b/i.test(text) && !/cries/.test(text))) Sound.laugh(/properly|so hard|both/.test(text) ? 2 : 1);
     current = { kind, text, id: ++lineCount };
+    sinceLine = 0;
     choices = null;
     choicesEl.innerHTML = '';
     textEl.textContent = '';
@@ -129,16 +130,23 @@ const Talk = (() => {
   function finish() {
     running = false;
     hide();
-    Sound.hush();
     choicesEl.innerHTML = '';
     const d = onDone; onDone = null;
     if (d) d();
   }
 
+  // Holding Ctrl fast-forwards through lines (but stops at choices).
+  let ctrl = false, ffT = 0, sinceLine = 99;
+  window.addEventListener('keydown', (e) => { if (e.key === 'Control') ctrl = true; });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Control') ctrl = false; });
+  window.addEventListener('blur', () => { ctrl = false; });
+
   function update(dt) {
+    sinceLine += dt;
     if (waitT > 0) { waitT -= dt; if (waitT <= 0) { waitT = 0; step(); } return; }
+    if (ctrl && running && !asking && !choices && line) { ffT += dt; if (ffT > 0.09) { ffT = 0; advance(); } return; }
     if (!line || !typing) return;
-    shown = Math.min(line.length, shown + dt * 52);
+    shown = Math.min(line.length, shown + dt * 68);
     textEl.textContent = line.slice(0, Math.floor(shown));
     if (shown >= line.length) {
       typing = false;
@@ -158,5 +166,10 @@ const Talk = (() => {
     return false;
   }
 
-  return { init, run, update, key, get active() { return running; }, get asking() { return asking; }, get current() { return current; } };
+  return {
+    init, run, update, key,
+    get active() { return running; }, get asking() { return asking; }, get current() { return current; },
+    // Whether she's "talking" right now (her line is still coming up), for her gestures and nods.
+    get talking() { return !!(current && current.kind === 'm' && (typing || sinceLine < 1.6)); },
+  };
 })();

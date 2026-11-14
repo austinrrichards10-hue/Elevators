@@ -6,16 +6,32 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 
 | Input | Action |
 | --- | --- |
-| Mouse | Look around (chapter 1) |
-| WASD | Walk (chapter 1) |
-| E / Space / Enter / click | Talk to Miku; move the text on |
-| 1 – 7, or click | Pick what to say |
+| Mouse | Look around |
+| WASD (Shift to hurry) | Walk |
+| E | Talk to Miku; use the thing you're looking at |
+| Q or Tab | Your phone |
+| E / Space / Enter / click | Move the text on |
+| Hold Ctrl | Fast-forward through dialogue |
+| 1 – 9, or click | Pick what to say |
 | M | Mute |
-| Esc | Pause (chapter 1) |
+| Esc | Pause; close the phone or computer |
+
+## Life at home
+
+Between the story's nights you're at home, in your apartment on the 40th floor across the road from the tower, walking about in first person.
+
+- **The computer** (on the desk): **Lumen Mart** sells things for your place (a teal neon sign, fairy lights for the window, a leek plushie, a star projector that puts a sky on your ceiling, a fish tank, a floor cushion, a Gerald poster) and gifts for Miku (a green onion bouquet, an apple bag charm, a city pop record, a star map, a lemon-yellow scarf, two coffees, a cat plush). Everything arrives the next day: decorations appear in the apartment, gifts go in your bag, or once you have her number you can send them straight to her. **NightShift** is your job: type the words as they come up, $3 a word, one shift a day.
+- **Your phone** (Q): **Messages**, once you have her number. She texts you on some days, you reply, and you can say goodnight. **Photos**, an album of memories taken at the end of each chapter and each evening together. **Status**: hearts, day, wallet, your bag and what's arriving.
+- **Gifts**: each one gets its own reaction, and she remembers which ones you've given her. Give them in person when she's home, or have them sent to her and she'll text you about it.
+- **The front door**: go out for ramen ($8) or a walk in the park. Once you have her number, you might bump into her at the stall.
+- **The bed** (through the back door): sleeping ends the day and the story moves on.
+- **The week together**: once she's moved in, she's in the apartment with you. Walk over and talk to her to plan the evening, give her a gift or just chat; then go to bed.
+
+Hearts (shown top left) come from affection: kind answers, texts, goodnights and gifts. Miku doesn't speak aloud: the words are on screen, and the only sound she makes is a short, light giggle when she laughs.
 
 ## The story
 
-1. **Floor 70**: you start on the dim floor-70 landing and walk into the elevator yourself. She's at the glass. You meet, and she talks at each stop on the way down: her windowless apartment, the song she can't finish. Played in first person.
+1. **Floor 70**: you start on the dim floor-70 landing and walk into the elevator yourself. She's at the glass. You meet, and she talks at each stop on the way down (about a minute and a half): her windowless apartment, the song she can't finish. Then you go home.
 2. **Same Time Tomorrow**: two cans of coffee from the vending machine, and she sings you the first verse.
 3. **The Blue Room**: after her show in a basement bar, ramen at a stall at the foot of the tower. An egg is stolen.
 4. **Up on the Roof**: fairy lights on her building's roof, the second verse, and maybe a kiss.
@@ -30,13 +46,13 @@ Your choices change what she says and remembers, so the egg, the heights, the st
 
 - **The places**: the tower's floor-70 landing; the glass car riding the outside of the tower, with four dark concrete bands it passes through; a ramen stall on the plaza at the tower's foot; a park bench with fireflies; the roof of Miku's old building; your apartment. Her building and your tower are real buildings in the city, visible from the elevator.
 - **Miku**: the Sanrio x Project Sekai Miku, a rigged model, animated live. She breathes and shifts her weight, and glances around (and at you, when you're close). When she turns, her head goes first and her body follows on a spring, easing in and settling. Her arms move through gestures that suit what she's saying: hands behind her back at ease, explaining, asking with open hands, a hand to her mouth when she laughs, a wave, hands to her chest when she's shy, reaching out toward the city when she sings. Each arm is solved as a two-bone chain every frame, and the hands go round her sides when moving between front and back.
-- **Her voice**: she speaks every line out loud, using the browser's text-to-speech, pitched up high and bright to sound like her. The game picks the most Miku-like voice the computer has, and you can choose another under "Her voice" on the title screen. Microsoft Edge has the best voices for this (try "Ana Online (Natural)"); Chrome and Windows' own voices also work. Her song lyrics are sung instead, by a small singing synth in `src/audio.js` that follows the song's melody syllable by syllable.
-- **The music**, all synthesised: a sad piano-and-strings theme for the elevator; a warm, tender theme for your time together; and her song, "Seventy Floors", with a soft synthesised voice singing the tune. The music goes muffled in the concrete bands.
+- **The music**, all synthesised: a sad piano-and-strings theme for the elevator; a warm, tender theme for your time together; and her song, "Seventy Floors", played on piano while the lyrics come up. The music goes muffled in the concrete bands.
 - **The city**: low-poly and flat-shaded, with about 2,500 lit towers, traffic, parks, a moon and mountains.
 
 ## Files
 
 - `src/story.js`: the whole story: every chapter, all the dialogue, the endings, chapter cards and saving.
+- `src/life.js`: life at home: money and days, the shop and deliveries, gifts, the phone (messages, photos, status) and the computer (shop, work, orders).
 - `src/talk.js`: the dialogue box, and the little script runner the story is written in (lines, narration, sung lines, choices, affection, flags).
 - `src/main.js`: the world and the camera: the ride, first-person walking, cinematic shots, and the `Game` API the story uses.
 - `src/places.js`: the ramen stall, the park, the rooftop and the apartment.
