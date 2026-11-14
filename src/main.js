@@ -512,6 +512,10 @@
       const label = talkOk ? (hooks.talkLabel || 'Talk to Miku') : usableNow ? usableNow.label : null;
       if (label !== lastPrompt) { lastPrompt = label; if (label) prompt.innerHTML = '<kbd>E</kbd>' + label; }
       prompt.classList.toggle('hidden', !label);
+    } else if (state.mode === 'ui' && !shot) {
+      // A menu or choices are open: you can't walk, but you still ride along with the car.
+      const p = fpPose();
+      camera.position.copy(p.pos); camera.quaternion.copy(p.quat);
     } else if (state.mode === 'scene' && shot) {
       const p = shotPose(shot, t);
       if (shotFrom) {

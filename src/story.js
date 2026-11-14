@@ -155,7 +155,7 @@ const Story = (() => {
 
   // Halfway down the first night, leaning on the rail, she tells you about Hana.
   const HANA = [
-    { do: () => Game.slowCar(0.22) },
+    { do: () => Game.slowCar(0.2) },
     "n: The car slows as it slides into the dark between the towers. Her hands tighten on the rail.",
     "m: Can I tell you something? You don't have to say anything. I just… haven't said it out loud in a while.",
     { c: [
@@ -186,7 +186,7 @@ const Story = (() => {
       { t: "You don't have to be alone.", a: 1, then: ["m: I know. I'm just scared. That's all. That's the whole thing."] },
       { t: 'Thank you for telling me.', a: 1, then: ["m: Thank you for listening. I mean it."] },
     ] },
-    { do: (S) => { S.flags.hana = true; Game.slowCar(1); } },
+    { do: (S) => { S.flags.hana = true; Game.slowCar(0.4); } },
     "n: The car picks up speed again. The lights below rush up to meet you.",
   ];
 
@@ -200,11 +200,13 @@ const Story = (() => {
       const drain = async () => {
         if (busy) return;
         busy = true;
+        Game.slowCar(0.4);          // the car eases off while she's talking
         while (pending.length) {
           if (!Game.leaning) Game.mikuFace('player');
           await say(pending.shift());
         }
         Game.mikuFace('view');
+        Game.slowCar(1);
         busy = false;
       };
       const meetFirst = () => { if (!met) { met = true; pending.push(MEET); } };
@@ -243,7 +245,7 @@ const Story = (() => {
   async function ch1() {
     Sound.music('sad');
     Game.titleMode();
-    Game.newRide({ playable: true, stops: false, speed: 1 });
+    Game.newRide({ playable: true, stops: false, speed: 0.55 });
     Game.firstPerson(null, true);
     await fadeIn();
     await say([
