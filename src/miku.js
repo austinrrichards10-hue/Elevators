@@ -41,10 +41,16 @@ const Miku = (() => {
   // The rig's Japanese bone names didn't survive the export, but each elbow has a helper bone
   // named Left_/Right_EllbowSupport. Elbow = its parent; upper arm = two bones above the elbow
   // (upper arm → arm twist → elbow → wrist twist → wrist).
-  // She's modelled in an A-pose (arms ~35° below horizontal). Only the shoulder joint turns:
-  // the upper-arm bone swings the whole arm down, shoulder to wrist, as one straight piece. The
-  // elbows are left as modelled. In the model's own space she faces +z, so her left is +x.
-  const ARM_OUT = 0.1, ARM_FWD = 0.02;    // how far the arm leans out from her side / forward
+  // She's modelled in an A-pose. Her hands are clasped behind her back: each arm is solved as a
+  // two-bone chain (shoulder → elbow → wrist) reaching a point at the small of her back, with the
+  // elbows bending out and back. In the model's own space she faces +z, so her left is +x.
+  // Each value can be overridden from the URL to tune the pose, e.g. ?hy=0.4&hz=0.17.
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+  const HAND_DROP = num('hy', 0.37);   // how far below the shoulders the hands meet
+  const HAND_BACK = num('hz', 0.1);    // how far behind the shoulders' centre line
+  const HAND_GAP = num('hx', 0.025);   // each hand's offset from her midline (left over right)
+  const ELBOW_OUT = num('eo', 1), ELBOW_BACK = num('eb', 0.5);
 
   function aim(bone, from, to, dir) {
     // Turn `bone` so the line from `from` to `to` (both moved by it) points along `dir` (model space).
@@ -57,18 +63,41 @@ const Miku = (() => {
     bone.updateMatrixWorld(true);
   }
 
+  function armChain(model, side) {
+    // Exactly the helper itself, not its "…_EllbowSupport_end" tip bone one link further down.
+    const helper = new RegExp('^' + side + '_EllbowSupport_\\d+$');
+    let support = null;
+    model.traverse((o) => { if (o.isBone && helper.test(o.name)) support = o; });
+    if (!support) return null;
+    const elbow = support.parent, upper = elbow.parent.parent;
+    const wristTwist = elbow.children.find((k) => k.isBone);
+    const wrist = (wristTwist && wristTwist.children.find((k) => k.isBone)) || wristTwist;
+    return wrist ? { upper, elbow, wrist } : null;
+  }
+
+  const wpos = (o) => o.getWorldPosition(new THREE.Vector3());
+
   function relaxArms(model) {
     model.updateMatrixWorld(true);
-    for (const [side, sx] of [['Left', 1], ['Right', -1]]) {
-      let support = null;
-      // Exactly the helper itself, not its "…_EllbowSupport_end" tip bone one link further down.
-      const helper = new RegExp('^' + side + '_EllbowSupport_\\d+$');
-      model.traverse((o) => { if (o.isBone && helper.test(o.name)) support = o; });
-      if (!support) continue;
-      const elbow = support.parent, upper = elbow.parent.parent;
-      const wristTwist = elbow.children.find((k) => k.isBone);
-      const wrist = (wristTwist && wristTwist.children.find((k) => k.isBone)) || wristTwist || elbow;
-      aim(upper, upper, wrist, new THREE.Vector3(sx * ARM_OUT, -1, ARM_FWD));
+    const arms = [['Left', 1], ['Right', -1]].map(([side, sx]) => ({ sx, c: armChain(model, side) })).filter((a) => a.c);
+    if (arms.length < 2) return;
+    // The point between her shoulders; the hands meet below and behind it.
+    const mid = wpos(arms[0].c.upper).add(wpos(arms[1].c.upper)).multiplyScalar(0.5);
+    for (const { sx, c } of arms) {
+      const S = wpos(c.upper);
+      const a = S.distanceTo(wpos(c.elbow)), b = wpos(c.elbow).distanceTo(wpos(c.wrist));
+      const T = new THREE.Vector3(mid.x + sx * HAND_GAP, mid.y - HAND_DROP, mid.z - HAND_BACK);
+      // Two-bone IK: where the elbow sits so the upper arm and forearm reach T.
+      const toT = T.clone().sub(S);
+      const d = Math.min(toT.length(), (a + b) * 0.999);
+      const u = toT.normalize();
+      const along = (a * a - b * b + d * d) / (2 * d);
+      const h = Math.sqrt(Math.max(0, a * a - along * along));
+      const pole = new THREE.Vector3(sx * ELBOW_OUT, 0, -ELBOW_BACK);
+      pole.sub(u.clone().multiplyScalar(u.dot(pole))).normalize();
+      const E = S.clone().add(u.clone().multiplyScalar(along)).add(pole.multiplyScalar(h));
+      aim(c.upper, c.upper, c.elbow, E.clone().sub(S));
+      aim(c.elbow, c.elbow, c.wrist, T.clone().sub(wpos(c.elbow)));
     }
   }
 

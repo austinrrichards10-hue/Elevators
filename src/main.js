@@ -29,8 +29,11 @@
   const cables = [-0.12, 0.12].map((x) => { const c = new THREE.Mesh(cableGeo, cableMat); c.position.x = x; scene.add(c); return c; });
 
   const CAB_Z = City.TOWER_HALF + 0.42 + cab.R;
-  const START_Y = 280, END_Y = 0.32;
+  const building = Building.build(scene, CAB_Z);
+  const DECKS = Building.DECKS;
+  const START_Y = DECKS[0], END_Y = DECKS[DECKS.length - 1];
   const MAX_SPEED = 1.6, ACCEL = 0.25;
+  const DECK_WAIT = 16;      // seconds the car waits at each sky deck on the way down
   const WALK = 1.35, ROOM = cab.R - 0.3, EYE_H = 1.66, BODY_R = 0.25;
 
   const state = {
@@ -42,6 +45,7 @@
     time: 0,
     introT: 0,
     departAt: 0,
+    stop: 1,                // index in DECKS of where the car is heading next
   };
   const player = { x: -0.45, z: -0.75, yaw: Math.PI + 0.25, pitch: -0.05, bob: 0, step: 0 };
   const keys = {};
@@ -209,21 +213,27 @@
     miku.obj.rotation.y = miku.yaw;
   }
 
+  // Down to the next deck, wait there a while, then on; the last stop is the ground.
   function descend(dt) {
     if (!state.descending) return;
-    const left = state.cabY - END_Y;
+    const target = DECKS[state.stop];
+    const left = state.cabY - target;
     const stopSpeed = Math.sqrt(Math.max(0, 2 * ACCEL * left));
     state.speed = Math.min(MAX_SPEED, state.speed + ACCEL * dt, stopSpeed);
     state.cabY -= state.speed * dt;
-    if (left < 0.01 || (state.cabY <= END_Y + 0.002 && state.speed < 0.02)) {
-      state.cabY = END_Y;
+    if (left < 0.01 || (state.cabY <= target + 0.002 && state.speed < 0.02)) {
+      state.cabY = target;
       state.speed = 0;
       state.descending = false;
-      if (!state.arrived) {
+      Sound.chime();
+      if (state.stop === DECKS.length - 1) {
         state.arrived = true;
-        Sound.chime();
         cab.setFloor('G', false);
         showCaption('Ground floor', 5);
+      } else {
+        showCaption('Sky deck · Floor ' + Building.floorOf(target), 5);
+        state.departAt = state.time + DECK_WAIT;
+        state.stop++;
       }
     }
   }
@@ -299,7 +309,8 @@
       Talk.update(dt);
     }
     updateCab(t);
-    Sound.update(state.speed / MAX_SPEED, 1 - (state.cabY - END_Y) / (START_Y - END_Y), t);
+    building.update(state.cabY);
+    Sound.update(state.speed / MAX_SPEED, 1 - (state.cabY - END_Y) / (START_Y - END_Y), t, building.openness(state.cabY));
 
     if (hintTimer > 0 && (hintTimer -= dt) <= 0) hint.classList.remove('show');
     if (captionTimer > 0 && (captionTimer -= dt) <= 0) caption.classList.remove('show');
