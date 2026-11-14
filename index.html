@@ -24,6 +24,7 @@
     <label id="voice-row" class="hidden">Her voice
       <select id="voice-select"></select>
     </label>
+    <p id="voice-status"></p>
     <div id="chapters" class="hidden"></div>
     <ul class="keys">
       <li><b>Mouse</b> look</li>
@@ -90,7 +91,7 @@ const load = (src) => new Promise((resolve, reject) => {
   s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
   document.body.appendChild(s);
 });
-for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/story.js', 'src/main.js']) await load(src);
+for (const src of ['src/voice.js', 'src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/story.js', 'src/main.js']) await load(src);
 </script>
 </body>
 </html>

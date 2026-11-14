@@ -278,6 +278,8 @@ const Sound = (() => {
 
   function hush() {
     if (speechOn && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+    sayId++;
+    if (sources.length) stopSources();
     talking = false;
     if (!utter || !ctx) return;
     const u = utter; utter = null;
@@ -306,7 +308,8 @@ const Sound = (() => {
   }
   if (speechOn) { loadVoices(); speechSynthesis.addEventListener('voiceschanged', loadVoices); }
   function pickVoice() {
-    if (voiceName) { const v = voices.find((x) => x.name === voiceName); if (v) return v; }
+    const sys = voiceName && !voiceName.startsWith('k:') ? voiceName.replace(/^s:/, '') : null;
+    if (sys) { const v = voices.find((x) => x.name === sys); if (v) return v; }
     for (const re of PREFER) { const v = voices.find((x) => re.test(x.name)); if (v) return v; }
     return voices[0] || null;
   }
@@ -334,9 +337,102 @@ const Sound = (() => {
     return clean.length * 0.07;
   }
 
+  // ---------- Her neural voice ----------
+  // Her real speaking voice comes from src/voice.js: a neural voice (Kokoro) with every story
+  // line made ahead of time, so she sounds like a person. Here it gets her "Vocaloid" treatment:
+  // raised in pitch without speeding up (time-stretched, then played faster), brightened with a
+  // presence lift and air on top, doubled very faintly for that synthetic shine, with a little
+  // room. If a line isn't ready (or the browser can't decode it), the system voice says it.
+  const SEMITONES = 2.6;                     // how far she's lifted
+  let sayId = 0, sources = [];
+  const useNeural = () => !voiceName || voiceName.startsWith('k:');
+  const processed = new WeakMap();
+  const treat = (a) => { let v = processed.get(a); if (!v) { v = vocaloid(a.data, a.rate); processed.set(a, v); } return v; };
+  function prefetch(texts) {
+    if (!useNeural()) return;
+    for (const t of texts) if (/[a-z0-9]/i.test(t)) Voice.get(t).then(treat, () => {});
+  }
+
+  // Time-stretch (WSOLA: overlapping windows, each nudged to line up with the last, so the voice
+  // stays smooth), longer by `f`; played back `f` times faster it has its own length but higher pitch.
+  function stretch(x, f) {
+    const N = 768, Hs = N >> 1, Ha = Hs / f, tol = 160;
+    const w = new Float32Array(N);
+    for (let i = 0; i < N; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N);
+    const frames = Math.max(1, Math.floor((x.length - N - tol) / Ha));
+    const out = new Float32Array(frames * Hs + N);
+    let prev = 0;
+    for (let k = 0; k < frames; k++) {
+      const nominal = Math.round(k * Ha);
+      let best = Math.min(nominal, Math.max(0, x.length - N));
+      if (k > 0) {
+        const target = prev + Hs;
+        let bestC = -Infinity;
+        for (let d = -tol; d <= tol; d += 4) {
+          const p = nominal + d;
+          if (p < 0 || p + N > x.length || target + Hs > x.length) continue;
+          let c = 0;
+          for (let i = 0; i < Hs; i += 3) c += x[p + i] * x[target + i];
+          if (c > bestC) { bestC = c; best = p; }
+        }
+      }
+      const o = k * Hs;
+      for (let i = 0; i < N; i++) out[o + i] += x[best + i] * w[i];
+      prev = best;
+    }
+    return out;
+  }
+  function vocaloid(data, rate) {
+    const f = Math.pow(2, SEMITONES / 12);
+    return { data: stretch(data, f), rate, f };
+  }
+
+  function playVoice(v) {
+    if (!ctx) return;
+    stopSources();
+    const buf = ctx.createBuffer(1, v.data.length, v.rate);
+    buf.copyToChannel(v.data, 0);
+    const out = ctx.createGain(); out.gain.value = 1.15;
+    // Her tone: no boom, a lift in the presence range, and air on top.
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 170;
+    const pres = ctx.createBiquadFilter(); pres.type = 'peaking'; pres.frequency.value = 2900; pres.Q.value = 0.9; pres.gain.value = 3.5;
+    const air = ctx.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 6500; air.gain.value = 4;
+    hp.connect(pres).connect(air).connect(out).connect(voiceBus);
+    const t = ctx.currentTime + 0.02;
+    const main = ctx.createBufferSource(); main.buffer = buf; main.playbackRate.value = v.f;
+    main.connect(hp);
+    // The faint double: a hair later and a touch sharper.
+    const dbl = ctx.createBufferSource(); dbl.buffer = buf; dbl.playbackRate.value = v.f * 1.0045;
+    const dg = ctx.createGain(); dg.gain.value = 0.16;
+    const dd = ctx.createDelay(0.05); dd.delayTime.value = 0.012;
+    dbl.connect(dd).connect(dg).connect(hp);
+    main.start(t); dbl.start(t);
+    sources = [main, dbl];
+    talking = true;
+    main.onended = () => { if (sources[0] === main) { talking = false; sources = []; } };
+  }
+  function stopSources() {
+    for (const s of sources) { try { s.stop(); } catch (e) { /* already stopped */ } }
+    sources = [];
+  }
+
   // Says (or, for her song, sings) a line. kind 'm' = speaking, 's' = singing.
-  function say(text, kind) {
-    if (kind !== 's') { hush(); return speak(text); }
+  // `alt` is the line without the player's name, said instead if the named one isn't ready yet.
+  function say(text, kind, alt) {
+    if (kind !== 's') {
+      hush();
+      if (muted) return 0;
+      if (alt && !Voice.isDone(text) && Voice.has(alt)) { Voice.get(text).catch(() => {}); text = alt; }
+      if (useNeural() && ctx && (Voice.ready || Voice.has(text))) {
+        const id = ++sayId;
+        talking = true;
+        const shipped = Voice.has(text);
+        Voice.get(text).then((a) => { if (id === sayId && !muted) playVoice(treat(a)); })
+          .catch(() => { if (id === sayId && shipped) speak(text); else if (id === sayId) talking = false; });
+        return Voice.clean(text).length * 0.065;
+      }
+      return speak(text);      // the system voice: chosen, or while hers is still loading
+    }
     if (!ctx) return 0;
     hush();
     const syl = syllables(text);
@@ -508,10 +604,21 @@ const Sound = (() => {
     start, update, chime, toggleMute, music, say, hush,
     // 0..1: how much she's voicing right now, for her mouth-and-body movement.
     get speaking() { return talking || (ctx && ctx.currentTime < speakingUntil) ? 1 : 0; },
-    // The voices she can speak with, and choosing one.
-    get voices() { return voices.map((v) => v.name); },
-    get voice() { const v = pickVoice(); return v ? v.name : null; },
-    setVoice(name) { voiceName = name; try { localStorage.setItem(VOICE_KEY, name); } catch (e) { /* no storage */ } speak("Hi. It's me, Miku."); },
+    // The voices she can speak with ([value, label]), which is chosen, and choosing one.
+    // Values are 'k:<id>' for her neural voices and 's:<name>' for the computer's own voices.
+    get voices() {
+      return [
+        ['k:miku', 'Miku'],
+        ...voices.map((v) => ['s:' + v.name, 'System: ' + v.name.replace(/^Microsoft |\s*-\s*English.*$/g, '')]),
+      ];
+    },
+    get voice() { return useNeural() ? 'k:miku' : 's:' + (pickVoice() || { name: '' }).name; },
+    setVoice(value) {
+      voiceName = value;
+      try { localStorage.setItem(VOICE_KEY, value); } catch (e) { /* no storage */ }
+      say("Hi! It's me, Miku. Is this how I sound?", 'm');
+    },
+    prefetch,
     set ambience(v) { ambience = v; },
     get muted() { return muted; },
   };
