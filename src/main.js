@@ -30,10 +30,14 @@
 
   const CAB_Z = City.TOWER_HALF + 0.42 + cab.R;
   const building = Building.build(scene, CAB_Z);
-  const DECKS = Building.DECKS;
-  const START_Y = DECKS[0], END_Y = DECKS[DECKS.length - 1];
+  const STOPS = Building.STOPS;
+  const START_Y = STOPS[0], END_Y = STOPS[STOPS.length - 1];
   const MAX_SPEED = 1.6, ACCEL = 0.25;
-  const DECK_WAIT = 16;      // seconds the car waits at each sky deck on the way down
+  const STOP_WAIT = 20;      // seconds the car hangs still at each stop on the way down
+  // The car's own lights, dimmed while it's inside the concrete bands.
+  const cabLights = cab.group.children.filter((o) => o.isLight).map((l) => ({ l, base: l.intensity }));
+  const ringMat = cab.group.children.map((o) => o.material).find((m) => m && m.isMeshBasicMaterial && m.color.getHex() === 0xfff1d6);
+  const RING_LIT = new THREE.Color(0xfff1d6), RING_DIM = new THREE.Color(0x5a3c22);
   const WALK = 1.35, ROOM = cab.R - 0.3, EYE_H = 1.66, BODY_R = 0.25;
 
   const state = {
@@ -45,7 +49,7 @@
     time: 0,
     introT: 0,
     departAt: 0,
-    stop: 1,                // index in DECKS of where the car is heading next
+    stop: 1,                // index in STOPS of where the car is heading next
   };
   const player = { x: -0.45, z: -0.75, yaw: Math.PI + 0.25, pitch: -0.05, bob: 0, step: 0 };
   const keys = {};
@@ -213,10 +217,10 @@
     miku.obj.rotation.y = miku.yaw;
   }
 
-  // Down to the next deck, wait there a while, then on; the last stop is the ground.
+  // Down to the next stop, hang there a while over the city, then on; the last is the ground.
   function descend(dt) {
     if (!state.descending) return;
-    const target = DECKS[state.stop];
+    const target = STOPS[state.stop];
     const left = state.cabY - target;
     const stopSpeed = Math.sqrt(Math.max(0, 2 * ACCEL * left));
     state.speed = Math.min(MAX_SPEED, state.speed + ACCEL * dt, stopSpeed);
@@ -226,13 +230,13 @@
       state.speed = 0;
       state.descending = false;
       Sound.chime();
-      if (state.stop === DECKS.length - 1) {
+      if (state.stop === STOPS.length - 1) {
         state.arrived = true;
         cab.setFloor('G', false);
         showCaption('Ground floor', 5);
       } else {
-        showCaption('Sky deck · Floor ' + Building.floorOf(target), 5);
-        state.departAt = state.time + DECK_WAIT;
+        showCaption('Floor ' + Building.floorOf(target), 5);
+        state.departAt = state.time + STOP_WAIT;
         state.stop++;
       }
     }
@@ -309,8 +313,12 @@
       Talk.update(dt);
     }
     updateCab(t);
-    building.update(state.cabY);
-    Sound.update(state.speed / MAX_SPEED, 1 - (state.cabY - END_Y) / (START_Y - END_Y), t, building.openness(state.cabY));
+    building.update(t);
+    const open = building.openness(state.cabY);
+    // Inside a band the car's ceiling light sinks to a dim amber glow and the city light is gone.
+    for (const { l, base } of cabLights) l.intensity = base * (0.3 + 0.7 * open);
+    if (ringMat) ringMat.color.lerpColors(RING_DIM, RING_LIT, open);
+    Sound.update(state.speed / MAX_SPEED, 1 - (state.cabY - END_Y) / (START_Y - END_Y), t, open);
 
     if (hintTimer > 0 && (hintTimer -= dt) <= 0) hint.classList.remove('show');
     if (captionTimer > 0 && (captionTimer -= dt) <= 0) caption.classList.remove('show');

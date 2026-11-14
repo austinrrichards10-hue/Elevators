@@ -73,7 +73,7 @@ const Sound = (() => {
     [71, 3], [68, 1],
   ];
 
-  let music = null;
+  let music = null, musicLP = null;
 
   // A long, dark hall reverb, made from decaying noise.
   function reverb(seconds) {
@@ -138,8 +138,12 @@ const Sound = (() => {
     const verb = reverb(4.5);
     const wet = ctx.createGain(); wet.gain.value = 0.55;
     const dry = ctx.createGain(); dry.gain.value = 0.7;
-    bus.connect(dry).connect(master);
-    bus.connect(verb).connect(wet).connect(master);
+    // Muffled, as if through concrete, while the car is inside the tower's bands.
+    musicLP = ctx.createBiquadFilter();
+    musicLP.type = 'lowpass'; musicLP.frequency.value = 18000;
+    musicLP.connect(master);
+    bus.connect(dry).connect(musicLP);
+    bus.connect(verb).connect(wet).connect(musicLP);
     const pianoBus = ctx.createGain(); pianoBus.gain.value = 0.16;
     const stringBus = ctx.createGain(); stringBus.gain.value = 0.5;
     pianoBus.connect(bus); stringBus.connect(bus);
@@ -208,6 +212,7 @@ const Sound = (() => {
     wind.gain.gain.setTargetAtTime(0.05 * (1 - low * 0.7) * (0.15 + 0.85 * open) * (0.6 + 0.4 * Math.sin(t * 0.37) * Math.sin(t * 0.61)), now, 0.5);
     wind.filter.frequency.setTargetAtTime(380 + 220 * Math.sin(t * 0.23), now, 0.5);
     city.gain.gain.setTargetAtTime((0.004 + 0.03 * low * low) * (0.2 + 0.8 * open), now, 0.5);
+    if (musicLP) musicLP.frequency.setTargetAtTime(500 + 17500 * open * open, now, 0.4);
   }
 
   function chime() {
