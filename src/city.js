@@ -6,6 +6,12 @@ const City = (() => {
   // The landing on floor 70 where the ride starts: a room inside the tower behind the car's
   // doors. Floor height, half-width, depth back from the tower face, height, doorway half-width.
   const LANDING = { y: 280, halfW: 5, depth: 8, h: 3.6, door: 0.6 };
+  // Blocks kept for buildings the story uses: Miku's old walk-up (she goes up on its roof) and
+  // the tower your apartment is in, both in view of the elevator.
+  const RESERVED = {
+    '1,2': { w: 36, d: 30, h: 52, l: 0.09 },
+    '-1,2': { w: 34, d: 34, h: 176, l: 0.07 },
+  };
   const BLOCK = 86;           // block pitch, road centre to road centre
   const ROAD = 16;
   const EXTENT = 1450;        // city reaches this far from the tower
@@ -206,6 +212,13 @@ const City = (() => {
       for (let bz = -n; bz <= n; bz++) {
         const cx = bx * BLOCK, cz = bz * BLOCK;
         if (bx === 0 && bz === 0) continue;                       // the tower's own block
+        const res = RESERVED[bx + ',' + bz];
+        if (res) {                                                // a building the story uses
+          tint.setHSL(0.62, 0.2, res.l);
+          batch.box(cx, 0, cz, res.w, res.h, res.d, tint, 0.25, 0.5);
+          tops.push(cx, res.h + 1.5, cz);
+          continue;
+        }
         if (bx === 0 && bz === 1) { parks.push([cx, cz]); continue; } // a park right under the glass
         if (Math.abs(bx) <= 1 && Math.abs(bz) <= 1 && rand() < 0.4) { parks.push([cx, cz]); continue; }
         if (rand() < 0.04) { parks.push([cx, cz]); continue; }
@@ -299,7 +312,11 @@ const City = (() => {
       const lawn = new THREE.Mesh(new THREE.PlaneGeometry(BLOCK - ROAD, BLOCK - ROAD), lawnMat);
       lawn.rotation.x = -Math.PI / 2; lawn.position.set(px, 0.06, pz);
       scene.add(lawn);
-      for (let i = 0; i < 26; i++) treePos.push(px + (rand() - 0.5) * (BLOCK - ROAD - 8), pz + (rand() - 0.5) * (BLOCK - ROAD - 8), 0.7 + rand() * 0.7);
+      for (let i = 0; i < 26; i++) {
+        const tx = px + (rand() - 0.5) * (BLOCK - ROAD - 8), tz = pz + (rand() - 0.5) * (BLOCK - ROAD - 8), s = 0.7 + rand() * 0.7;
+        if (Math.hypot(tx - 18, tz - 90) < 10) continue;            // keep clear round the bench the story uses
+        treePos.push(tx, tz, s);
+      }
     }
     // The plaza around the tower.
     const plaza = new THREE.Mesh(new THREE.PlaneGeometry(BLOCK - ROAD, BLOCK - ROAD), new THREE.MeshLambertMaterial({ color: 0x1b1d26 }));
@@ -379,5 +396,5 @@ const City = (() => {
     return { update };
   }
 
-  return { build, TOWER_HALF, TOWER_TOP, FLOOR_H, LANDING };
+  return { build, TOWER_HALF, TOWER_TOP, FLOOR_H, LANDING, BLOCK };
 })();

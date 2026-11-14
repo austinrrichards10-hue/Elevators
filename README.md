@@ -1,41 +1,48 @@
 # Elevators
 
-A first-person ride down a glass elevator at night. You step into a twelve-sided glass car on the outside of the tallest tower in the city. Miku is already there, standing at the glass and looking out over the skyline. The car starts at floor 70 and slowly descends, taking about three minutes to reach the ground. Walk up to her and press E to talk. For now the game is the start screen and the ride down.
+A love story in eight chapters. It's midnight, and you step into a glass elevator on the outside of the tallest tower in the city. Someone is already in it, watching the lights: Miku. You ride down together. Then you keep riding down together, night after night, until the elevator closes for good.
 
-Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The start button reads "Loading…" for a few seconds while Miku's model loads.
+Open `index.html` in a desktop browser to play. An internet connection is needed because Three.js loads from a CDN. The start button reads "Loading…" for a few seconds while Miku's model loads. A full playthrough takes about 40 minutes.
 
 | Input | Action |
 | --- | --- |
-| Mouse | Look around |
-| WASD | Walk around the car |
-| E | Talk to Miku (when you're near her and looking at her), then move the conversation on |
-| 1 – 5 | Pick what to say |
+| Mouse | Look around (chapter 1) |
+| WASD | Walk (chapter 1) |
+| E / Space / Enter / click | Talk to Miku; move the text on |
+| 1 – 7, or click | Pick what to say |
 | M | Mute |
-| Esc | Pause (click to carry on) |
+| Esc | Pause (chapter 1) |
+
+## The story
+
+1. **Floor 70**: you start on the dim floor-70 landing and walk into the elevator yourself. She's at the glass. You meet, and she talks at each stop on the way down: her windowless apartment, the song she can't finish. Played in first person.
+2. **Same Time Tomorrow**: two cans of coffee from the vending machine, and she sings you the first verse.
+3. **The Blue Room**: after her show in a basement bar, ramen at a stall at the foot of the tower. An egg is stolen.
+4. **Up on the Roof**: fairy lights on her building's roof, the second verse, and maybe a kiss.
+5. **Last Month**: a notice on the landing. The glass elevator is being taken off the building.
+6. **A Window**: your apartment on the 40th floor across the road, with a window that looks straight at the elevator, and a question.
+7. **Home**: a week living together. Each evening you choose one of seven things to do: cook, movie night, write the song's last line at the keyboard, a ramen date, a walk in the park, laundry day, or watch the rain.
+8. **Seventy Floors**: the very last ride, at dawn. She sings the whole song.
+
+Your choices change what she says and remembers, so the egg, the heights, the star names and the line you write for her song all come back later. How warm you are along the way decides whether she moves in. There are two endings, **Home** and **A Window of Her Own**. Progress saves at the start of each chapter (Continue on the title screen), and once you've reached an ending you can replay any chapter from the title screen.
 
 ## What's in it
 
-- **The landing**: you start inside the tower on floor 70, in a small, dim lobby with a bench, a dead plant and one ceiling light that keeps flickering. The elevator's doors stand open at the far end with Miku inside. Walk in; the doors close behind you and the car sets off.
-- **The ride**: the car rides the outside of the tower, open to the city. It leaves floor 70, hangs still for 20 seconds at floors 49, 28 and 10 so you can look out, and ends on the ground.
-- **The building bands**: four times on the way down, the car slides through a band of raw concrete wrapped round the tower, shut in for about 7 seconds. Inside it's dark and water-stained, the lamps are weak, dim or dead and flicker, the car's light sinks to amber, and the music goes muffled as if through the walls.
-- **Start screen**: the camera drifts in the landing, looking through the open doors at Miku in the car.
-- **Miku**: the Sanrio x Project Sekai Miku, in her blue pinafore dress with the apple bag. She's a rigged model; she stands with her hands clasped behind her back, posed by solving each arm's bones to reach the small of her back. When you talk to her she turns to face you, then turns back to the view when you're done. What she says first depends on how far down the car is. You can ask her what she's looking at, whether she rides this a lot, who she is and what she thinks of the city. Walking away ends the conversation.
-- **The car**: nine glass panes face the city, with a handrail round them at waist height on brackets. The three steel panels at the back hold the doors, a floor readout and a call button. There's a ring light in the ceiling and a teal light ring round the floor's edge. The car hangs on two cables and sways slightly as it moves.
-- **The city**: low-poly and flat-shaded. About 2,500 towers with lit windows, three downtown clusters, setbacks and crowns, red aviation lights on the tallest roofs, parks, streetlights and 1,400 cars of moving headlights and tail lights. There's a faceted sky that glows purple at the horizon, stars, a low moon and mountains around the edge.
-- **Sound**: all synthesised. The music is a slow, sad piece in A minor for soft piano and low strings in a long reverb, about 74 seconds looping, that keeps ending on an unresolved chord. Under it are a motor hum, wind and the city, which go muffled inside the concrete bands, and a two-note chime at each stop.
+- **The places**: the tower's floor-70 landing; the glass car riding the outside of the tower, with four dark concrete bands it passes through; a ramen stall on the plaza at the tower's foot; a park bench with fireflies; the roof of Miku's old building; your apartment. Her building and your tower are real buildings in the city, visible from the elevator.
+- **Miku**: the Sanrio x Project Sekai Miku, a rigged model, standing with her hands clasped behind her back. She turns to face you when she talks, and to the view when she sings.
+- **The music**, all synthesised: a sad piano-and-strings theme for the elevator; a warm, tender theme for your time together; and her song, "Seventy Floors", with a soft synthesised voice singing the tune. The music goes muffled in the concrete bands.
+- **The city**: low-poly and flat-shaded, with about 2,500 lit towers, traffic, parks, a moon and mountains.
 
 ## Files
 
-- `src/main.js`: game flow, the start screen, first-person controls, the descent, and where Miku stands.
-- `src/talk.js`: the conversation with Miku, including everything she says.
-- `src/miku.js`: loads Miku with three.js's GLTF loader, hides the rig's physics-collider meshes, scales her to height and poses her arms.
-- `src/elevator.js`: the glass car.
-- `src/building.js`: the floor-70 landing, the concrete bands the car passes through, and where it stops.
-- `src/city.js`: the city, sky and the tower.
-- `src/audio.js`: the sound.
+- `src/story.js`: the whole story: every chapter, all the dialogue, the endings, chapter cards and saving.
+- `src/talk.js`: the dialogue box, and the little script runner the story is written in (lines, narration, sung lines, choices, affection, flags).
+- `src/main.js`: the world and the camera: the ride, first-person walking, cinematic shots, and the `Game` API the story uses.
+- `src/places.js`: the ramen stall, the park, the rooftop and the apartment.
+- `src/building.js`: the floor-70 landing, the concrete bands, and where the car stops.
+- `src/miku.js`: loads Miku with three.js's GLTF loader, hides the rig's physics-collider meshes, and poses her arms.
+- `src/elevator.js`: the glass car. `src/city.js`: the city, sky and tower. `src/audio.js`: sound and music.
 - `models/miku.js`: the model (a .glb, about 3 MB), embedded as a script by `tools/embedglb.ps1`.
-
-Three.js and its GLTF loader are loaded as modules (see the import map in `index.html`), which then load the game's scripts in order.
 
 ### Swapping the model
 

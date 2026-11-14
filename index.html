@@ -8,22 +8,26 @@
 </head>
 <body>
 <canvas id="view"></canvas>
+<div id="dawn"></div>
 <div id="fade"></div>
 
 <section id="title" class="screen">
   <div class="title-card">
-    <p class="kicker">Floor 70 · going down</p>
+    <p class="kicker">A love story · Floor 70 · going down</p>
     <h1>ELEVATORS</h1>
-    <p class="tag">A glass car on the outside of the tallest tower in the city. Midnight. The whole skyline is lit, and it's a long way to the ground.</p>
+    <p class="tag">A glass elevator on the outside of the tallest tower in the city. Midnight. Somebody is already in it, watching the lights.</p>
     <nav class="menu">
       <button id="start" class="primary">Begin</button>
+      <button id="continue" class="hidden">Continue</button>
       <button class="mute-toggle">Sound: on</button>
     </nav>
+    <div id="chapters" class="hidden"></div>
     <ul class="keys">
       <li><b>Mouse</b> look</li>
       <li><b>WASD</b> walk</li>
+      <li><b>E / Space / click</b> talk, next</li>
+      <li><b>1–7</b> choose</li>
       <li><b>M</b> mute</li>
-      <li><b>Esc</b> pause</li>
     </ul>
   </div>
   <p class="credit">"Miku (Sanrio X Project Sekai)" by 雨宮レン (CC BY 4.0)</p>
@@ -46,6 +50,23 @@
   <ol class="talk-choices"></ol>
   <div class="talk-more">E ▸</div>
 </div>
+<form id="namebox" class="hidden" autocomplete="off">
+  <label for="name-input">What's your name?</label>
+  <input id="name-input" maxlength="16" spellcheck="false">
+  <button class="primary" type="submit">That's me</button>
+</form>
+<div id="card">
+  <p id="card-kicker"></p>
+  <h2 id="card-title"></h2>
+  <p id="card-sub"></p>
+</div>
+<section id="credits" class="hidden">
+  <h2>ELEVATORS</h2>
+  <p class="credits-line">Thank you for riding.</p>
+  <p id="credits-endings"></p>
+  <p class="credits-small">Miku model: “Miku (Sanrio X Project Sekai)” by 雨宮レン, CC BY 4.0.<br>Music, sound, city and story made for this game.</p>
+  <button id="credits-back" class="primary">Back to the title</button>
+</section>
 
 <!-- Three.js and its GLTF loader come in as modules; the game's own scripts are plain scripts
      that use the global THREE, so they're loaded in order once it's set. src/miku.js loads
@@ -66,7 +87,7 @@ const load = (src) => new Promise((resolve, reject) => {
   s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Could not load ' + src));
   document.body.appendChild(s);
 });
-for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/miku.js', 'src/talk.js', 'src/main.js']) await load(src);
+for (const src of ['src/audio.js', 'src/city.js', 'src/elevator.js', 'src/building.js', 'src/places.js', 'src/miku.js', 'src/talk.js', 'src/story.js', 'src/main.js']) await load(src);
 </script>
 </body>
 </html>

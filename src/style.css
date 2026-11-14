@@ -81,6 +81,55 @@ kbd {
 .talk-more { position: absolute; right: 16px; bottom: 10px; font-size: 12px; color: var(--teal); animation: nudge 1s ease-in-out infinite; }
 @keyframes nudge { 50% { transform: translateX(3px); } }
 
+/* The dialogue box sits above the fade, so narration can play over black. */
+#talk { z-index: 25; }
+#talk.talk-n .talk-text { font-style: italic; color: #c9d4e8; }
+#talk.talk-n .talk-name { display: none; }
+#talk.talk-y .talk-name { color: #d8c8ff; }
+#talk.talk-y .talk-text { color: #e8e0ff; }
+#talk.talk-s .talk-text { font-style: italic; color: var(--teal-hi); text-align: center; text-shadow: 0 0 12px rgba(57, 197, 187, 0.4); }
+#talk.talk-s { border-color: rgba(127, 240, 230, 0.5); }
+
+#namebox {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 26;
+  display: flex; flex-direction: column; gap: 14px; align-items: stretch; width: min(360px, calc(100% - 32px));
+  padding: 24px; border-radius: 4px; background: rgba(4, 8, 18, 0.94); border: 1px solid rgba(127, 240, 230, 0.35);
+}
+#namebox label { color: var(--teal-hi); letter-spacing: 0.15em; text-transform: uppercase; font-size: 13px; }
+#namebox input {
+  font: inherit; font-size: 20px; padding: 10px 12px; border-radius: 3px; color: var(--ink);
+  background: rgba(10, 18, 34, 0.9); border: 1px solid rgba(127, 240, 230, 0.35); outline: none;
+}
+#namebox input:focus { border-color: var(--teal-hi); }
+
+#card {
+  position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 0 16px; background: #000; opacity: 0; pointer-events: none; transition: opacity 1s ease;
+}
+#card.show { opacity: 1; }
+#card-kicker { margin: 0; color: var(--teal); letter-spacing: 0.4em; text-transform: uppercase; font-size: 13px; }
+#card-title { margin: 14px 0; font-size: clamp(32px, 6vw, 64px); font-weight: 300; letter-spacing: 0.12em; color: var(--ink); }
+#card-sub { margin: 0; color: var(--dim); font-style: italic; }
+
+#dawn {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: linear-gradient(0deg, rgba(255, 150, 80, 0.55) 0%, rgba(255, 120, 120, 0.28) 35%, rgba(140, 120, 220, 0.12) 65%, rgba(0, 0, 0, 0) 100%);
+  transition: opacity 22s linear;
+}
+
+#chapters { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 6px; }
+#chapters p { width: 100%; margin: 0 0 4px; color: var(--dim); font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; }
+#chapters button { padding: 6px 12px; font-size: 13px; }
+
+#credits {
+  position: fixed; inset: 0; z-index: 31; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; padding: 0 16px; background: #000;
+}
+#credits h2 { margin: 0; font-size: clamp(32px, 6vw, 60px); letter-spacing: 0.12em; font-weight: 800; color: var(--teal-hi); }
+.credits-line { color: var(--ink); font-size: 18px; }
+#credits-endings { color: var(--teal); }
+.credits-small { color: #5d6b86; font-size: 12px; line-height: 1.6; margin-bottom: 18px; }
+
 @media (max-width: 640px) {
   #title { padding: 0 16px; background: linear-gradient(0deg, rgba(4, 6, 16, 0.95) 0%, rgba(4, 6, 16, 0.5) 70%, rgba(4, 6, 16, 0.2) 100%); align-items: flex-end; padding-bottom: 60px; }
   .credit { left: 16px; right: 16px; }
