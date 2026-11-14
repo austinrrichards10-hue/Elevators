@@ -342,7 +342,8 @@ const Places = (() => {
       c.fillStyle = '#c8645a';
       for (let i = 0; i < 7; i++) for (let j = 0; j < 4; j++) { c.save(); c.translate(70 + i * 62, 75 + j * 63); c.rotate(Math.PI / 4); c.fillRect(-9, -9, 18, 18); c.restore(); }
     });
-    plane(4.2, 3.2, new THREE.MeshStandardMaterial({ map: rugTex, roughness: 1 }), TX + 0.4, Y + 0.006, TZ, -Math.PI / 2, Math.PI / 2);
+    // Laid flat, then turned to run along the sofa (the turn is about the floor's normal).
+    plane(4.2, 3.2, new THREE.MeshStandardMaterial({ map: rugTex, roughness: 1 }), TX + 0.4, Y + 0.006, TZ, -Math.PI / 2).rotation.z = Math.PI / 2;
     box(0.7, 0.05, 1.3, wood, TX, Y + 0.4, TZ);
     for (const [dx, dz] of [[-0.3, -0.6], [0.3, -0.6], [-0.3, 0.6], [0.3, 0.6]]) cyl(0.018, 0.018, 0.38, dark, TX + dx, Y + 0.19, TZ + dz, 6);
     cyl(0.04, 0.035, 0.09, smooth(0x39c5bb), TX - 0.1, Y + 0.47, TZ - 0.3, 12);
@@ -515,7 +516,7 @@ const Places = (() => {
     for (const [y, h] of [[0.55, 0.7], [1.45, 0.75]]) box(0.7, h, 0.015, smooth(0x231c17, { roughness: 0.5 }), FX, Y + y, Z1 - 0.065);
     box(0.06, 2.22, 0.05, trim, FX - 0.5, Y + 1.11, Z1 - 0.03); box(0.06, 2.22, 0.05, trim, FX + 0.5, Y + 1.11, Z1 - 0.03); box(1.06, 0.06, 0.05, trim, FX, Y + 2.2, Z1 - 0.03);
     box(0.14, 0.03, 0.03, brass, FX - 0.33, Y + 1.0, Z1 - 0.09);
-    plane(0.8, 0.5, new THREE.MeshStandardMaterial({ map: canvasTex(160, 100, (c, w, h) => { c.fillStyle = '#6b5440'; c.fillRect(0, 0, w, h); c.fillStyle = '#e8dcc4'; c.font = 'bold 30px Georgia, serif'; c.textAlign = 'center'; c.fillText('hello', w / 2, 62); }), roughness: 1 }), FX, Y + 0.005, Z1 - 0.5, -Math.PI / 2, Math.PI);
+    plane(0.8, 0.5, new THREE.MeshStandardMaterial({ map: canvasTex(160, 100, (c, w, h) => { c.fillStyle = '#6b5440'; c.fillRect(0, 0, w, h); c.fillStyle = '#e8dcc4'; c.font = 'bold 30px Georgia, serif'; c.textAlign = 'center'; c.fillText('hello', w / 2, 62); }), roughness: 1 }), FX, Y + 0.005, Z1 - 0.5, -Math.PI / 2).rotation.z = Math.PI;
     box(0.5, 0.06, 0.03, trim, FX + 0.85, Y + 1.65, Z1 - 0.02);
     box(0.16, 0.7, 0.04, smooth(0xf2c84b, { roughness: 1 }), FX + 0.75, Y + 1.3, Z1 - 0.09);
     box(0.3, 0.45, 0.06, smooth(0xd9cdb8, { roughness: 1 }), FX + 1.0, Y + 1.38, Z1 - 0.1);
