@@ -122,7 +122,6 @@ kbd {
   font: inherit; font-size: 13px; max-width: 280px; padding: 6px 8px; border-radius: 3px; color: var(--ink);
   background: rgba(10, 18, 34, 0.8); border: 1px solid rgba(127, 240, 230, 0.35);
 }
-#voice-status { margin: 6px 0 0; min-height: 1em; color: var(--teal); font-size: 12px; }
 #chapters { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 6px; }
 #chapters p { width: 100%; margin: 0 0 4px; color: var(--dim); font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; }
 #chapters button { padding: 6px 12px; font-size: 13px; }

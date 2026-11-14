@@ -42,7 +42,6 @@ const Talk = (() => {
     stack = [{ steps: script, i: 0 }];
     onDone = done;
     running = true;
-    Sound.prefetch(upcoming(3));
     step();
   }
 
@@ -69,9 +68,8 @@ const Talk = (() => {
     nameEl.textContent = kind === 'm' || kind === 's' ? 'Miku' : kind === 'y' ? (S.name || 'You') : '';
     line = kind === 's' ? '♪ ' + text + ' ♪' : kind === 'y' ? '“' + text + '”' : text;
     // She voices her own lines (and sings the sung ones), Vocaloid style.
-    if (kind === 'm' || kind === 's') Sound.say(text, kind, raw.includes('{name}') ? Voice.withoutName(raw.slice(3)) : null); else Sound.hush();
+    if (kind === 'm' || kind === 's') Sound.say(text, kind); else Sound.hush();
     current = { kind, text, id: ++lineCount };
-    Sound.prefetch(upcoming(4));
     choices = null;
     choicesEl.innerHTML = '';
     textEl.textContent = '';
@@ -80,23 +78,7 @@ const Talk = (() => {
     moreEl.classList.add('hidden');
   }
 
-  // Her next few lines (as far as the script goes without a choice), so her voice can be made ahead.
-  function upcoming(n) {
-    const out = [];
-    for (let d = stack.length - 1; d >= 0 && out.length < n; d--) {
-      const { steps, i } = stack[d];
-      for (let k = i; k < steps.length && out.length < n; k++) {
-        const s = steps[k];
-        if (typeof s === 'string') { if (s.startsWith('m: ')) out.push(fill(s.slice(3))); }
-        else if (s.c) { for (const c of s.c) if (c.then && typeof c.then[0] === 'string' && c.then[0].startsWith('m: ')) out.push(fill(c.then[0].slice(3))); return out; }
-        else if (s.if) return out;
-      }
-    }
-    return out;
-  }
-
   function offer(list) {
-    Sound.prefetch(list.map((c) => c.then && typeof c.then[0] === 'string' && c.then[0].startsWith('m: ') ? fill(c.then[0].slice(3)) : '').filter(Boolean));
     choices = list.filter((c) => !c.if || c.if(S));
     el.classList.remove('hidden');
     if (!line) { nameEl.textContent = ''; textEl.textContent = ''; }

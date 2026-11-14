@@ -779,24 +779,6 @@ const Story = (() => {
     window: { title: 'A Window of Her Own', sub: 'A little braver, a little warmer, and the story might end another way.' },
   };
 
-  // ---------- Her lines with your name in them ----------
-  // These can't be made ahead of time, so once your name is known they're made in the
-  // background, long before she says them.
-  function nameLines() {
-    const src = [ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8].map((f) => f.toString()).join('\n')
-      + JSON.stringify([MEET, IDLE, STOP_BEATS, GROUND, EVENINGS]);
-    const out = new Set();
-    const re = /(["'])m: ((?:\\.|(?!\1).)*)\1/g;
-    let m;
-    while ((m = re.exec(src))) {
-      const t = m[2].replace(/\\(["'\\])/g, '$1');
-      if (t.includes('{name}')) out.add(t.replace(/\{name\}/g, state.name));
-    }
-    return [...out];
-  }
-  const prepareName = () => { if (state.name) Sound.prefetch(nameLines()); };
-  MEET.splice(MEET.findIndex((s) => s && s.name) + 1, 0, { do: prepareName });
-
   // ---------- Running chapters ----------
   async function play(n) {
     let i = n;
@@ -851,18 +833,18 @@ const Story = (() => {
     document.querySelectorAll('.mute-toggle').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); Sound.toggleMute(); updateMuteLabels(); }));
     document.addEventListener('mutechange', updateMuteLabels);
     // Her speaking voice: whichever text-to-speech voices this computer has.
-    // Her voice: her own (shipped in models/voice.js), or one of the computer's.
+    // Her voice: whichever text-to-speech voices this computer has.
     const sel = $('voice-select');
     const fillVoices = () => {
+      const list = Sound.voices;
+      if (!list.length) return;
       $('voice-row').classList.remove('hidden');
       const cur = Sound.voice;
-      sel.innerHTML = Sound.voices.map(([v, label]) => `<option value="${v.replace(/"/g, '')}"${v === cur ? ' selected' : ''}>${label.replace(/</g, '')}</option>`).join('');
-      $('voice-status').textContent = Voice.ready ? '' : typeof AudioDecoder === 'undefined' ? "This browser can't play her recorded voice; using the system voice." : '';
+      sel.innerHTML = list.map(([v, label]) => `<option value="${v.replace(/"/g, '')}"${v === cur ? ' selected' : ''}>${label.replace(/</g, '')}</option>`).join('');
     };
     fillVoices();
     document.addEventListener('voiceschanged-game', fillVoices);
-    sel.addEventListener('change', () => { Sound.start(); Sound.setVoice(sel.value); });
-    Voice.init(fillVoices);
+    sel.addEventListener('change', () => Sound.setVoice(sel.value));
     updateMuteLabels();
     $('credits-back').addEventListener('click', () => location.reload());
     // In cinematic scenes, clicking anywhere moves the text on.
@@ -877,7 +859,6 @@ const Story = (() => {
     if (fresh || !save.snaps[n]) restore({ aff: 0, flags: {}, name: '', evenings: [] });
     else restore(save.snaps[n]);
     if (fresh) save.snaps = {};
-    prepareName();
     $('title').classList.add('leaving');
     setTimeout(() => $('title').classList.add('hidden'), 1300);
     await fadeOut();
