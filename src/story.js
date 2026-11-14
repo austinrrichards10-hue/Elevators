@@ -774,12 +774,20 @@ const Story = (() => {
     Sound.music(null);
     setCity(opts);
     await fadeIn();
-    Game.hint(T && T.kind === 'tower' ? 'The glass tower is south, past the shops. Its lobby is at the foot of the glass car.' : 'Shops are along the street to the south. Your building door is behind you.', 7);
+    Game.hint((T && T.kind === 'tower' ? 'The glass tower is south, past the shops (follow the compass).' : 'Shops are along the street to the south; the compass up top shows the way.') + ' Shift to run, Space to hop.', 8);
   }
   // Out in the city: the shops, your building's door, the glass tower's lobby.
   function setCity(opts) {
     const at = Game.places.city.at, T = opts.T;
     Game.hooks.phone = () => Life.openPhone();
+    // The compass: home, the tower, the shops. Tonight's goal is the highlighted one.
+    const goTower = () => T && T.kind === 'tower' && night();
+    Game.setMarkers([
+      { x: at.homeDoor.x, z: at.homeDoor.z, label: 'Home', main: () => night() && !goTower() },
+      { x: at.towerDoor.x, z: at.towerDoor.z, label: 'Glass tower', main: goTower },
+      { x: -52, z: 62.5, label: 'Hoshi Mart', main: false },
+      { x: -52, z: 83.5, label: 'Shops', main: false },
+    ]);
     Game.setUsables([
       ...Game.places.city.usables,
       { ...at.homeDoor, r: 2.2, label: 'Go up to your apartment', use: async () => {

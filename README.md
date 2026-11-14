@@ -7,7 +7,8 @@ Open `index.html` in a desktop browser to play. An internet connection is needed
 | Input | Action |
 | --- | --- |
 | Mouse | Look around |
-| WASD (Shift to hurry) | Walk |
+| WASD (Shift to run) | Walk |
+| Space | Hop (at home and in the city) |
 | E | Talk to Miku; use the thing you're looking at |
 | Q or Tab | Your phone |
 | E / Space / Enter / click | Move the text on |
@@ -34,7 +35,9 @@ The bed's "Nap until evening" skips ahead to the evening.
 
 ## The city
 
-Take the elevator by your front door down to the street, and you can walk anywhere at ground level (buildings are solid). Hold Shift to hurry. On the road south of your building is a shopping street of five little shops you can walk into:
+Take the elevator by your front door down to the street, and you can walk anywhere at ground level (buildings are solid). Out here you walk briskly; hold Shift to run. A compass along the top shows home, the glass tower and the shops, and when tonight's goal is somewhere in town it's highlighted, with a marker and the distance.
+
+The streets near you look like a Japanese city block: asphalt roads with lane markings and zebra crossings, raised pavements, shopfronts with awnings and hanging signs, utility poles strung with wires, street trees, vending machines and traffic lights. Cars drive on the left, stop at red lights, queue behind each other and stop for you if you step out in front of them. By day the buildings are pale concrete, tile and brick with glass windows; after dark the windows, signs and shops light up. On the road south of your building is a shopping street of five little shops you can walk into:
 
 - **Hoshi Mart 星マート**: the konbini. Ingredients for cooking (rice, eggs, green onions, nori, noodles, chicken, curry roux, ketchup, salmon) and snacks (melon bread, pudding, onigiri, canned coffee).
 - **Menya Tsuki 麺屋 月**: ramen at the counter.
@@ -110,7 +113,8 @@ Your choices change what she says and remembers, so the egg, the heights, the st
 - **The places**: the tower's floor-70 landing; the glass car riding the outside of the tower, with four dark concrete bands it passes through; a ramen stall on the plaza at the tower's foot; a park bench with fireflies; the roof of Miku's old building; your apartment. Her building and your tower are real buildings in the city, visible from the elevator.
 - **Miku**: the Sanrio x Project Sekai Miku, a rigged model, animated live. She breathes and shifts her weight, and glances around (and at you, when you're close). When she turns, her head goes first and her body follows on a spring, easing in and settling. Her arms move through gestures that suit what she's saying: hands behind her back at ease, explaining, asking with open hands, a hand to her mouth when she laughs, a wave, hands to her chest when she's shy, reaching out toward the city when she sings. Each arm is solved as a two-bone chain every frame, and the hands go round her sides when moving between front and back.
 - **The music**, all synthesised: a sad piano-and-strings theme for the elevator; a warm, tender theme for your time together; and her song, "Seventy Floors", played on piano while the lyrics come up. The music goes muffled in the concrete bands.
-- **The city**: low-poly and flat-shaded, with about 2,500 lit towers, traffic, parks, a moon and mountains.
+- **The city**: about 2,500 towers, parks, traffic, a moon and mountains. It is drawn two ways. From up high you see the whole skyline. At street level the buildings near you get shopfronts and rooftop clutter, the street furniture appears, and the far city is cut away into the haze. The buildings are split into chunks so only what is in view gets drawn, shop interiors are only drawn when you are close, and the resolution steps down automatically if the frame rate drops.
+- **Moving around**: walking eases in and out, mouse look is lightly smoothed, there are footsteps and a gentle head bob, the view widens a little when you run, and you step up and down kerbs.
 
 ## Files
 

@@ -33,7 +33,7 @@ const Places = (() => {
   function buildStall(scene) {
     const g = new THREE.Group(); scene.add(g);
     const { box, cyl, ball, plane, light } = maker(g);
-    const X = -25, Z = 31, Y = 0.07;               // the stall's counter faces -z
+    const X = -25, Z = 31, Y = City.SLAB + 0.01;               // the stall's counter faces -z
     const wood = mat(0x5a3a26), dark = mat(0x1b1410), red = mat(0x8e1f1f), steel = mat(0x8a8f99, { metalness: 0.7, roughness: 0.35 });
     box(3.4, 1.0, 1.4, wood, X, Y + 0.5, Z);                  // body
     box(3.6, 0.06, 0.55, mat(0x7a5236), X, Y + 1.03, Z - 0.75);  // counter
@@ -79,7 +79,7 @@ const Places = (() => {
   function buildPark(scene) {
     const g = new THREE.Group(); scene.add(g);
     const { box, cyl, ball, light } = maker(g);
-    const X = 18, Z = 92, Y = 0.07;
+    const X = 18, Z = 92, Y = City.SLAB + 0.01;
     const wood = mat(0x4a3424), iron = mat(0x22252b, { metalness: 0.6 });
     box(1.8, 0.06, 0.45, wood, X, Y + 0.45, Z);
     box(1.8, 0.4, 0.05, wood, X, Y + 0.72, Z + 0.22).rotation.x = -0.15;

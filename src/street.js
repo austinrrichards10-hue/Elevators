@@ -25,8 +25,11 @@ const Street = (() => {
   const DOOR_W = 1.3;
 
   function build(scene) {
-    const g = new THREE.Group(); scene.add(g);
-    const add = (geo, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; g.add(o); return o; };
+    // Everything here stands on the raised pavement of its block.
+    const g = new THREE.Group(); g.position.y = City.SLAB; scene.add(g);
+    let target = g;      // shop interiors go in their own groups, only drawn when you're close
+    const interiors = [];
+    const add = (geo, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; target.add(o); return o; };
     const box = (w, h, d, m, x, y, z, ry) => add(new THREE.BoxGeometry(w, h, d), m, x, y, z, ry);
     const cyl = (r0, r1, h, m, x, y, z, seg = 12) => add(new THREE.CylinderGeometry(r0, r1, h, seg), m, x, y, z);
     const ball = (r, m, x, y, z) => add(new THREE.SphereGeometry(r, 10, 8), m, x, y, z);
@@ -34,12 +37,29 @@ const Street = (() => {
     const walls = [];   // [x0, x1, z0, z1] you can't walk through
     const usables = [];
     const signs = [];   // emissive sign materials, brighter at night
+    const windows = []; // lit upstairs windows: on at night, off by day
     const glass = new THREE.MeshPhysicalMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.12, roughness: 0.05, side: THREE.DoubleSide, depthWrite: false });
     const frameM = mat(0x1a1b20, { metalness: 0.6, roughness: 0.4 });
-
-    // Pavement along the shop fronts, with a kerb.
-    plane(10, 62, mat(0x3a3c44, { roughness: 0.9 }), FRONT + 5, 0.06, 83.5, 0, -Math.PI / 2);
-    box(0.25, 0.15, 62, mat(0x6a6c74), FRONT + 9.9, 0.075, 83.5);
+    // Upstairs walls: a daylight facade (pale walls, glass) and a matching map of lit windows.
+    function facade(cols, rows, cw, ch, wall, litChance) {
+      const lit = [];
+      for (let i = 0; i < cols * rows; i++) lit.push(Math.random() < litChance);
+      const draw = (glow) => (c, w, h) => {
+        c.fillStyle = glow ? '#000' : wall; c.fillRect(0, 0, w, h);
+        for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+          const x = k * cw + cw * 0.18, y = r * ch + ch * 0.2, ww = cw * 0.64, hh = ch * 0.55;
+          if (glow) { if (lit[r * cols + k]) { c.fillStyle = '#ffd9a0'; c.fillRect(x, y, ww, hh); } continue; }
+          c.fillStyle = '#4c535c'; c.fillRect(x - 2, y - 2, ww + 4, hh + 4);
+          const gr = c.createLinearGradient(0, y, 0, y + hh); gr.addColorStop(0, '#93a8bc'); gr.addColorStop(1, '#3e4a58');
+          c.fillStyle = gr; c.fillRect(x, y, ww, hh);
+          c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(0, r * ch + ch - 3, w, 3);
+        }
+      };
+      const map = canvasTex(cols * cw, rows * ch, draw(false)), em = canvasTex(cols * cw, rows * ch, draw(true));
+      const m = new THREE.MeshStandardMaterial({ map, emissiveMap: em, emissive: 0xffffff, emissiveIntensity: 0.8, roughness: 0.85 });
+      windows.push(m);
+      return m;
+    }
 
     for (const s of SHOPS) {
       const zc = (s.z0 + s.z1) / 2, w = s.z1 - s.z0, depth = FRONT - BACK, xc = (FRONT + BACK) / 2;
@@ -52,14 +72,9 @@ const Street = (() => {
       plane(w, HT, inner, BACK, HT / 2, zc, Math.PI / 2);
       plane(depth, HT, inner, xc, HT / 2, s.z0 + 0.01, 0);
       plane(depth, HT, inner, xc, HT / 2, s.z1 - 0.01, Math.PI);
-      box(depth + 0.4, 9, w + 0.02, mat(0x2a2c34, { roughness: 0.9 }), xc - 0.2, HT + 4.5, zc);
-      const upper = canvasTex(128, 256, (c, cw, ch) => {
-        c.fillStyle = '#2a2c34'; c.fillRect(0, 0, cw, ch);
-        for (let r = 0; r < 3; r++) for (let k = 0; k < 2; k++) { c.fillStyle = Math.random() < 0.5 ? '#ffd9a0' : '#1a1c22'; c.fillRect(14 + k * 58, 20 + r * 80, 42, 50); }
-      });
-      const um = new THREE.MeshStandardMaterial({ map: upper, emissiveMap: upper, emissive: 0xffffff, emissiveIntensity: 0.6, roughness: 0.9 });
-      signs.push(um);
-      plane(w, 9, um, FRONT + 0.21, HT + 4.5, zc, Math.PI / 2);
+      const wallC = ['#d9d2c4', '#c8c2b8', '#b7a28c', '#e2dfd8', '#a9b0b6'][SHOPS.indexOf(s)];
+      box(depth + 0.4, 9, w + 0.02, mat(new THREE.Color(wallC).multiplyScalar(0.8).getHex(), { roughness: 0.9 }), xc - 0.2, HT + 4.5, zc);
+      plane(w, 9, facade(3, 3, 64, 96, wallC, 0.5), FRONT + 0.21, HT + 4.5, zc, Math.PI / 2);
       walls.push([BACK - 0.3, BACK, s.z0, s.z1], [BACK, FRONT, s.z0 - 0.3, s.z0 + 0.05], [BACK, FRONT, s.z1 - 0.05, s.z1 + 0.3]);
       // The front: glass with a door gap in the middle, under a fascia with the lit sign.
       const dz0 = zc - DOOR_W / 2, dz1 = zc + DOOR_W / 2;
@@ -83,28 +98,30 @@ const Street = (() => {
       // An awning over the door, and a little light over it.
       const aw = box(1.4, 0.06, DOOR_W + 1.2, mat(new THREE.Color(s.stripe).getHex(), { roughness: 0.9 }), FRONT + 0.75, HT - 1.1, zc); aw.rotation.z = -0.18;
       ball(0.08, glow(0xffe8c0), FRONT + 0.2, HT - 1.25, zc);
-      // Inside lighting: rows of ceiling panels.
+      // Inside: rows of ceiling panels, and everything in the shop.
+      const ig = new THREE.Group(); g.add(ig); target = ig; s.interior = ig; interiors.push(s);
       for (let x = BACK + 1.5; x < FRONT - 0.8; x += 2.2) box(1.2, 0.03, 0.4, glow(s.light), x, HT - 0.02, zc);
       s.zc = zc; s.xc = xc;
       buildInterior(s, { box, cyl, ball, plane, walls, usables });
+      target = g;
     }
 
     // Plain buildings filling the rest of the shopping block, behind the shops.
     const fill = [[-80, 70, 30, 24, 38], [-80, 100, 30, 26, 52], [-104, 70, 14, 24, 26], [-104, 100, 14, 30, 44]];
-    for (const [x, z, w, d, h] of fill) {
-      const tex = canvasTex(128, 256, (c, cw, ch) => { c.fillStyle = '#20232c'; c.fillRect(0, 0, cw, ch); for (let r = 0; r < 12; r++) for (let k = 0; k < 4; k++) { c.fillStyle = Math.random() < 0.35 ? '#ffd9a0' : '#15171d'; c.fillRect(6 + k * 30, 6 + r * 21, 22, 13); } });
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(Math.max(1, w / 12), Math.max(1, h / 24));
-      const m = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.9 });
-      signs.push(m);
+    const fillWalls = ['#c9c3b8', '#b9b3aa', '#d6d0c4', '#a8a49e'];
+    fill.forEach(([x, z, w, d, h], i) => {
+      const m = facade(4, 6, 48, 64, fillWalls[i], 0.35);
+      m.map.repeat.set(Math.max(1, w / 12), Math.max(1, h / 24)); m.emissiveMap.repeat.copy(m.map.repeat);
       box(w, h, d, m, x, h / 2, z);
       City.addFootprint(x, z, w, d);
-    }
+    });
 
-    // Two street lamps per shop row, and a vending machine.
-    for (let z = 60; z < 112; z += 13) {
-      cyl(0.06, 0.08, 4.5, mat(0x22252b, { metalness: 0.6 }), FRONT + 9.4, 2.25, z, 8);
-      ball(0.18, glow(0xfff0d0), FRONT + 9.1, 4.5, z);
-      walls.push([FRONT + 9.25, FRONT + 9.55, z - 0.15, z + 0.15]);
+    // Street lamps along the kerb in front of the shops, and a vending machine.
+    for (let z = 62; z < 116; z += 13) {
+      cyl(0.06, 0.08, 4.5, mat(0x22252b, { metalness: 0.6 }), FRONT + 2.1, 2.25, z, 8);
+      box(0.6, 0.05, 0.05, mat(0x22252b), FRONT + 1.8, 4.45, z);
+      ball(0.18, glow(0xfff0d0), FRONT + 1.5, 4.35, z);
+      walls.push([FRONT + 1.95, FRONT + 2.25, z - 0.15, z + 0.15]);
     }
     box(0.8, 1.9, 1.1, mat(0xd8dadc), FRONT + 0.6, 0.95 + 0.07, 112.5);
     plane(0.9, 1.2, new THREE.MeshBasicMaterial({ map: canvasTex(90, 120, (c, cw, ch) => { c.fillStyle = '#e8f4ff'; c.fillRect(0, 0, cw, ch); for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) { c.fillStyle = ['#d84a3a', '#39c5bb', '#f2c84b', '#3a6ad8'][(r + k) % 4]; c.fillRect(6 + k * 21, 8 + r * 26, 14, 20); } }) }), FRONT + 1.01, 1.25, 112.5, Math.PI / 2);
@@ -131,10 +148,12 @@ const Street = (() => {
     entrance(-8, 17, 1, 'OBSERVATION · 70F', 0x39c5bb);
 
     function update(t, px, pz, k) {
-      // Brighter signs at night.
+      // Signs glow brighter at night; upstairs windows only light up after dark.
       for (const m of signs) m.emissiveIntensity = 0.75 * (1 - k * 0.7) + 0.15;
+      for (const m of windows) m.emissiveIntensity = 0.85 * (1 - k) * (1 - k);
       let near = null, nd = 1e9;
       for (const s of SHOPS) { const d = Math.hypot(px - s.xc, pz - s.zc); if (d < nd) { nd = d; near = s; } }
+      for (const s of interiors) s.interior.visible = Game.area === 'city' && Math.hypot(px - s.xc, pz - s.zc) < 32;
       const on = near && nd < 18;
       const bright = near && (near.id === 'konbini' || near.id === 'florist') ? 0.35 : 1;
       shopLight.intensity = on ? 8 * bright : 0; shopLight2.intensity = on ? 4.5 * bright : 0;
@@ -151,9 +170,11 @@ const Street = (() => {
     }
     // Which shop you're in, if any.
     const shopAt = (x, z) => SHOPS.find((s) => x < FRONT && x > BACK && z > s.z0 && z < s.z1) || null;
+    // How high the ground is: shop floors, the pavement, or the road.
+    const groundAt = (x, z) => (x < FRONT && x > BACK && z > 57 && z < 110 ? City.SLAB + 0.07 : City.groundAt(x, z));
 
     return {
-      group: g, canStand, floorY: 0.06, update, usables, shopAt, SHOPS,
+      group: g, canStand, groundAt, floorY: City.SLAB, update, usables, shopAt, SHOPS,
       at: {
         homeDoor: { x: -80, z: 153.3, yaw: Math.PI },
         towerDoor: { x: -8, z: 18.5, yaw: 0 },

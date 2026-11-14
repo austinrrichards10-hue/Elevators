@@ -303,6 +303,26 @@ const Sound = (() => {
     else if (kind === 'door') { tone(110, 0, 0.25, 'triangle', 0.12); tone(82, 0.12, 0.3, 'triangle', 0.1); }
   }
 
+  // Footsteps: a short scuff of filtered noise and a soft thump. `surface` is 'street',
+  // 'floor' (the wooden floors at home) or 'glass' (the car); `vol` scales it (running is louder).
+  let stepBuf = null;
+  function step(surface, vol = 1) {
+    if (!ctx || muted) return;
+    if (!stepBuf) stepBuf = noiseBuffer(0.3, false);
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = stepBuf; src.playbackRate.value = 0.85 + Math.random() * 0.3;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
+    f.frequency.value = surface === 'street' ? 1300 + Math.random() * 500 : surface === 'glass' ? 1900 + Math.random() * 300 : 650 + Math.random() * 200;
+    const g = ctx.createGain(), v = 0.045 * vol * (surface === 'floor' ? 0.8 : 1);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    src.connect(f).connect(g).connect(master); src.start(t, Math.random() * 0.15, 0.13);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(surface === 'floor' ? 120 : 95, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.09);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.05 * vol, t + 0.005); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.connect(g2).connect(master); o.start(t); o.stop(t + 0.13);
+  }
+
   function start() {
     if (ctx) { ctx.resume(); return; }
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -378,7 +398,7 @@ const Sound = (() => {
   }
 
   return {
-    start, update, chime, toggleMute, music, laugh, blip, setVolumes,
+    start, update, chime, toggleMute, music, laugh, blip, setVolumes, step,
     set ambience(v) { ambience = v; },
     get muted() { return muted; },
   };

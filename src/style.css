@@ -415,3 +415,32 @@ html, body, button, input, label, li, a, select { cursor: none !important; }
 .bag button { padding: 4px 12px; font-size: 12px; }
 .status h4 { margin: 8px 0 4px; color: var(--teal-hi); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
 .ing, .empty-s { color: var(--dim); font-size: 13px; }
+
+/* ---------- Compass and waypoint (on the streets) ---------- */
+#compass {
+  position: fixed; top: 18px; left: 50%; width: min(520px, 70vw); height: 34px; transform: translateX(-50%);
+  pointer-events: none; z-index: 6; transition: opacity 0.4s;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  background: linear-gradient(180deg, rgba(4, 10, 20, 0.55), rgba(4, 10, 20, 0.25));
+  border-top: 1px solid rgba(127, 240, 230, 0.25); border-bottom: 1px solid rgba(127, 240, 230, 0.12);
+}
+#compass.hidden, #waypoint.hidden { opacity: 0; }
+#compass .cp-strip { position: absolute; inset: 0; }
+#compass .cp-strip > div { position: absolute; top: 0; transform: translateX(-50%); }
+#compass .cp-tick { width: 1px; height: 6px; top: 0 !important; background: rgba(233, 243, 255, 0.45); }
+#compass .cp-tick.big { height: 10px; }
+#compass .cp-dir { top: 7px !important; font: 600 13px var(--ui); color: #e9f3ff; letter-spacing: 0.08em; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+#compass .cp-mark { top: 4px !important; display: flex; flex-direction: column; align-items: center; }
+#compass .cp-mark i { width: 9px; height: 9px; transform: rotate(45deg); border: 1.5px solid rgba(233, 243, 255, 0.8); background: rgba(4, 10, 20, 0.5); }
+#compass .cp-mark span { margin-top: 7px; font: 500 10px var(--ui); color: rgba(233, 243, 255, 0.75); white-space: nowrap; letter-spacing: 0.04em; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+#compass .cp-mark.main i { border-color: var(--teal-hi); background: var(--teal); box-shadow: 0 0 12px var(--teal-hi); }
+#compass .cp-mark.main span { color: var(--teal-hi); font-weight: 600; }
+#compass .cp-centre { position: absolute; left: 50%; bottom: -5px; width: 0; height: 0; transform: translateX(-50%); border: 5px solid transparent; border-bottom-color: var(--teal-hi); }
+#waypoint {
+  position: fixed; left: 0; top: 0; pointer-events: none; z-index: 5; transition: opacity 0.3s;
+  display: flex; flex-direction: column; align-items: center; margin: -10px 0 0 -60px; width: 120px;
+}
+#waypoint .wp-mark { width: 14px; height: 14px; transform: rotate(45deg); border: 2px solid var(--teal-hi); background: rgba(57, 197, 187, 0.35); box-shadow: 0 0 16px var(--teal-hi); animation: wp-pulse 1.8s ease-in-out infinite; }
+#waypoint .wp-text { margin-top: 8px; font: 600 11px var(--ui); color: #e9f3ff; letter-spacing: 0.05em; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); white-space: nowrap; }
+@keyframes wp-pulse { 50% { box-shadow: 0 0 26px var(--teal-hi); transform: rotate(45deg) scale(1.15); } }

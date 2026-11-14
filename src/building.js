@@ -71,7 +71,7 @@ const Building = (() => {
 
     const tex = concreteTexture();
     const concrete = new THREE.MeshStandardMaterial({ map: tex.map, emissiveMap: tex.emissive, emissive: 0xffffff, emissiveIntensity: 1, roughness: 0.95, metalness: 0 });
-    const shell = new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.9, metalness: 0.1, flatShading: true });
+    const shell = new THREE.MeshStandardMaterial({ color: 0x5c5e65, roughness: 0.9, metalness: 0.1, flatShading: true });
     const louvre = new THREE.MeshStandardMaterial({ color: 0x0c0d11, roughness: 0.7, metalness: 0.4, flatShading: true });
 
     const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); group.add(m); return m; };

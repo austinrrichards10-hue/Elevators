@@ -88,7 +88,7 @@
   };
   // space: 'cab' (walking in the car and the floor-70 landing, in the car's own coordinates) or
   // 'home' (walking round your apartment, in world coordinates).
-  const player = { space: 'cab', x: 0.15, z: ROOM_Z0 + 2.6, yaw: Math.PI, pitch: -0.03, bob: 0, step: 0, vx: 0, vz: 0, y: 0 };
+  const player = { space: 'cab', x: 0.15, z: ROOM_Z0 + 2.6, yaw: Math.PI, pitch: -0.03, bob: 0, sway: 0, step: 0, vx: 0, vz: 0, y: 0, jy: 0, vy: 0, air: false, land: 0, run: 0 };
   const keys = {};
   const hooks = { stop: null, arrive: null, board: null, talk: null, canTalk: null, phone: null };
   // Things you can use where you're walking: { x, z, r, label, use() } (world coordinates at home).
@@ -156,12 +156,24 @@
   });
   canvas.addEventListener('click', () => { if (state.mode === 'play' && document.pointerLockElement !== canvas) lock(); });
 
+  // Mouse look is gathered here and fed in over a couple of frames (see look()), which takes the
+  // jitter out of uneven mouse reports without feeling laggy.
+  const lookIn = { yaw: 0, pitch: 0 };
   document.addEventListener('mousemove', (e) => {
     if (state.mode !== 'play' || document.pointerLockElement !== canvas) return;
+    // Browsers sometimes report a huge jump right after the pointer locks; ignore those.
+    if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
     const sens = 0.0022 * (settings.sens || 1);
-    player.yaw -= e.movementX * sens;
-    player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * sens));
+    lookIn.yaw -= e.movementX * sens;
+    lookIn.pitch -= e.movementY * sens;
   });
+  function look(dt) {
+    const k = 1 - Math.exp(-dt * 32);
+    const dy = lookIn.yaw * k, dp = lookIn.pitch * k;
+    lookIn.yaw -= dy; lookIn.pitch -= dp;
+    player.yaw += dy;
+    player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch + dp));
+  }
   document.addEventListener('keydown', (e) => {
     if (Talk.asking) return;
     keys[e.code] = true;
@@ -175,20 +187,39 @@
       else if (usableNow) usableNow.use();
     }
     if ((e.code === 'KeyQ' || e.code === 'Tab') && hooks.phone) { e.preventDefault(); hooks.phone(); }
+    // A little hop, out and about (and at home).
+    if (e.code === 'Space' && player.space === 'world' && !player.air && !e.repeat) { e.preventDefault(); player.air = true; player.vy = 4.4; }
   });
   document.addEventListener('keyup', (e) => { keys[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
+  // Resolution adapts to keep the frame rate up: it steps down if frames run slow and back up
+  // when there's headroom.
+  const PR_MAX = Math.min(window.devicePixelRatio, 1.5);
+  let prScale = 1;
+  const perf = { t: 0, sum: 0, n: 0, good: 0 };
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
+    const pr = Math.max(0.5, PR_MAX * prScale);
+    renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
-    composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    composer.setPixelRatio(pr);
     composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);
   resize();
+  function adapt(raw) {
+    if (document.hidden || state.mode === 'title') return;
+    perf.sum += raw; perf.n++; perf.t += raw;
+    if (perf.t < 1.5) return;
+    const avg = perf.sum / perf.n;
+    perf.t = perf.sum = perf.n = 0;
+    if (avg > 1 / 40 && prScale > 0.55) { prScale = Math.max(0.55, prScale - 0.15); perf.good = 0; resize(); }
+    else if (avg < 1 / 57 && prScale < 1) { if (++perf.good >= 3) { prScale = Math.min(1, prScale + 0.1); perf.good = 0; resize(); } }
+    else perf.good = 0;
+  }
 
   // ---------- Walking ----------
   // Is Miku where you are, and where?
@@ -238,18 +269,29 @@
     if (state.lean) { if (f || s) standUp(); else { player.bob *= 0.9; return; } }
     const len = Math.hypot(f, s) || 1;
     const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-    const speed = WALK * (player.area === 'city' && player.space === 'world' ? 1.7 : 1) * (keys.ShiftLeft || keys.ShiftRight ? 1.7 : 1);
-    const tvx = ((-sy * f) + (cy * s)) / len * speed, tvz = ((-cy * f) + (-sy * s)) / len * speed;
-    const k = 1 - Math.exp(-dt * (f || s ? 9 : 7));
+    const outdoors = player.area === 'city' && player.space === 'world';
+    const run = keys.ShiftLeft || keys.ShiftRight;
+    // Walking pace indoors and in the car; a brisk walk or a run out on the streets.
+    const speed = outdoors ? (run ? 5.4 : 2.4) : WALK * (run ? 1.7 : 1);
+    // Backing up and strafing are a touch slower than going forward.
+    const fwdK = f < 0 ? 0.75 : 1, sideK = f === 0 ? 0.9 : 1;
+    const tvx = ((-sy * f * fwdK) + (cy * s * sideK)) / len * speed, tvz = ((-cy * f * fwdK) + (-sy * s * sideK)) / len * speed;
+    // Speed up quickly, slow down a little more gently; in the air you keep your momentum.
+    const grip = player.air ? 1.5 : (f || s ? (outdoors ? 7 : 10) : (outdoors ? 6 : 9));
+    const k = 1 - Math.exp(-dt * grip);
     player.vx += (tvx - player.vx) * k;
     player.vz += (tvz - player.vz) * k;
-    const dx = player.vx * dt, dz = player.vz * dt;
     const moving = Math.hypot(player.vx, player.vz) > 0.05;
     if (moving) {
-      if (canStand(player.x + dx, player.z + dz)) { player.x += dx; player.z += dz; }
-      else if (canStand(player.x + dx, player.z)) { player.x += dx; player.vz *= 0.5; }
-      else if (canStand(player.x, player.z + dz)) { player.z += dz; player.vx *= 0.5; }
-      else { player.vx = 0; player.vz = 0; }
+      // Small steps, so a fast run never skips through a thin wall; slide along walls.
+      const steps = Math.max(1, Math.ceil(Math.hypot(player.vx, player.vz) * dt / 0.1));
+      const dx = player.vx * dt / steps, dz = player.vz * dt / steps;
+      for (let i = 0; i < steps; i++) {
+        if (canStand(player.x + dx, player.z + dz)) { player.x += dx; player.z += dz; }
+        else if (canStand(player.x + dx, player.z)) { player.x += dx; player.vz *= 0.6; }
+        else if (canStand(player.x, player.z + dz)) { player.z += dz; player.vx *= 0.6; }
+        else { player.vx *= 0.2; player.vz *= 0.2; break; }
+      }
       if (player.space === 'cab') {
         if (inDoorway(player.x, player.z)) player.x *= 1 - Math.min(1, dt * 6);
         else if (!state.boarded && player.z > ROOM_Z1 - 1.1 && player.z < ROOM_Z1 && Math.abs(player.x) < 1.3 && dz > 0) player.x *= 1 - Math.min(1, dt * 3);
@@ -262,10 +304,31 @@
         const md = Math.hypot(mx, mz), min = r + BODY_R;
         if (md < min && md > 1e-4) { player.x = miku.x + mx / md * min; player.z = miku.z + mz / md * min; }
       }
-      player.step += dt * 7.5 * Math.min(1.6, Math.hypot(player.vx, player.vz) / WALK);
     }
-    const target = moving ? Math.sin(player.step) * 0.02 * Math.min(1, Math.hypot(player.vx, player.vz) / WALK) : 0;
-    player.bob += (target - player.bob) * Math.min(1, dt * 10);
+    // Up and down off kerbs and shop steps, and the hop.
+    if (player.space === 'world') {
+      const P = places[player.area];
+      const ground = P.groundAt ? P.groundAt(player.x, player.z) : P.floorY;
+      player.y += (ground - player.y) * Math.min(1, dt * 12);
+      if (player.air) {
+        player.vy -= 15 * dt;
+        player.jy += player.vy * dt;
+        if (player.jy <= 0) { player.jy = 0; player.vy = 0; player.air = false; player.land = 1; Sound.step && Sound.step(outdoors ? 'street' : 'floor', 1.4); }
+      }
+    }
+    // Head bob: down on each footfall (with a footstep), a slight sway side to side.
+    const v = Math.hypot(player.vx, player.vz);
+    if (moving && !player.air) {
+      const before = Math.floor(player.step / Math.PI);
+      player.step += dt * Math.PI * (1.1 + 0.33 * v);
+      if (Math.floor(player.step / Math.PI) !== before && v > 0.5 && Sound.step) Sound.step(player.space === 'world' ? (outdoors ? 'street' : 'floor') : 'glass', Math.min(1.3, 0.5 + v / 5));
+    }
+    const amp = Math.min(1, v / 2) * (0.018 + 0.012 * Math.min(1, v / 5));
+    const tb = moving && !player.air ? -Math.abs(Math.sin(player.step)) * amp * 1.6 + amp * 0.8 : 0;
+    player.bob += (tb - player.bob) * Math.min(1, dt * 14);
+    player.sway += ((moving ? Math.sin(player.step) * amp * 0.7 : 0) - player.sway) * Math.min(1, dt * 10);
+    player.land = Math.max(0, (player.land || 0) - dt * 4);
+    player.run = outdoors && run && v > 3 ? 1 : 0;
   }
 
   // ---------- Miku: turning, looking, gesturing ----------
@@ -433,7 +496,11 @@
   };
   const fpPose = () => {
     if (player.space === 'world') {
-      return { pos: new THREE.Vector3(player.x, player.y + EYE_H + player.bob, player.z), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')) };
+      const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw), dip = -0.07 * Math.sin(player.land * Math.PI);
+      return {
+        pos: new THREE.Vector3(player.x + cy * player.sway, player.y + EYE_H + player.bob + player.jy + dip, player.z - sy * player.sway),
+        quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, -player.sway * 0.6, 'YXZ')),
+      };
     }
     // Leaning: eased toward the rail, lower, head just over it.
     const k = state.leanK * state.leanK * (3 - 2 * state.leanK);
@@ -443,6 +510,66 @@
     const q = cab.group.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')));
     return { pos: tmpA.clone(), quat: q };
   };
+
+  // ---------- Compass and waypoint (out on the streets) ----------
+  // A strip along the top shows which way you're facing, with markers for places (home, the
+  // tower, the shops). Tonight's goal, if it's somewhere in town, gets a marker in the world too.
+  // A marker: { x, z, label, main } (main can be a function, checked as you go).
+  let markers = [], builtFor = null, items = [];
+  const compass = document.createElement('div');
+  compass.id = 'compass'; compass.className = 'hidden';
+  compass.innerHTML = '<div class="cp-strip"></div><div class="cp-centre"></div>';
+  document.body.appendChild(compass);
+  const strip = compass.querySelector('.cp-strip');
+  const wp = document.createElement('div');
+  wp.id = 'waypoint'; wp.className = 'hidden';
+  wp.innerHTML = '<div class="wp-mark"></div><div class="wp-text"></div>';
+  document.body.appendChild(wp);
+  const wpText = wp.querySelector('.wp-text');
+  const CP_RANGE = 1.5;
+  const isMain = (m) => (typeof m.main === 'function' ? m.main() : !!m.main);
+  function buildCompass() {
+    strip.innerHTML = ''; items = [];
+    const mk = (cls, html, bearing, m) => { const e = document.createElement('div'); e.className = cls; e.innerHTML = html; strip.appendChild(e); items.push({ e, bearing, m, txt: '' }); };
+    for (let i = 0; i < 24; i++) if (i % 6) mk('cp-tick' + (i % 3 ? '' : ' big'), '', i * Math.PI / 12);
+    [['N', 0], ['W', Math.PI / 2], ['S', Math.PI], ['E', -Math.PI / 2]].forEach(([l, b]) => mk('cp-dir', l, b));
+    for (const m of markers) mk('cp-mark', '<i></i><span></span>', 0, m);
+  }
+  const tmpP = new THREE.Vector3();
+  function updateCompass(on) {
+    compass.classList.toggle('hidden', !on);
+    if (!on) { wp.classList.add('hidden'); return; }
+    if (builtFor !== markers) { builtFor = markers; buildCompass(); }
+    let main = null;
+    for (const it of items) {
+      let b = it.bearing;
+      if (it.m) {
+        const dx = it.m.x - player.x, dz = it.m.z - player.z, d = Math.hypot(dx, dz);
+        b = Math.atan2(-dx, -dz);
+        const mn = isMain(it.m);
+        if (mn) main = { m: it.m, d };
+        it.e.classList.toggle('main', mn);
+        const txt = it.m.label + (mn || d < 120 ? ' · ' + Math.round(d) + ' m' : '');
+        if (txt !== it.txt) { it.txt = txt; it.e.querySelector('span').textContent = txt; }
+      }
+      const rel = angleDiff(b, player.yaw);
+      const a = Math.abs(rel) / CP_RANGE;
+      it.e.style.opacity = a < 1 ? String(1 - a * a * a) : '0';
+      it.e.style.left = (50 - (rel / CP_RANGE) * 50) + '%';
+    }
+    // Tonight's goal, marked where it is.
+    let show = false;
+    if (main && main.d > 5) {
+      tmpP.set(main.m.x, City.SLAB + 3.2, main.m.z).project(camera);
+      if (tmpP.z < 1 && Math.abs(tmpP.x) < 0.95 && Math.abs(tmpP.y) < 0.9) {
+        show = true;
+        wp.style.transform = `translate(${((tmpP.x + 1) / 2) * window.innerWidth}px, ${((1 - tmpP.y) / 2) * window.innerHeight}px)`;
+        const t = main.m.label + ' · ' + Math.round(main.d) + ' m';
+        if (wpText.textContent !== t) wpText.textContent = t;
+      }
+    }
+    wp.classList.toggle('hidden', !show);
+  }
 
   // ---------- Loop ----------
   const clock = new THREE.Clock();
@@ -503,6 +630,7 @@
         if (introDone) { const d = introDone; introDone = null; d(); }
       }
     } else if (state.mode === 'play') {
+      look(dt);
       walk(dt);
       const p = fpPose();
       camera.position.copy(p.pos); camera.quaternion.copy(p.quat);
@@ -526,7 +654,15 @@
         if (shotK >= 1) shotFrom = null;
       } else { camera.position.copy(p.pos); camera.quaternion.copy(p.quat); }
     }
-    if (state.mode !== 'play') { prompt.classList.add('hidden'); lastPrompt = null; }
+    if (state.mode !== 'play') { prompt.classList.add('hidden'); lastPrompt = null; lookIn.yaw = lookIn.pitch = 0; player.run = 0; }
+    // A wider view when you run.
+    const fovWant = 72 + (state.mode === 'play' ? player.run * 6 : 0);
+    if (Math.abs(camera.fov - fovWant) > 0.01) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
+    // Street level or the skyline: what to draw.
+    const onStreet = player.space === 'world' && player.area === 'city' && state.mode !== 'title' && !(state.mode === 'scene' && shot);
+    City.setView(camera.position, onStreet, player.x, player.z);
+    updateCompass(onStreet && (state.mode === 'play' || state.mode === 'ui'));
+    adapt(raw);
     if (!paused) updateMiku(dt, t);
     building.update(t);
     const open = building.openness(state.cabY);
@@ -607,8 +743,11 @@
       Sound.ambience = area === 'home' ? 0.2 : 0.6;
       player.space = 'world'; player.area = area;
       state.lean = false; state.leanK = 0;
-      player.x = at.x; player.z = at.z; player.y = places[area].floorY;
+      player.x = at.x; player.z = at.z;
+      player.y = places[area].groundAt ? places[area].groundAt(at.x, at.z) : places[area].floorY;
       player.yaw = at.yaw; player.pitch = -0.05; player.vx = player.vz = 0;
+      player.jy = player.vy = 0; player.air = false; lookIn.yaw = lookIn.pitch = 0;
+      if (area !== 'city') markers = [];
       if (withMiku) placeMiku(places.home.spots[withMiku]); else if (miku.obj) miku.obj.visible = false;
       miku.face = 'view';
       shot = null;
@@ -619,6 +758,7 @@
       if (document.pointerLockElement !== canvas) { state.mode = 'paused'; $('pause').classList.remove('hidden'); }
     },
     setUsables(list) { usables = list; },
+    setMarkers(list) { markers = list || []; },
     get area() { return player.space === 'world' ? player.area : 'cab'; },
     // Choices are clicked, so free the mouse while they're up (and take it back after).
     choosing(on) {
